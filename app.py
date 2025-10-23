@@ -1,14 +1,24 @@
-# app.py (upgraded reference model + MPS + long-text chunking + readable summary)
-import os, csv, time, hashlib, pathlib
+# app.py — AI Text Scanner with Category Detection, Category-Aware Calibration,
+# readable CSV logging, and per-scan PDF reports.
+
+import os, csv, time, hashlib, pathlib, math, re
 from typing import List, Dict, Optional
 from pydantic import BaseModel
-import math
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+
+# ---- PDF (ReportLab) ----
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.graphics.charts.barcharts import VerticalBarChart
 
 # -------------------- Config --------------------
 MODEL_NAME = os.getenv("REF_MODEL", "EleutherAI/gpt-neo-1.3B")
@@ -23,12 +33,10 @@ elif torch.cuda.is_available():
     DEVICE = torch.device("cuda")
 else:
     DEVICE = torch.device("cpu")
-
 DTYPE = torch.float16 if (USE_FP16 and (DEVICE.type in {"cuda", "mps"})) else torch.float32
 
 # -------------------- App + CORS --------------------
-app = FastAPI(title="AI Text Scanner (MVP, Large Ref Model)")
-
+app = FastAPI(title="AI Text Scanner (MVP, Category-Aware)")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -49,7 +57,7 @@ class ScanIn(BaseModel):
     text: str
     tag: Optional[str] = None
 
-# -------------------- Helpers --------------------
+# -------------------- Core scoring helpers --------------------
 def scan_chunk(input_ids: torch.Tensor) -> Dict:
     with torch.no_grad():
         out = model(input_ids=input_ids)
@@ -67,14 +75,10 @@ def scan_chunk(input_ids: torch.Tensor) -> Dict:
         p_actual = probs[actual_id].item()
         rank = int((probs > p_actual).sum().item() + 1)
 
-        if rank <= 10:
-            topk_bins[10] += 1
-        elif rank <= 100:
-            topk_bins[100] += 1
-        elif rank <= 1000:
-            topk_bins[1000] += 1
-        else:
-            topk_bins["rest"] += 1
+        if rank <= 10: topk_bins[10] += 1
+        elif rank <= 100: topk_bins[100] += 1
+        elif rank <= 1000: topk_bins[1000] += 1
+        else: topk_bins["rest"] += 1
 
         tok_str = tokenizer.convert_ids_to_tokens([actual_id])[0]
         per_token.append({"t": tok_str, "rank": rank, "p": p_actual})
@@ -100,7 +104,6 @@ def scan_chunk(input_ids: torch.Tensor) -> Dict:
         "burstiness": burstiness,
     }
 
-
 def chunked_scan(text: str) -> Dict:
     enc = tokenizer(text, return_tensors="pt", add_special_tokens=False)
     ids = enc["input_ids"][0]
@@ -120,15 +123,11 @@ def chunked_scan(text: str) -> Dict:
         result = scan_chunk(chunk_ids)
 
         all_tokens.extend(result["per_token"])
-        for k in agg_bins:
-            agg_bins[k] += result["bins"][k]
+        for k in agg_bins: agg_bins[k] += result["bins"][k]
         agg_total += result["total"]
-        scores.append(result["score"])
-        ppls.append(result["ppl"])
-        bursts.append(result["burstiness"])
+        scores.append(result["score"]); ppls.append(result["ppl"]); bursts.append(result["burstiness"])
 
-        if end == ids.size(0):
-            break
+        if end == ids.size(0): break
         start = end - STRIDE
 
     if agg_total > 0:
@@ -147,98 +146,86 @@ def chunked_scan(text: str) -> Dict:
         "burstiness": sum(bursts) / len(bursts) if bursts else 0.0,
     }
 
-
-# -------- CSV logging --------
-LOG_PATH = os.getenv("SCAN_LOG_PATH", "scan_logs.csv")
-_FIELDNAMES = [
-    "ts", "text_sha256", "text_len_chars", "text_len_tokens",
-    "model_name", "device", "dtype",
-    "overall_score", "top10_frac", "top100_frac", "ppl", "burstiness",
-    "ai_likelihood_calibrated", "tag"
+# -------------------- Category detection --------------------
+ARCHAIC_TOKENS = r"\b(thou|thee|thy|thine|ye|hath|doth|dost|art|shalt|whence|wherefore|ere|oft|nay|aye)\b"
+ACADEMIC_CUES = [
+    r"\babstract\b", r"\bintroduction\b", r"\bmethod(s|ology)?\b", r"\bresults?\b",
+    r"\bdiscussion\b", r"\bconclusion(s)?\b", r"\breferences\b", r"\bdoi:\b",
+    r"\b(et al\.|ibid\.|cf\.)\b", r"\(\d{4}\)", r"\[[0-9]{1,3}\]"
 ]
+JOURNALISM_CUES = [
+    r"\baccording to\b", r"\bspokes(person|man|woman)\b", r"\bofficials?\b",
+    r"\binterview\b", r"\breported\b", r"\bpress (conference|release)\b",
+    r"\b([A-Z][a-z]+ ){1,3}\([A-Z]{2,}\)\s?—"
+]
+TECH_CUES = [
+    r"\bAPI\b", r"\bSDK\b", r"\bthroughput\b", r"\blatency\b", r"\bBig\-O\b",
+    r"\bHTTP/\d\.\d\b", r"\bRFC\s?\d+\b", r"\balgorithm\b", r"def [a-zA-Z_]+\(", r"\bclass [A-Z]\w+\b"
+]
+POETRY_LINEBREAK_RATIO_CUTOFF = 0.20
+SHORT_AVG_LINE_LEN = 60
 
-def _ensure_log_header(path: str):
-    if not os.path.exists(path) or os.path.getsize(path) == 0:
-        with open(path, "w", newline="") as f:
-            csv.DictWriter(f, fieldnames=_FIELDNAMES).writeheader()
+def _ratio(n, d): return (n / d) if d else 0.0
+
+def detect_category(text: str) -> dict:
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    avg_line_len = sum(len(l) for l in lines)/len(lines) if lines else len(text)
+    no_punct_ends = sum(1 for l in lines if not re.search(r"[\.!?;:—-]\s*$", l.strip()))
+    enj_ratio = _ratio(no_punct_ends, max(1, len(lines)))
+    arch_hits = len(re.findall(ARCHAIC_TOKENS, text, flags=re.I))
+    acad_hits = sum(bool(re.search(p, text, flags=re.I)) for p in ACADEMIC_CUES)
+    jour_hits = sum(bool(re.search(p, text, flags=re.I)) for p in JOURNALISM_CUES)
+    tech_hits = sum(bool(re.search(p, text)) for p in TECH_CUES)
+
+    if arch_hits >= 3 and enj_ratio >= 0.15:
+        return {"category": "archaic_poetry", "confidence": 0.85, "signals": {"arch": arch_hits, "enj": enj_ratio}}
+    if acad_hits >= 3 and len(lines) >= 6:
+        return {"category": "academic", "confidence": 0.8, "signals": {"acad": acad_hits}}
+    if jour_hits >= 2:
+        return {"category": "journalism", "confidence": 0.7, "signals": {"jour": jour_hits}}
+    if tech_hits >= 2:
+        return {"category": "technical", "confidence": 0.75, "signals": {"tech": tech_hits}}
+    if enj_ratio >= POETRY_LINEBREAK_RATIO_CUTOFF and avg_line_len <= SHORT_AVG_LINE_LEN:
+        return {"category": "modern_poetry", "confidence": 0.7, "signals": {"enj": enj_ratio}}
+    if re.search(r"\b(I|we|my|our)\b.*\b(said|thought|felt|remember|walked|looked)\b", text, flags=re.I):
+        return {"category": "creative_narrative", "confidence": 0.6, "signals": {}}
+    if re.search(r"\bI think\b|\bmy view\b|\bin my opinion\b", text, flags=re.I):
+        return {"category": "blog_opinion", "confidence": 0.6, "signals": {}}
+    return {"category": "other", "confidence": 0.5, "signals": {}}
+
+def category_adjustments(cat: str) -> dict:
+    w = {"score": 2.3, "ppl": 0.9, "burst": 0.6, "t10": 0.5, "bias": -1.5}
+    note = "Default calibration."
+    if cat == "journalism":
+        w = {"score": 2.0, "ppl": 0.9, "burst": 0.7, "t10": 0.4, "bias": -1.3}
+        note = "Journalism: edited prose; stricter threshold."
+    elif cat == "academic":
+        w = {"score": 1.9, "ppl": 1.0, "burst": 0.9, "t10": 0.35, "bias": -1.25}
+        note = "Academic: citations inflate predictability; weight burstiness more."
+    elif cat == "technical":
+        w = {"score": 1.8, "ppl": 0.9, "burst": 0.7, "t10": 0.35, "bias": -1.2}
+        note = "Technical: repetitive terminology; avoid false positives."
+    elif cat == "modern_poetry":
+        w = {"score": 1.2, "ppl": 0.7, "burst": 1.4, "t10": 0.25, "bias": -1.8}
+        note = "Modern poetry: emphasize burstiness; down-weight predictability."
+    elif cat == "archaic_poetry":
+        w = {"score": 1.0, "ppl": 0.7, "burst": 1.6, "t10": 0.2, "bias": -2.0}
+        note = "Archaic poetry: lexical correction to avoid false positives."
+    elif cat == "creative_narrative":
+        w = {"score": 1.6, "ppl": 0.9, "burst": 1.1, "t10": 0.35, "bias": -1.55}
+        note = "Creative narrative: style variation expected."
+    elif cat == "blog_opinion":
+        w = {"score": 1.8, "ppl": 0.9, "burst": 0.9, "t10": 0.35, "bias": -1.45}
+        note = "Opinion/blog: conversational; moderate thresholds."
+    return {"weights": w, "note": note}
+
+# -------------------- Logging + PDF --------------------
+LOG_PATH = os.path.join(".", "scan_logs.csv")
 
 def _sha256_text(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
-def log_scan_row(row: dict):
-    """
-    Writes each scan to scan_logs.csv and a readable scan_summaries.txt file.
-    Ensures consistent, clean CSV formatting with headers and verdicts.
-    """
-    pathlib.Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
-    csv_exists = os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > 0
-
-    verdict = (
-        "Likely AI-generated" if row["ai_likelihood_calibrated"] >= 0.6
-        else "Likely human-written"
-    )
-
-    # Open in append mode
-    with open(LOG_PATH, "a", newline="") as f:
-        writer = csv.writer(f)
-
-        # Write header if file is new
-        if not csv_exists:
-            writer.writerow([
-                "# Legend:",
-                "Each row = one scan result.",
-                "Likelihood % is the probability text was AI-generated.",
-                "Verdict is a simple interpretation of the likelihood value."
-            ])
-            writer.writerow([])
-            writer.writerow([
-                "Timestamp",
-                "Verdict",
-                "Likelihood %",
-                "Predictability Score",
-                "Top-10 %",
-                "Top-100 %",
-                "Perplexity",
-                "Burstiness",
-                "Model",
-                "Device",
-                "Chars",
-                "Tokens",
-                "Text Hash",
-                "Tag"
-            ])
-
-        # Write the main data row
-        writer.writerow([
-            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row["ts"])),
-            verdict,
-            f"{int(row['ai_likelihood_calibrated'] * 100)}%",
-            f"{row['overall_score']:.2f}",
-            f"{row['top10_frac'] * 100:.1f}%",
-            f"{row['top100_frac'] * 100:.1f}%",
-            f"{row['ppl']:.1f}",
-            f"{row['burstiness']:.2f}",
-            row["model_name"],
-            row["device"],
-            row["text_len_chars"],
-            row["text_len_tokens"],
-            row["text_sha256"][:8],
-            row["tag"],
-        ])
-
-        pdf_path = create_pdf_summary(row)
-        print(f"[+] PDF report created: {pdf_path}")
-
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.graphics.shapes import Drawing, Rect, String
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-
 def create_pdf_summary(row: dict):
-    """Generate a graphical PDF summary for each scan result."""
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(row["ts"]))
     pdf_path = os.path.join(os.path.dirname(LOG_PATH), f"scan_summary_{timestamp}.pdf")
 
@@ -247,21 +234,20 @@ def create_pdf_summary(row: dict):
     story = []
 
     likelihood_pct = int(row["ai_likelihood_calibrated"] * 100)
-    verdict = (
-        "Almost certainly AI-generated" if likelihood_pct >= 85 else
-        "Very likely AI-generated" if likelihood_pct >= 70 else
-        "Possibly AI-generated" if likelihood_pct >= 50 else
-        "Likely human-written"
-    )
+    verdict = ("Almost certainly AI-generated" if likelihood_pct >= 85 else
+               "Very likely AI-generated" if likelihood_pct >= 70 else
+               "Possibly AI-generated" if likelihood_pct >= 50 else
+               "Likely human-written")
 
-    # Header
     story.append(Paragraph("<b>AI Text Scan Report</b>", styles["Title"]))
-    story.append(Spacer(1, 0.2 * inch))
+    story.append(Spacer(1, 0.15 * inch))
     story.append(Paragraph(f"<b>Verdict:</b> {verdict}", styles["Heading2"]))
     story.append(Paragraph(f"<b>Likelihood:</b> {likelihood_pct}%", styles["Normal"]))
-    story.append(Spacer(1, 0.1 * inch))
+    story.append(Paragraph(f"<b>Detected style:</b> {row.get('category','other').replace('_',' ')} "
+                           f"(conf {int(100*row.get('category_conf',0))}%)", styles["Normal"]))
+    story.append(Paragraph(f"<i>{row.get('category_note','')}</i>", styles["Normal"]))
+    story.append(Spacer(1, 0.15 * inch))
 
-    # Summary table
     data = [
         ["Metric", "Value"],
         ["Predictability Score", f"{row['overall_score']:.2f}"],
@@ -272,9 +258,8 @@ def create_pdf_summary(row: dict):
         ["Model", row["model_name"]],
         ["Device", row["device"]],
         ["Text Length", f"{row['text_len_chars']} chars / {row['text_len_tokens']} tokens"],
-        ["Tag", row["tag"] or "(none)"]
+        ["Tag", row["tag"] or "(none)"],
     ]
-
     table = Table(data, colWidths=[2.5 * inch, 3.5 * inch])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
@@ -285,80 +270,88 @@ def create_pdf_summary(row: dict):
         ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
         ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
     ]))
-
     story.append(table)
-    story.append(Spacer(1, 0.25 * inch))
+    story.append(Spacer(1, 0.2 * inch))
 
-    # Likelihood color bar
+    # Likelihood indicator bar
     story.append(Paragraph("<b>Likelihood Indicator</b>", styles["Heading3"]))
-    story.append(Spacer(1, 0.1 * inch))
-    color = (
-        colors.red if likelihood_pct >= 85 else
-        colors.orange if likelihood_pct >= 60 else
-        colors.yellow if likelihood_pct >= 40 else
-        colors.green
-    )
-    d = Drawing(400, 40)
+    color = (colors.red if likelihood_pct >= 85 else
+             colors.orange if likelihood_pct >= 60 else
+             colors.yellow if likelihood_pct >= 40 else
+             colors.green)
+    d = Drawing(420, 40)
     d.add(Rect(0, 10, 4 * likelihood_pct, 20, fillColor=color))
     d.add(Rect(0, 10, 400, 20, fillColor=None, strokeColor=colors.black))
     d.add(String(410, 15, f"{likelihood_pct}%", fontSize=12))
     story.append(d)
-    story.append(Spacer(1, 0.3 * inch))
+    story.append(Spacer(1, 0.25 * inch))
 
-    # Bar chart of key metrics
+    # Metrics bar chart
     story.append(Paragraph("<b>Metrics Overview</b>", styles["Heading3"]))
     chart = VerticalBarChart()
-    chart.x = 50
-    chart.y = 30
-    chart.height = 150
-    chart.width = 400
-    chart.data = [[
-        row["top10_frac"] * 100,
-        row["top100_frac"] * 100,
-        row["ppl"],
-        row["burstiness"]
-    ]]
+    chart.x, chart.y = 50, 30
+    chart.height, chart.width = 150, 400
+    chart.data = [[row["top10_frac"]*100, row["top100_frac"]*100, row["ppl"], row["burstiness"]]]
     chart.categoryAxis.categoryNames = ["Top-10 %", "Top-100 %", "Perplexity", "Burstiness"]
     chart.bars[0].fillColor = colors.darkblue
     chart.valueAxis.valueMin = 0
     chart.valueAxis.valueMax = max(100, row["ppl"] + 10)
     chart.valueAxis.valueStep = 20
-    d2 = Drawing(500, 200)
-    d2.add(chart)
-    story.append(d2)
+    d2 = Drawing(500, 200); d2.add(chart); story.append(d2)
 
+    expected = {
+        "journalism": "Expected: Top-10 60–80%, PPL 10–25, Burstiness 4–7. High predictability is normal.",
+        "academic": "Expected: Top-10 55–75%, PPL 12–30, Burstiness 5–8. Citations raise predictability.",
+        "technical": "Expected: Top-10 55–75%, PPL 12–28, Burstiness 5–8. Repetition is normal.",
+        "modern_poetry": "Expected: Top-10 30–55%, PPL 20–60, Burstiness 7–12 (high).",
+        "archaic_poetry": "Expected: Top-10 35–60%, PPL 18–55, Burstiness 8–13. Archaic lexicon lowers AI-likelihood.",
+        "creative_narrative": "Expected: Top-10 40–60%, PPL 18–45, Burstiness 7–11.",
+        "blog_opinion": "Expected: Top-10 45–65%, PPL 15–35, Burstiness 6–10.",
+        "other": "Expected: Mixed; interpret with caution.",
+    }
+    story.append(Spacer(1, 0.15 * inch))
+    story.append(Paragraph(f"<i>{expected.get(row.get('category','other'), expected['other'])}</i>", styles["Normal"]))
     doc.build(story)
     return pdf_path
 
+def log_scan_row(row: dict):
+    """Readable CSV (single schema) + per-scan PDF."""
+    pathlib.Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
+    csv_exists = os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > 0
+    with open(LOG_PATH, "a", newline="") as f:
+        writer = csv.writer(f)
+        if not csv_exists:
+            writer.writerow([
+                "# Legend:", "Each row = one scan result.",
+                "Likelihood % = probability text was AI-generated.",
+                "Verdict interprets likelihood; Category is auto-detected."
+            ])
+            writer.writerow([])
+            writer.writerow([
+                "Timestamp","Verdict","Likelihood %","Predictability Score",
+                "Top-10 %","Top-100 %","Perplexity","Burstiness",
+                "Model","Device","Chars","Tokens","Text Hash","Tag",
+                "Category","Category Conf","Category Note"
+            ])
 
-    # ---------- Write summary to plain text ----------
-    summary_path = os.path.join(os.path.dirname(LOG_PATH), "scan_summaries.txt")
-    likelihood_pct = int(row["ai_likelihood_calibrated"] * 100)
-    verdict_text = (
-        "almost certainly AI-generated" if likelihood_pct >= 85 else
-        "very likely AI-generated" if likelihood_pct >= 70 else
-        "possibly AI-generated" if likelihood_pct >= 50 else
-        "likely human-written"
-    )
-
-    summary = (
-        f"\n--- Scan Summary ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(row['ts']))}) ---\n"
-        f"Verdict: {verdict_text.capitalize()}.\n"
-        f"Likelihood this was AI-generated: {likelihood_pct}%.\n"
-        f"Predictability Score: {row['overall_score']:.2f}\n"
-        f"Top-10 Tokens: {row['top10_frac'] * 100:.1f}%  |  Top-100 Tokens: {row['top100_frac'] * 100:.1f}%\n"
-        f"Perplexity: {row['ppl']:.1f}  |  Burstiness: {row['burstiness']:.2f}\n"
-        f"Model: {row['model_name']}  |  Device: {row['device']}\n"
-        f"Text Length: {row['text_len_chars']} chars / {row['text_len_tokens']} tokens\n"
-        f"Tag: {row['tag'] or '(none)'}\n"
-        "------------------------------------------------------------\n"
-    )
-
-    with open(summary_path, "a") as txt:
-        txt.write(summary)
-
-
-
+        verdict = ("Likely AI-generated" if row["ai_likelihood_calibrated"] >= 0.6 else "Likely human-written")
+        writer.writerow([
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row["ts"])),
+            verdict,
+            f"{int(row['ai_likelihood_calibrated'] * 100)}%",
+            f"{row['overall_score']:.2f}",
+            f"{row['top10_frac'] * 100:.1f}%",
+            f"{row['top100_frac'] * 100:.1f}%",
+            f"{row['ppl']:.1f}",
+            f"{row['burstiness']:.2f}",
+            row["model_name"], row["device"],
+            row["text_len_chars"], row["text_len_tokens"],
+            row["text_sha256"][:8], row["tag"] or "",
+            row.get("category","other"), f"{int(100*row.get('category_conf',0))}%",
+            row.get("category_note",""),
+        ])
+    pdf_path = create_pdf_summary(row)
+    print(f"[+] PDF report created: {pdf_path}")
 
 # -------------------- Route --------------------
 @app.post("/scan")
@@ -368,20 +361,27 @@ def scan(inp: ScanIn):
         return {"overall_score": 0.0, "per_token": [], "explanation": "Empty text"}
 
     out = chunked_scan(text)
+
     total = max(1, out["total"])
     bins = out["bins"]
     frac10 = bins[10] / total
     frac100 = bins[100] / total
 
-    # --- calibrated probability ---
+    # features for calibration
     fPpl   = max(0, min(1, (25 - (out['ppl'] or 25)) / 20))
     fBurst = max(0, min(1, (8 - (out['burstiness'] or 8)) / 6))
-    z = (2.3 * out["score"]) + (0.9 * fPpl) + (0.6 * fBurst) + (0.5 * frac10) - 1.5
+
+    # --- Category detection + adjustments ---
+    cat_info = detect_category(text)
+    cat = cat_info["category"]; cat_conf = cat_info["confidence"]
+    adj = category_adjustments(cat); w = adj["weights"]
+
+    z = (w["score"] * out["score"]) + (w["ppl"] * fPpl) + (w["burst"] * fBurst) + (w["t10"] * frac10) + w["bias"]
     calP = 1 / (1 + math.exp(-4 * z))
     calP = max(0, min(1, calP))
 
-    # --- log row ---
-    log_scan_row({
+    # Log to CSV and generate PDF
+    row = {
         "ts": int(time.time()),
         "text_sha256": _sha256_text(text),
         "text_len_chars": len(text),
@@ -395,28 +395,26 @@ def scan(inp: ScanIn):
         "ppl": round(out["ppl"], 6),
         "burstiness": round(out["burstiness"], 6),
         "ai_likelihood_calibrated": round(calP, 6),
-        "tag": (inp.tag or "")
-    })
+        "tag": (inp.tag or ""),
+        "category": cat,
+        "category_conf": round(cat_conf, 3),
+        "category_note": adj["note"],
+    }
+    log_scan_row(row)
 
-    # -------- readable explanation --------
     percent = round(calP * 100)
-    if percent >= 85:
-        summary = f"Likelihood this was AI-generated: {percent}% — almost certain."
-    elif percent >= 70:
-        summary = f"Likelihood this was AI-generated: {percent}% — high likelihood."
-    elif percent >= 50:
-        summary = f"Likelihood this was AI-generated: {percent}% — moderate likelihood."
-    elif percent >= 30:
-        summary = f"Likelihood this was AI-generated: {percent}% — low to moderate likelihood."
-    else:
-        summary = f"Likelihood this was AI-generated: {percent}% — unlikely."
-
+    summary = (
+        "almost certain." if percent >= 85 else
+        "high likelihood." if percent >= 70 else
+        "moderate likelihood." if percent >= 50 else
+        "low likelihood."
+    )
     exp = (
-        f"{round(100*frac10)}% of tokens in Top-10; "
-        f"{round(100*frac100)}% in Top-100. "
+        f"{round(100*frac10)}% of tokens in Top-10; {round(100*frac100)}% in Top-100. "
         f"Perplexity≈{out['ppl']:.1f}; Burstiness≈{out['burstiness']:.3f}. "
-        "Higher Top-10 fractions and lower perplexity typically correlate with model-like text. "
-        + summary
+        f"Higher Top-10 fractions and lower perplexity typically correlate with model-like text. "
+        f"Likelihood this was AI-generated: {percent}% — {summary} "
+        f"Detected style: {cat.replace('_',' ')} (conf≈{cat_conf:.0%}). {adj['note']}"
     )
 
     return {
@@ -430,11 +428,14 @@ def scan(inp: ScanIn):
         "model_name": MODEL_NAME,
         "device": str(DEVICE),
         "dtype": str(DTYPE),
-        "calibrated_prob": calP
+        "calibrated_prob": calP,
+        "category": cat,
+        "category_conf": cat_conf,
+        "category_note": adj["note"],
     }
 
 
-# # app.py (upgraded reference model + MPS + long-text chunking)
+# # app.py (upgraded reference model + MPS + long-text chunking + readable summary)
 # import os, csv, time, hashlib, pathlib
 # from typing import List, Dict, Optional
 # from pydantic import BaseModel
@@ -442,19 +443,15 @@ def scan(inp: ScanIn):
 
 # from fastapi import FastAPI
 # from fastapi.middleware.cors import CORSMiddleware
-# from pydantic import BaseModel
 
 # import torch
 # from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # # -------------------- Config --------------------
 # MODEL_NAME = os.getenv("REF_MODEL", "EleutherAI/gpt-neo-1.3B")
-# # Good alternatives:
-# #   "EleutherAI/pythia-1.4b"
-# #   "gpt2-medium"  (lighter fallback)
-# MAX_TOKENS_PER_PASS = 768      # context per forward pass (safe for 1.3B on MPS)
-# STRIDE = 128                   # overlap between chunks so boundary tokens get scored
-# USE_FP16 = True                # try half precision on MPS or CUDA
+# MAX_TOKENS_PER_PASS = 768
+# STRIDE = 128
+# USE_FP16 = True
 
 # # -------------------- Device setup --------------------
 # if torch.backends.mps.is_available():
@@ -471,7 +468,7 @@ def scan(inp: ScanIn):
 
 # app.add_middleware(
 #     CORSMiddleware,
-#     allow_origins=["*"],  # tighten later
+#     allow_origins=["*"],
 #     allow_credentials=True,
 #     allow_methods=["*"],
 #     allow_headers=["*"],
@@ -487,33 +484,24 @@ def scan(inp: ScanIn):
 # # -------------------- IO Models --------------------
 # class ScanIn(BaseModel):
 #     text: str
-#     tag: Optional[str] = None   # <- new (can be "ai", "human", or empty)
+#     tag: Optional[str] = None
 
 # # -------------------- Helpers --------------------
 # def scan_chunk(input_ids: torch.Tensor) -> Dict:
-#     """
-#     input_ids: [1, seq_len] on DEVICE
-#     returns dict with per-token ranks and probabilities
-#     """
 #     with torch.no_grad():
 #         out = model(input_ids=input_ids)
-#         logits = out.logits  # [1, seq_len, vocab]
+#         logits = out.logits
 #     ids = input_ids[0]
 #     per_token = []
 #     topk_bins = {10: 0, 100: 0, 1000: 0, "rest": 0}
 #     total = max(0, ids.size(0) - 1)
-
-#     # Compute logprobs for perplexity/burstiness
 #     logprobs = []
 
 #     for i in range(1, ids.size(0)):
-#         next_logits = logits[0, i - 1]  # predicts token i
+#         next_logits = logits[0, i - 1]
 #         probs = torch.softmax(next_logits, dim=-1)
-
 #         actual_id = ids[i].item()
 #         p_actual = probs[actual_id].item()
-
-#         # Rank = 1 + number of tokens with prob > p_actual
 #         rank = int((probs > p_actual).sum().item() + 1)
 
 #         if rank <= 10:
@@ -527,16 +515,12 @@ def scan(inp: ScanIn):
 
 #         tok_str = tokenizer.convert_ids_to_tokens([actual_id])[0]
 #         per_token.append({"t": tok_str, "rank": rank, "p": p_actual})
-#         # for perplexity metrics
 #         logprobs.append(math.log(max(p_actual, 1e-12)))
 
-#     # Perplexity over this chunk (exclude first token)
 #     ppl = math.exp(-sum(logprobs) / max(1, len(logprobs)))
-#     # Burstiness: variance of log-probs (higher variance = more human-like “unevenness”)
 #     mean_lp = sum(logprobs) / max(1, len(logprobs))
 #     burstiness = sum((lp - mean_lp) ** 2 for lp in logprobs) / max(1, len(logprobs))
 
-#     # Heuristic overall score from rank bins
 #     if total > 0:
 #         frac10 = topk_bins[10] / total
 #         frac100 = topk_bins[100] / total
@@ -553,6 +537,7 @@ def scan(inp: ScanIn):
 #         "burstiness": burstiness,
 #     }
 
+
 # def chunked_scan(text: str) -> Dict:
 #     enc = tokenizer(text, return_tensors="pt", add_special_tokens=False)
 #     ids = enc["input_ids"][0]
@@ -560,13 +545,10 @@ def scan(inp: ScanIn):
 #         input_ids = ids.unsqueeze(0).to(DEVICE)
 #         return scan_chunk(input_ids)
 
-#     # Long text: slide over with stride
 #     all_tokens: List[Dict] = []
 #     agg_bins = {10: 0, 100: 0, 1000: 0, "rest": 0}
 #     agg_total = 0
-#     scores = []
-#     ppls = []
-#     bursts = []
+#     scores, ppls, bursts = [], [], []
 
 #     start = 0
 #     while start < ids.size(0):
@@ -574,8 +556,6 @@ def scan(inp: ScanIn):
 #         chunk_ids = ids[start:end].unsqueeze(0).to(DEVICE)
 #         result = scan_chunk(chunk_ids)
 
-#         # Keep all tokens except the very first one of the document
-#         # (but that nuance is small—fine for MVP)
 #         all_tokens.extend(result["per_token"])
 #         for k in agg_bins:
 #             agg_bins[k] += result["bins"][k]
@@ -586,9 +566,8 @@ def scan(inp: ScanIn):
 
 #         if end == ids.size(0):
 #             break
-#         start = end - STRIDE  # overlap
+#         start = end - STRIDE
 
-#     # Aggregate across chunks
 #     if agg_total > 0:
 #         frac10 = agg_bins[10] / agg_total
 #         frac100 = agg_bins[100] / agg_total
@@ -605,14 +584,14 @@ def scan(inp: ScanIn):
 #         "burstiness": sum(bursts) / len(bursts) if bursts else 0.0,
 #     }
 
-#     # -------- CSV logging --------
-# LOG_PATH = os.getenv("SCAN_LOG_PATH", "scan_logs.csv")
 
+# # -------- CSV logging --------
+# LOG_PATH = os.getenv("SCAN_LOG_PATH", "scan_logs.csv")
 # _FIELDNAMES = [
 #     "ts", "text_sha256", "text_len_chars", "text_len_tokens",
 #     "model_name", "device", "dtype",
 #     "overall_score", "top10_frac", "top100_frac", "ppl", "burstiness",
-#     "ai_likelihood_calibrated", "tag"  # tag left blank for you to label later
+#     "ai_likelihood_calibrated", "tag"
 # ]
 
 # def _ensure_log_header(path: str):
@@ -624,11 +603,198 @@ def scan(inp: ScanIn):
 #     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 # def log_scan_row(row: dict):
+#     """
+#     Writes each scan to scan_logs.csv and a readable scan_summaries.txt file.
+#     Ensures consistent, clean CSV formatting with headers and verdicts.
+#     """
 #     pathlib.Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
-#     _ensure_log_header(LOG_PATH)
+#     csv_exists = os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > 0
+
+#     verdict = (
+#         "Likely AI-generated" if row["ai_likelihood_calibrated"] >= 0.6
+#         else "Likely human-written"
+#     )
+
+#     # Open in append mode
 #     with open(LOG_PATH, "a", newline="") as f:
-#         w = csv.DictWriter(f, fieldnames=_FIELDNAMES)
-#         w.writerow(row)
+#         writer = csv.writer(f)
+
+#         # Write header if file is new
+#         if not csv_exists:
+#             writer.writerow([
+#                 "# Legend:",
+#                 "Each row = one scan result.",
+#                 "Likelihood % is the probability text was AI-generated.",
+#                 "Verdict is a simple interpretation of the likelihood value."
+#             ])
+#             writer.writerow([])
+#             writer.writerow([
+#                 "Timestamp",
+#                 "Verdict",
+#                 "Likelihood %",
+#                 "Predictability Score",
+#                 "Top-10 %",
+#                 "Top-100 %",
+#                 "Perplexity",
+#                 "Burstiness",
+#                 "Model",
+#                 "Device",
+#                 "Chars",
+#                 "Tokens",
+#                 "Text Hash",
+#                 "Tag"
+#             ])
+
+#         # Write the main data row
+#         writer.writerow([
+#             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row["ts"])),
+#             verdict,
+#             f"{int(row['ai_likelihood_calibrated'] * 100)}%",
+#             f"{row['overall_score']:.2f}",
+#             f"{row['top10_frac'] * 100:.1f}%",
+#             f"{row['top100_frac'] * 100:.1f}%",
+#             f"{row['ppl']:.1f}",
+#             f"{row['burstiness']:.2f}",
+#             row["model_name"],
+#             row["device"],
+#             row["text_len_chars"],
+#             row["text_len_tokens"],
+#             row["text_sha256"][:8],
+#             row["tag"],
+#         ])
+
+#         pdf_path = create_pdf_summary(row)
+#         print(f"[+] PDF report created: {pdf_path}")
+
+# from reportlab.lib import colors
+# from reportlab.lib.pagesizes import letter
+# from reportlab.lib.units import inch
+# from reportlab.lib.styles import getSampleStyleSheet
+# from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+# from reportlab.graphics.shapes import Drawing, Rect, String
+# from reportlab.graphics.charts.barcharts import VerticalBarChart
+
+# def create_pdf_summary(row: dict):
+#     """Generate a graphical PDF summary for each scan result."""
+#     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(row["ts"]))
+#     pdf_path = os.path.join(os.path.dirname(LOG_PATH), f"scan_summary_{timestamp}.pdf")
+
+#     doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+#     styles = getSampleStyleSheet()
+#     story = []
+
+#     likelihood_pct = int(row["ai_likelihood_calibrated"] * 100)
+#     verdict = (
+#         "Almost certainly AI-generated" if likelihood_pct >= 85 else
+#         "Very likely AI-generated" if likelihood_pct >= 70 else
+#         "Possibly AI-generated" if likelihood_pct >= 50 else
+#         "Likely human-written"
+#     )
+
+#     # Header
+#     story.append(Paragraph("<b>AI Text Scan Report</b>", styles["Title"]))
+#     story.append(Spacer(1, 0.2 * inch))
+#     story.append(Paragraph(f"<b>Verdict:</b> {verdict}", styles["Heading2"]))
+#     story.append(Paragraph(f"<b>Likelihood:</b> {likelihood_pct}%", styles["Normal"]))
+#     story.append(Spacer(1, 0.1 * inch))
+
+#     # Summary table
+#     data = [
+#         ["Metric", "Value"],
+#         ["Predictability Score", f"{row['overall_score']:.2f}"],
+#         ["Top-10 Tokens", f"{row['top10_frac']*100:.1f}%"],
+#         ["Top-100 Tokens", f"{row['top100_frac']*100:.1f}%"],
+#         ["Perplexity", f"{row['ppl']:.1f}"],
+#         ["Burstiness", f"{row['burstiness']:.2f}"],
+#         ["Model", row["model_name"]],
+#         ["Device", row["device"]],
+#         ["Text Length", f"{row['text_len_chars']} chars / {row['text_len_tokens']} tokens"],
+#         ["Tag", row["tag"] or "(none)"]
+#     ]
+
+#     table = Table(data, colWidths=[2.5 * inch, 3.5 * inch])
+#     table.setStyle(TableStyle([
+#         ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+#         ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+#         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+#         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+#         ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+#         ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+#         ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
+#     ]))
+
+#     story.append(table)
+#     story.append(Spacer(1, 0.25 * inch))
+
+#     # Likelihood color bar
+#     story.append(Paragraph("<b>Likelihood Indicator</b>", styles["Heading3"]))
+#     story.append(Spacer(1, 0.1 * inch))
+#     color = (
+#         colors.red if likelihood_pct >= 85 else
+#         colors.orange if likelihood_pct >= 60 else
+#         colors.yellow if likelihood_pct >= 40 else
+#         colors.green
+#     )
+#     d = Drawing(400, 40)
+#     d.add(Rect(0, 10, 4 * likelihood_pct, 20, fillColor=color))
+#     d.add(Rect(0, 10, 400, 20, fillColor=None, strokeColor=colors.black))
+#     d.add(String(410, 15, f"{likelihood_pct}%", fontSize=12))
+#     story.append(d)
+#     story.append(Spacer(1, 0.3 * inch))
+
+#     # Bar chart of key metrics
+#     story.append(Paragraph("<b>Metrics Overview</b>", styles["Heading3"]))
+#     chart = VerticalBarChart()
+#     chart.x = 50
+#     chart.y = 30
+#     chart.height = 150
+#     chart.width = 400
+#     chart.data = [[
+#         row["top10_frac"] * 100,
+#         row["top100_frac"] * 100,
+#         row["ppl"],
+#         row["burstiness"]
+#     ]]
+#     chart.categoryAxis.categoryNames = ["Top-10 %", "Top-100 %", "Perplexity", "Burstiness"]
+#     chart.bars[0].fillColor = colors.darkblue
+#     chart.valueAxis.valueMin = 0
+#     chart.valueAxis.valueMax = max(100, row["ppl"] + 10)
+#     chart.valueAxis.valueStep = 20
+#     d2 = Drawing(500, 200)
+#     d2.add(chart)
+#     story.append(d2)
+
+#     doc.build(story)
+#     return pdf_path
+
+
+#     # ---------- Write summary to plain text ----------
+#     summary_path = os.path.join(os.path.dirname(LOG_PATH), "scan_summaries.txt")
+#     likelihood_pct = int(row["ai_likelihood_calibrated"] * 100)
+#     verdict_text = (
+#         "almost certainly AI-generated" if likelihood_pct >= 85 else
+#         "very likely AI-generated" if likelihood_pct >= 70 else
+#         "possibly AI-generated" if likelihood_pct >= 50 else
+#         "likely human-written"
+#     )
+
+#     summary = (
+#         f"\n--- Scan Summary ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(row['ts']))}) ---\n"
+#         f"Verdict: {verdict_text.capitalize()}.\n"
+#         f"Likelihood this was AI-generated: {likelihood_pct}%.\n"
+#         f"Predictability Score: {row['overall_score']:.2f}\n"
+#         f"Top-10 Tokens: {row['top10_frac'] * 100:.1f}%  |  Top-100 Tokens: {row['top100_frac'] * 100:.1f}%\n"
+#         f"Perplexity: {row['ppl']:.1f}  |  Burstiness: {row['burstiness']:.2f}\n"
+#         f"Model: {row['model_name']}  |  Device: {row['device']}\n"
+#         f"Text Length: {row['text_len_chars']} chars / {row['text_len_tokens']} tokens\n"
+#         f"Tag: {row['tag'] or '(none)'}\n"
+#         "------------------------------------------------------------\n"
+#     )
+
+#     with open(summary_path, "a") as txt:
+#         txt.write(summary)
+
+
 
 
 # # -------------------- Route --------------------
@@ -636,40 +802,22 @@ def scan(inp: ScanIn):
 # def scan(inp: ScanIn):
 #     text = inp.text.strip()
 #     if not text:
-#         return {
-#             "overall_score": 0.0,
-#             "per_token": [],
-#             "explanation": "Empty text",
-#             "ppl": None,
-#             "burstiness": None,
-#         }
+#         return {"overall_score": 0.0, "per_token": [], "explanation": "Empty text"}
 
 #     out = chunked_scan(text)
-
-#     # Build explanation
-#     total = max(1, out["total"])
-#     bins = out["bins"]
-#     exp = (
-#         f"{round(100*(bins[10]/total))}% of tokens in Top-10; "
-#         f"{round(100*(bins[100]/total))}% in Top-100. "
-#         f"Perplexity≈{out['ppl']:.1f}; Burstiness≈{out['burstiness']:.3f}. "
-#         "Higher Top-10 fractions and lower perplexity typically correlate with model-like text."
-#     )
-
 #     total = max(1, out["total"])
 #     bins = out["bins"]
 #     frac10 = bins[10] / total
 #     frac100 = bins[100] / total
 
-#     # --- simple calibrated probability (same logic your frontend uses; optional) ---
-#     # Map perplexity & burstiness to 0..1 “AI-ness” helpers
+#     # --- calibrated probability ---
 #     fPpl   = max(0, min(1, (25 - (out['ppl'] or 25)) / 20))
 #     fBurst = max(0, min(1, (8 - (out['burstiness'] or 8)) / 6))
 #     z = (2.3 * out["score"]) + (0.9 * fPpl) + (0.6 * fBurst) + (0.5 * frac10) - 1.5
 #     calP = 1 / (1 + math.exp(-4 * z))
 #     calP = max(0, min(1, calP))
 
-#     # --- write CSV row ---
+#     # --- log row ---
 #     log_scan_row({
 #         "ts": int(time.time()),
 #         "text_sha256": _sha256_text(text),
@@ -684,16 +832,28 @@ def scan(inp: ScanIn):
 #         "ppl": round(out["ppl"], 6),
 #         "burstiness": round(out["burstiness"], 6),
 #         "ai_likelihood_calibrated": round(calP, 6),
-#         "tag": (inp.tag or "")      # <- use the value sent from the UI
+#         "tag": (inp.tag or "")
 #     })
 
-
+#     # -------- readable explanation --------
+#     percent = round(calP * 100)
+#     if percent >= 85:
+#         summary = f"Likelihood this was AI-generated: {percent}% — almost certain."
+#     elif percent >= 70:
+#         summary = f"Likelihood this was AI-generated: {percent}% — high likelihood."
+#     elif percent >= 50:
+#         summary = f"Likelihood this was AI-generated: {percent}% — moderate likelihood."
+#     elif percent >= 30:
+#         summary = f"Likelihood this was AI-generated: {percent}% — low to moderate likelihood."
+#     else:
+#         summary = f"Likelihood this was AI-generated: {percent}% — unlikely."
 
 #     exp = (
 #         f"{round(100*frac10)}% of tokens in Top-10; "
 #         f"{round(100*frac100)}% in Top-100. "
 #         f"Perplexity≈{out['ppl']:.1f}; Burstiness≈{out['burstiness']:.3f}. "
-#         "Higher Top-10 fractions and lower perplexity typically correlate with model-like text."
+#         "Higher Top-10 fractions and lower perplexity typically correlate with model-like text. "
+#         + summary
 #     )
 
 #     return {
@@ -709,3 +869,280 @@ def scan(inp: ScanIn):
 #         "dtype": str(DTYPE),
 #         "calibrated_prob": calP
 #     }
+
+
+# # # app.py (upgraded reference model + MPS + long-text chunking)
+# # import os, csv, time, hashlib, pathlib
+# # from typing import List, Dict, Optional
+# # from pydantic import BaseModel
+# # import math
+
+# # from fastapi import FastAPI
+# # from fastapi.middleware.cors import CORSMiddleware
+# # from pydantic import BaseModel
+
+# # import torch
+# # from transformers import AutoTokenizer, AutoModelForCausalLM
+
+# # # -------------------- Config --------------------
+# # MODEL_NAME = os.getenv("REF_MODEL", "EleutherAI/gpt-neo-1.3B")
+# # # Good alternatives:
+# # #   "EleutherAI/pythia-1.4b"
+# # #   "gpt2-medium"  (lighter fallback)
+# # MAX_TOKENS_PER_PASS = 768      # context per forward pass (safe for 1.3B on MPS)
+# # STRIDE = 128                   # overlap between chunks so boundary tokens get scored
+# # USE_FP16 = True                # try half precision on MPS or CUDA
+
+# # # -------------------- Device setup --------------------
+# # if torch.backends.mps.is_available():
+# #     DEVICE = torch.device("mps")
+# # elif torch.cuda.is_available():
+# #     DEVICE = torch.device("cuda")
+# # else:
+# #     DEVICE = torch.device("cpu")
+
+# # DTYPE = torch.float16 if (USE_FP16 and (DEVICE.type in {"cuda", "mps"})) else torch.float32
+
+# # # -------------------- App + CORS --------------------
+# # app = FastAPI(title="AI Text Scanner (MVP, Large Ref Model)")
+
+# # app.add_middleware(
+# #     CORSMiddleware,
+# #     allow_origins=["*"],  # tighten later
+# #     allow_credentials=True,
+# #     allow_methods=["*"],
+# #     allow_headers=["*"],
+# # )
+
+# # # -------------------- Model --------------------
+# # tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+# # model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=DTYPE)
+# # model.eval().to(DEVICE)
+# # if tokenizer.pad_token is None:
+# #     tokenizer.pad_token = tokenizer.eos_token
+
+# # # -------------------- IO Models --------------------
+# # class ScanIn(BaseModel):
+# #     text: str
+# #     tag: Optional[str] = None   # <- new (can be "ai", "human", or empty)
+
+# # # -------------------- Helpers --------------------
+# # def scan_chunk(input_ids: torch.Tensor) -> Dict:
+# #     """
+# #     input_ids: [1, seq_len] on DEVICE
+# #     returns dict with per-token ranks and probabilities
+# #     """
+# #     with torch.no_grad():
+# #         out = model(input_ids=input_ids)
+# #         logits = out.logits  # [1, seq_len, vocab]
+# #     ids = input_ids[0]
+# #     per_token = []
+# #     topk_bins = {10: 0, 100: 0, 1000: 0, "rest": 0}
+# #     total = max(0, ids.size(0) - 1)
+
+# #     # Compute logprobs for perplexity/burstiness
+# #     logprobs = []
+
+# #     for i in range(1, ids.size(0)):
+# #         next_logits = logits[0, i - 1]  # predicts token i
+# #         probs = torch.softmax(next_logits, dim=-1)
+
+# #         actual_id = ids[i].item()
+# #         p_actual = probs[actual_id].item()
+
+# #         # Rank = 1 + number of tokens with prob > p_actual
+# #         rank = int((probs > p_actual).sum().item() + 1)
+
+# #         if rank <= 10:
+# #             topk_bins[10] += 1
+# #         elif rank <= 100:
+# #             topk_bins[100] += 1
+# #         elif rank <= 1000:
+# #             topk_bins[1000] += 1
+# #         else:
+# #             topk_bins["rest"] += 1
+
+# #         tok_str = tokenizer.convert_ids_to_tokens([actual_id])[0]
+# #         per_token.append({"t": tok_str, "rank": rank, "p": p_actual})
+# #         # for perplexity metrics
+# #         logprobs.append(math.log(max(p_actual, 1e-12)))
+
+# #     # Perplexity over this chunk (exclude first token)
+# #     ppl = math.exp(-sum(logprobs) / max(1, len(logprobs)))
+# #     # Burstiness: variance of log-probs (higher variance = more human-like “unevenness”)
+# #     mean_lp = sum(logprobs) / max(1, len(logprobs))
+# #     burstiness = sum((lp - mean_lp) ** 2 for lp in logprobs) / max(1, len(logprobs))
+
+# #     # Heuristic overall score from rank bins
+# #     if total > 0:
+# #         frac10 = topk_bins[10] / total
+# #         frac100 = topk_bins[100] / total
+# #         overall = min(1.0, 0.75 * frac10 + 0.35 * frac100)
+# #     else:
+# #         overall = 0.0
+
+# #     return {
+# #         "per_token": per_token,
+# #         "bins": topk_bins,
+# #         "total": total,
+# #         "score": overall,
+# #         "ppl": ppl,
+# #         "burstiness": burstiness,
+# #     }
+
+# # def chunked_scan(text: str) -> Dict:
+# #     enc = tokenizer(text, return_tensors="pt", add_special_tokens=False)
+# #     ids = enc["input_ids"][0]
+# #     if ids.size(0) <= MAX_TOKENS_PER_PASS:
+# #         input_ids = ids.unsqueeze(0).to(DEVICE)
+# #         return scan_chunk(input_ids)
+
+# #     # Long text: slide over with stride
+# #     all_tokens: List[Dict] = []
+# #     agg_bins = {10: 0, 100: 0, 1000: 0, "rest": 0}
+# #     agg_total = 0
+# #     scores = []
+# #     ppls = []
+# #     bursts = []
+
+# #     start = 0
+# #     while start < ids.size(0):
+# #         end = min(start + MAX_TOKENS_PER_PASS, ids.size(0))
+# #         chunk_ids = ids[start:end].unsqueeze(0).to(DEVICE)
+# #         result = scan_chunk(chunk_ids)
+
+# #         # Keep all tokens except the very first one of the document
+# #         # (but that nuance is small—fine for MVP)
+# #         all_tokens.extend(result["per_token"])
+# #         for k in agg_bins:
+# #             agg_bins[k] += result["bins"][k]
+# #         agg_total += result["total"]
+# #         scores.append(result["score"])
+# #         ppls.append(result["ppl"])
+# #         bursts.append(result["burstiness"])
+
+# #         if end == ids.size(0):
+# #             break
+# #         start = end - STRIDE  # overlap
+
+# #     # Aggregate across chunks
+# #     if agg_total > 0:
+# #         frac10 = agg_bins[10] / agg_total
+# #         frac100 = agg_bins[100] / agg_total
+# #         overall = min(1.0, 0.75 * frac10 + 0.35 * frac100)
+# #     else:
+# #         overall = 0.0
+
+# #     return {
+# #         "per_token": all_tokens,
+# #         "bins": agg_bins,
+# #         "total": agg_total,
+# #         "score": overall,
+# #         "ppl": sum(ppls) / len(ppls) if ppls else 0.0,
+# #         "burstiness": sum(bursts) / len(bursts) if bursts else 0.0,
+# #     }
+
+# #     # -------- CSV logging --------
+# # LOG_PATH = os.getenv("SCAN_LOG_PATH", "scan_logs.csv")
+
+# # _FIELDNAMES = [
+# #     "ts", "text_sha256", "text_len_chars", "text_len_tokens",
+# #     "model_name", "device", "dtype",
+# #     "overall_score", "top10_frac", "top100_frac", "ppl", "burstiness",
+# #     "ai_likelihood_calibrated", "tag"  # tag left blank for you to label later
+# # ]
+
+# # def _ensure_log_header(path: str):
+# #     if not os.path.exists(path) or os.path.getsize(path) == 0:
+# #         with open(path, "w", newline="") as f:
+# #             csv.DictWriter(f, fieldnames=_FIELDNAMES).writeheader()
+
+# # def _sha256_text(s: str) -> str:
+# #     return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+# # def log_scan_row(row: dict):
+# #     pathlib.Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
+# #     _ensure_log_header(LOG_PATH)
+# #     with open(LOG_PATH, "a", newline="") as f:
+# #         w = csv.DictWriter(f, fieldnames=_FIELDNAMES)
+# #         w.writerow(row)
+
+
+# # # -------------------- Route --------------------
+# # @app.post("/scan")
+# # def scan(inp: ScanIn):
+# #     text = inp.text.strip()
+# #     if not text:
+# #         return {
+# #             "overall_score": 0.0,
+# #             "per_token": [],
+# #             "explanation": "Empty text",
+# #             "ppl": None,
+# #             "burstiness": None,
+# #         }
+
+# #     out = chunked_scan(text)
+
+# #     # Build explanation
+# #     total = max(1, out["total"])
+# #     bins = out["bins"]
+# #     exp = (
+# #         f"{round(100*(bins[10]/total))}% of tokens in Top-10; "
+# #         f"{round(100*(bins[100]/total))}% in Top-100. "
+# #         f"Perplexity≈{out['ppl']:.1f}; Burstiness≈{out['burstiness']:.3f}. "
+# #         "Higher Top-10 fractions and lower perplexity typically correlate with model-like text."
+# #     )
+
+# #     total = max(1, out["total"])
+# #     bins = out["bins"]
+# #     frac10 = bins[10] / total
+# #     frac100 = bins[100] / total
+
+# #     # --- simple calibrated probability (same logic your frontend uses; optional) ---
+# #     # Map perplexity & burstiness to 0..1 “AI-ness” helpers
+# #     fPpl   = max(0, min(1, (25 - (out['ppl'] or 25)) / 20))
+# #     fBurst = max(0, min(1, (8 - (out['burstiness'] or 8)) / 6))
+# #     z = (2.3 * out["score"]) + (0.9 * fPpl) + (0.6 * fBurst) + (0.5 * frac10) - 1.5
+# #     calP = 1 / (1 + math.exp(-4 * z))
+# #     calP = max(0, min(1, calP))
+
+# #     # --- write CSV row ---
+# #     log_scan_row({
+# #         "ts": int(time.time()),
+# #         "text_sha256": _sha256_text(text),
+# #         "text_len_chars": len(text),
+# #         "text_len_tokens": total,
+# #         "model_name": MODEL_NAME,
+# #         "device": str(DEVICE),
+# #         "dtype": str(DTYPE),
+# #         "overall_score": round(out["score"], 6),
+# #         "top10_frac": round(frac10, 6),
+# #         "top100_frac": round(frac100, 6),
+# #         "ppl": round(out["ppl"], 6),
+# #         "burstiness": round(out["burstiness"], 6),
+# #         "ai_likelihood_calibrated": round(calP, 6),
+# #         "tag": (inp.tag or "")      # <- use the value sent from the UI
+# #     })
+
+
+
+# #     exp = (
+# #         f"{round(100*frac10)}% of tokens in Top-10; "
+# #         f"{round(100*frac100)}% in Top-100. "
+# #         f"Perplexity≈{out['ppl']:.1f}; Burstiness≈{out['burstiness']:.3f}. "
+# #         "Higher Top-10 fractions and lower perplexity typically correlate with model-like text."
+# #     )
+
+# #     return {
+# #         "overall_score": out["score"],
+# #         "per_token": out["per_token"],
+# #         "explanation": exp,
+# #         "ppl": out["ppl"],
+# #         "burstiness": out["burstiness"],
+# #         "bins": bins,
+# #         "total": total,
+# #         "model_name": MODEL_NAME,
+# #         "device": str(DEVICE),
+# #         "dtype": str(DTYPE),
+# #         "calibrated_prob": calP
+# #     }
