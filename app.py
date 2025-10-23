@@ -226,6 +226,111 @@ def log_scan_row(row: dict):
             row["tag"],
         ])
 
+        pdf_path = create_pdf_summary(row)
+        print(f"[+] PDF report created: {pdf_path}")
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+
+def create_pdf_summary(row: dict):
+    """Generate a graphical PDF summary for each scan result."""
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(row["ts"]))
+    pdf_path = os.path.join(os.path.dirname(LOG_PATH), f"scan_summary_{timestamp}.pdf")
+
+    doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+
+    likelihood_pct = int(row["ai_likelihood_calibrated"] * 100)
+    verdict = (
+        "Almost certainly AI-generated" if likelihood_pct >= 85 else
+        "Very likely AI-generated" if likelihood_pct >= 70 else
+        "Possibly AI-generated" if likelihood_pct >= 50 else
+        "Likely human-written"
+    )
+
+    # Header
+    story.append(Paragraph("<b>AI Text Scan Report</b>", styles["Title"]))
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph(f"<b>Verdict:</b> {verdict}", styles["Heading2"]))
+    story.append(Paragraph(f"<b>Likelihood:</b> {likelihood_pct}%", styles["Normal"]))
+    story.append(Spacer(1, 0.1 * inch))
+
+    # Summary table
+    data = [
+        ["Metric", "Value"],
+        ["Predictability Score", f"{row['overall_score']:.2f}"],
+        ["Top-10 Tokens", f"{row['top10_frac']*100:.1f}%"],
+        ["Top-100 Tokens", f"{row['top100_frac']*100:.1f}%"],
+        ["Perplexity", f"{row['ppl']:.1f}"],
+        ["Burstiness", f"{row['burstiness']:.2f}"],
+        ["Model", row["model_name"]],
+        ["Device", row["device"]],
+        ["Text Length", f"{row['text_len_chars']} chars / {row['text_len_tokens']} tokens"],
+        ["Tag", row["tag"] or "(none)"]
+    ]
+
+    table = Table(data, colWidths=[2.5 * inch, 3.5 * inch])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+        ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
+    ]))
+
+    story.append(table)
+    story.append(Spacer(1, 0.25 * inch))
+
+    # Likelihood color bar
+    story.append(Paragraph("<b>Likelihood Indicator</b>", styles["Heading3"]))
+    story.append(Spacer(1, 0.1 * inch))
+    color = (
+        colors.red if likelihood_pct >= 85 else
+        colors.orange if likelihood_pct >= 60 else
+        colors.yellow if likelihood_pct >= 40 else
+        colors.green
+    )
+    d = Drawing(400, 40)
+    d.add(Rect(0, 10, 4 * likelihood_pct, 20, fillColor=color))
+    d.add(Rect(0, 10, 400, 20, fillColor=None, strokeColor=colors.black))
+    d.add(String(410, 15, f"{likelihood_pct}%", fontSize=12))
+    story.append(d)
+    story.append(Spacer(1, 0.3 * inch))
+
+    # Bar chart of key metrics
+    story.append(Paragraph("<b>Metrics Overview</b>", styles["Heading3"]))
+    chart = VerticalBarChart()
+    chart.x = 50
+    chart.y = 30
+    chart.height = 150
+    chart.width = 400
+    chart.data = [[
+        row["top10_frac"] * 100,
+        row["top100_frac"] * 100,
+        row["ppl"],
+        row["burstiness"]
+    ]]
+    chart.categoryAxis.categoryNames = ["Top-10 %", "Top-100 %", "Perplexity", "Burstiness"]
+    chart.bars[0].fillColor = colors.darkblue
+    chart.valueAxis.valueMin = 0
+    chart.valueAxis.valueMax = max(100, row["ppl"] + 10)
+    chart.valueAxis.valueStep = 20
+    d2 = Drawing(500, 200)
+    d2.add(chart)
+    story.append(d2)
+
+    doc.build(story)
+    return pdf_path
+
+
     # ---------- Write summary to plain text ----------
     summary_path = os.path.join(os.path.dirname(LOG_PATH), "scan_summaries.txt")
     likelihood_pct = int(row["ai_likelihood_calibrated"] * 100)
