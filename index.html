@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AI Text Scanner (MVP)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+    textarea { width: 100%; height: 220px; }
+    .chip { display:inline-block; padding:0 .25rem; margin:.05rem; border-radius:4px; }
+    .rank10 { background: #d1ffd1; }    /* very predictable (Top-10) */
+    .rank100 { background: #f1ffd1; }   /* Top-100 */
+    .rank1000 { background: #fff3d1; }  /* Top-1000 */
+    .rankRest { background: #ffd1d1; }  /* unpredictable */
+    .meta { margin:.5rem 0 1rem; }
+    .badge { display:inline-block; padding:.2rem .5rem; border-radius:6px; font-weight:600; }
+    .b-low { background:#e8f5e9; }      /* greenish */
+    .b-med { background:#fff8e1; }      /* amber */
+    .b-high{ background:#ffebee; }      /* red-ish */
+    .legend { font-size:.9rem; opacity:.8; }
+  </style>
+</head>
+<body>
+  <h1>AI Text Scanner (MVP)</h1>
+
+  <textarea id="txt" placeholder="Paste text here..."></textarea>
+  <br/><br/>
+  <button id="scan">Scan</button>
+  <select id="tag" style="margin-left:.5rem;">
+  <option value="">(no label)</option>
+  <option value="ai">ai</option>
+  <option value="human">human</option>
+</select>
+
+
+  <!-- New verdict + summary rows -->
+  <div class="meta">
+    <div id="verdict"></div>
+    <p id="summary"></p>
+    <div class="legend">
+      Legend: <span class="chip rank10">Top-10</span> <span class="chip rank100">Top-100</span>
+      <span class="chip rank1000">Top-1000</span> <span class="chip rankRest">Unpredictable</span>
+    </div>
+  </div>
+
+  <div id="highlights" style="line-height:2;"></div>
+
+  <script>
+  const rankClass = (r) => r<=10 ? "rank10" : r<=100 ? "rank100" : r<=1000 ? "rank1000" : "rankRest";
+
+  // Heuristic calibration → returns 0..1
+  // Inputs: overall score (0..1), perplexity (~10..80), burstiness (~3..15), and Top-10 fraction.
+  function calibratedProb({score, ppl, burstiness, bins, total}) {
+    const eps = 1e-9;
+    const t10 = total ? Math.max(0, Math.min(1, (bins?.[10] || 0) / total)) : 0;
+
+    // Map raw features to 0..1 “good-for-AI” scales
+    // Perplexity: lower is more AI-like; ~20 is a good pivot for general prose
+    const fPpl   = Math.max(0, Math.min(1, (25 - (ppl || 25)) / 20));      // 1 when ppl <= 5, 0 when ppl >= 45
+    // Burstiness: lower is more AI-like; ~7 is a reasonable pivot for factual paragraphs
+    const fBurst = Math.max(0, Math.min(1, (8 - (burstiness || 8)) / 6));  // 1 when <=2, 0 when >=14
+
+    // Linear combo → squashed by logistic. Tuned for sensible behavior on typical English prose.
+    // You’ll later replace these weights with a learned logistic regression.
+    const z = (2.3 * (score || 0)) + (0.9 * fPpl) + (0.6 * fBurst) + (0.5 * t10) - 1.5;
+    const p = 1 / (1 + Math.exp(-4 * z)); // steeper sigmoid
+
+    return Math.max(0, Math.min(1, p));
+  }
+
+  function aiLikelihoodFromProb(p) {
+    if (p >= 0.75) return {label: "High AI-likelihood", cls: "b-high"};
+    if (p >= 0.50) return {label: "Medium AI-likelihood", cls: "b-med"};
+    return {label: "Low AI-likelihood", cls: "b-low"};
+  }
+
+  // Confidence heuristic based on token count only (amount of evidence)
+  function confidence(perTokenLen) {
+    if (perTokenLen >= 400) return "High";
+    if (perTokenLen >= 150) return "Medium";
+    return "Low";
+  }
+
+  document.getElementById("scan").onclick = async () => {
+    const text = document.getElementById("txt").value;
+    const tag  = document.getElementById("tag").value; // "(no label)" -> "" is fine
+    const res = await fetch("http://localhost:8080/scan", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ text, tag })  // keys must match exactly
+  });
+
+    const data = await res.json();
+
+    // --- NEW: calibrated probability ---
+    const calP = calibratedProb({
+      score: data.overall_score,
+      ppl: data.ppl,
+      burstiness: data.burstiness,
+      bins: data.bins,
+      total: data.total
+    });
+
+    const verdict = aiLikelihoodFromProb(calP);
+    const conf = confidence((data.per_token || []).length);
+
+    // Verdict line (now shows calibrated %)
+    document.getElementById("verdict").innerHTML =
+      `<span class="badge ${verdict.cls}">${verdict.label}</span> ` +
+      `<span style="margin-left:.4rem; opacity:.8;">` +
+      `Confidence: ${conf} · Score: ${(data.overall_score||0).toFixed(2)} ` +
+      `· AI-likelihood: ${(calP*100).toFixed(0)}% (calibrated)` +
+      `</span>`;
+
+    // Existing summary (keep your explanation; optionally append model/device)
+    document.getElementById("summary").textContent = data.explanation || "";
+
+    // Highlights
+    const frag = document.createDocumentFragment();
+    (data.per_token || []).forEach(tok => {
+      const span = document.createElement("span");
+      span.className = "chip " + rankClass(tok.rank);
+      span.textContent = tok.t.replace(/Ġ/g, ' ');
+      span.title = `rank=${tok.rank} p=${(tok.p || 0).toFixed(5)}`;
+      frag.appendChild(span);
+    });
+    const hl = document.getElementById("highlights");
+    hl.innerHTML = "";
+    hl.appendChild(frag);
+  };
+</script>
+
+</body>
+</html>
