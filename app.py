@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -76,10 +77,14 @@ def scan_chunk(input_ids: torch.Tensor) -> Dict:
         p_actual = probs[actual_id].item()
         rank = int((probs > p_actual).sum().item() + 1)
 
-        if rank <= 10: topk_bins[10] += 1
-        elif rank <= 100: topk_bins[100] += 1
-        elif rank <= 1000: topk_bins[1000] += 1
-        else: topk_bins["rest"] += 1
+        if rank <= 10:
+            topk_bins[10] += 1
+        elif rank <= 100:
+            topk_bins[100] += 1
+        elif rank <= 1000:
+            topk_bins[1000] += 1
+        else:
+            topk_bins["rest"] += 1
 
         tok_str = tokenizer.convert_ids_to_tokens([actual_id])[0]
         per_token.append({"t": tok_str, "rank": rank, "p": p_actual})
@@ -124,11 +129,15 @@ def chunked_scan(text: str) -> Dict:
         result = scan_chunk(chunk_ids)
 
         all_tokens.extend(result["per_token"])
-        for k in agg_bins: agg_bins[k] += result["bins"][k]
+        for k in agg_bins:
+            agg_bins[k] += result["bins"][k]
         agg_total += result["total"]
-        scores.append(result["score"]); ppls.append(result["ppl"]); bursts.append(result["burstiness"])
+        scores.append(result["score"])
+        ppls.append(result["ppl"])
+        bursts.append(result["burstiness"])
 
-        if end == ids.size(0): break
+        if end == ids.size(0):
+            break
         start = end - STRIDE
 
     if agg_total > 0:
@@ -167,7 +176,8 @@ TECH_CUES = [
 POETRY_LINEBREAK_RATIO_CUTOFF = 0.20
 SHORT_AVG_LINE_LEN = 60
 
-def _ratio(n, d): return (n / d) if d else 0.0
+def _ratio(n, d):
+    return (n / d) if d else 0.0
 
 def detect_category(text: str) -> dict:
     lines = [ln for ln in text.splitlines() if ln.strip()]
@@ -312,7 +322,9 @@ def create_pdf_summary(row: dict):
     chart.valueAxis.valueMin = 0
     chart.valueAxis.valueMax = max(100, row["ppl"] + 10)
     chart.valueAxis.valueStep = 20
-    d2 = Drawing(500, 200); d2.add(chart); story.append(d2)
+    d2 = Drawing(500, 200)
+    d2.add(chart)
+    story.append(d2)
 
     expected = {
         "journalism": "Expected: Top-10 60–80%, PPL 10–25, Burstiness 4–7. High predictability is normal.",
@@ -327,6 +339,7 @@ def create_pdf_summary(row: dict):
     }
     story.append(Spacer(1, 0.15 * inch))
     story.append(Paragraph(f"<i>{expected.get(row.get('category','other'), expected['other'])}</i>", styles["Normal"]))
+
     doc.build(story)
     return pdf_path
 
@@ -334,8 +347,10 @@ def log_scan_row(row: dict):
     """Readable CSV (single schema) + per-scan PDF."""
     pathlib.Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
     csv_exists = os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > 0
+
     with open(LOG_PATH, "a", newline="") as f:
         writer = csv.writer(f)
+
         if not csv_exists:
             writer.writerow([
                 "# Legend:", "Each row = one scan result.",
@@ -350,7 +365,10 @@ def log_scan_row(row: dict):
                 "Category","Category Conf","Category Note"
             ])
 
-        verdict = ("Likely AI-generated" if row["ai_likelihood_calibrated"] >= 0.6 else "Likely human-written")
+        verdict = ("Likely AI-generated"
+                   if row["ai_likelihood_calibrated"] >= 0.6
+                   else "Likely human-written")
+
         writer.writerow([
             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row["ts"])),
             verdict,
@@ -360,12 +378,17 @@ def log_scan_row(row: dict):
             f"{row['top100_frac'] * 100:.1f}%",
             f"{row['ppl']:.1f}",
             f"{row['burstiness']:.2f}",
-            row["model_name"], row["device"],
-            row["text_len_chars"], row["text_len_tokens"],
-            row["text_sha256"][:8], row["tag"] or "",
-            row.get("category","other"), f"{int(100*row.get('category_conf',0))}%",
+            row["model_name"],
+            row["device"],
+            row["text_len_chars"],
+            row["text_len_tokens"],
+            row["text_sha256"][:8],
+            row["tag"] or "",
+            row.get("category","other"),
+            f"{int(100*row.get('category_conf',0))}%",
             row.get("category_note",""),
         ])
+
     pdf_path = create_pdf_summary(row)
     print(f"[+] PDF report created: {pdf_path}")
 
@@ -374,7 +397,11 @@ def log_scan_row(row: dict):
 def scan(inp: ScanIn):
     text = inp.text.strip()
     if not text:
-        return {"overall_score": 0.0, "per_token": [], "explanation": "Empty text"}
+        return {
+            "overall_score": 0.0,
+            "per_token": [],
+            "explanation": "Empty text",
+        }
 
     out = chunked_scan(text)
 
@@ -387,25 +414,43 @@ def scan(inp: ScanIn):
     fPpl   = max(0, min(1, (25 - (out['ppl'] or 25)) / 20))
     fBurst = max(0, min(1, (8 - (out['burstiness'] or 8)) / 6))
 
-    # --- Category detection (text-based) ---
+    # --- Category detection ---
     cat_info = detect_category(text)
-    cat = cat_info["category"]; cat_conf = cat_info["confidence"]
+    cat = cat_info["category"]
+    cat_conf = cat_info["confidence"]
 
     # --- Classic-literature override using metrics (NEW) ---
-    # If it looks like narrative AND shows very low perplexity + low burstiness + high Top-10,
-    # treat as classic literature to avoid false positives (e.g., Twain).
-    classic_metric_trigger = (out["ppl"] <= 15.0 and out["burstiness"] <= 7.0 and frac10 >= 0.65)
+    classic_metric_trigger = (
+        out["ppl"] <= 15.0
+        and out["burstiness"] <= 7.0
+        and frac10 >= 0.65
+    )
     if cat in ("creative_narrative", "other") and classic_metric_trigger:
         cat = "classic_literature"
-        # Boost confidence if lexical cues appear
-        classic_hits = len(re.findall(r"\b(whilst|whereupon|thereof|therein|therewith|herein|hereby|forthwith|betwixt|methinks|thereupon|wherein)\b", text, flags=re.I))
-        cat_conf = 0.75 if classic_hits >= 1 else max(cat_conf, 0.65)
+        classic_hits = len(
+            re.findall(
+                r"\b(whilst|whereupon|thereof|therein|therewith|herein|hereby|forthwith|betwixt|methinks|thereupon|wherein)\b",
+                text,
+                flags=re.I,
+            )
+        )
+        cat_conf = (
+            0.75 if classic_hits >= 1
+            else max(cat_conf, 0.65)
+        )
 
     # Get category-specific weights
-    adj = category_adjustments(cat); w = adj["weights"]
+    adj = category_adjustments(cat)
+    w = adj["weights"]
 
     # Calibrated probability (category-aware)
-    z = (w["score"] * out["score"]) + (w["ppl"] * fPpl) + (w["burst"] * fBurst) + (w["t10"] * frac10) + w["bias"]
+    z = (
+        (w["score"] * out["score"])
+        + (w["ppl"] * fPpl)
+        + (w["burst"] * fBurst)
+        + (w["t10"] * frac10)
+        + w["bias"]
+    )
     calP = 1 / (1 + math.exp(-4 * z))
     calP = max(0, min(1, calP))
 
@@ -433,17 +478,23 @@ def scan(inp: ScanIn):
 
     percent = round(calP * 100)
     summary = (
-        "almost certain." if percent >= 85 else
-        "high likelihood." if percent >= 70 else
-        "moderate likelihood." if percent >= 50 else
+        "almost certain."
+        if percent >= 85 else
+        "high likelihood."
+        if percent >= 70 else
+        "moderate likelihood."
+        if percent >= 50 else
         "low likelihood."
     )
+
     exp = (
-        f"{round(100*frac10)}% of tokens in Top-10; {round(100*frac100)}% in Top-100. "
+        f"{round(100*frac10)}% of tokens in Top-10; "
+        f"{round(100*frac100)}% in Top-100. "
         f"Perplexity≈{out['ppl']:.1f}; Burstiness≈{out['burstiness']:.3f}. "
-        f"Higher Top-10 fractions and lower perplexity typically correlate with model-like text. "
+        "Higher Top-10 fractions and lower perplexity typically correlate with model-like text. "
         f"Likelihood this was AI-generated: {percent}% — {summary} "
-        f"Detected style: {cat.replace('_',' ')} (conf≈{cat_conf:.0%}). {adj['note']}"
+        f"Detected style: {cat.replace('_',' ')} (conf≈{cat_conf:.0%}). "
+        f"{adj['note']}"
     )
 
     return {
@@ -462,3 +513,20 @@ def scan(inp: ScanIn):
         "category_conf": cat_conf,
         "category_note": adj["note"],
     }
+
+# -----------------------------------------------------------------
+# NEW: Serve index.html at "/" so the browser UI loads
+# -----------------------------------------------------------------
+@app.get("/", response_class=HTMLResponse)
+def serve_index():
+    """
+    Serve the local index.html so visiting http://127.0.0.1:8080/
+    loads the scanner UI.
+    """
+    index_path = pathlib.Path(__file__).parent / "index.html"
+    return index_path.read_text(encoding="utf-8")
+
+# Optional: silence favicon.ico 404 spam in logs
+@app.get("/favicon.ico")
+def favicon():
+    return Response(status_code=204)
