@@ -213,6 +213,25 @@ def serve_index():
 ```
 Your latest build already includes this fix.
 
+### Known Mac OS Client issues (For the local client application only)
+You can manually tell macOS to trust the app:
+
+Open Terminal.
+
+Run:
+
+xattr -d com.apple.quarantine ~/Downloads/AI_Text_Scanner.app
+
+
+Press Enter, then try opening the app again.
+
+If you’re opening the raw binary (not the .app bundle), run:
+
+xattr -d com.apple.quarantine ~/Downloads/AI_Text_Scanner
+
+
+Now it’ll open immediately, no warning.
+
 ---
 
 ## ⚠️ Limitations
@@ -269,6 +288,8 @@ http://127.0.0.1:8080/
 You’re in. Paste text, click **Scan**, and review your results and reports.
 
 ---
+
+
 
 Made with ❤️ by Soren Essen  
 Powered by **FastAPI**, **Transformers**, and **Calypso Labs**.
