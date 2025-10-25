@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Calypso Labs — Initializing...</title>
+<style>
+  /* --- layout --- */
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #000;
+    color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", Roboto, sans-serif;
+    overflow: hidden;
+  }
+
+  .splash {
+    width: 800px;
+    max-width: 90vw;
+    height: 400px;
+    max-height: 60vh;
+    border-radius: 24px;
+    position: relative;
+    background: radial-gradient(circle at 30% 20%, rgba(0,90,130,0.6) 0%, rgba(0,20,35,0.9) 60%, rgba(0,0,0,1) 100%);
+    box-shadow:
+      0 30px 80px rgba(0, 200, 255, 0.15),
+      0 4px 20px rgba(0,0,0,0.9) inset,
+      0 0 60px rgba(0,120,200,0.4);
+    border: 1px solid rgba(0,200,255,0.2);
+    padding: 2rem 2.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  /* drifting caustic light overlay */
+  .light-overlay {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% -10%, rgba(0,180,255,0.4) 0%, rgba(0,0,0,0) 70%);
+    mix-blend-mode: screen;
+    filter: blur(60px);
+    opacity: 0.3;
+    animation: drift 6s infinite alternate ease-in-out;
+    pointer-events: none;
+  }
+
+  @keyframes drift {
+    0%   { transform: translateY(0px) translateX(0px) scale(1); opacity:0.28; }
+    100% { transform: translateY(-30px) translateX(15px) scale(1.05); opacity:0.4; }
+  }
+
+  /* particle specks like plankton */
+  .specks {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.4) 0.5px, transparent 1px),
+                      radial-gradient(rgba(0,200,255,0.4) 0.5px, transparent 1px);
+    background-size: 200px 200px, 300px 300px;
+    background-position: 0 0, 50px 80px;
+    filter: blur(0.6px);
+    opacity: 0.2;
+    animation: driftSpecks 10s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes driftSpecks {
+    0%   { transform: translateY(0px); }
+    100% { transform: translateY(-40px); }
+  }
+
+  /* top section: logo + tagline */
+  .header {
+    position: relative;
+    z-index: 2;
+  }
+
+  .brand-row {
+    display: flex;
+    align-items: flex-end;
+    gap: .75rem;
+  }
+
+  .logo-mark {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: radial-gradient(circle at 30% 30%, rgba(0,255,255,0.8) 0%, rgba(0,80,120,0.2) 60%, rgba(0,0,0,0) 70%);
+    box-shadow:
+      0 0 20px rgba(0,255,255,0.6),
+      0 0 60px rgba(0,120,255,0.4),
+      inset 0 0 10px rgba(0,180,255,0.5);
+    border: 1px solid rgba(0,255,255,0.4);
+    position: relative;
+  }
+
+  /* subtle trident / wave slash mark using pure CSS */
+  .logo-mark::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 22%;
+    width: 18px;
+    height: 28px;
+    transform: translateX(-50%);
+    border-radius: 4px 4px 10px 10px;
+    background: radial-gradient(circle at 50% 0%, rgba(0,0,0,0) 0%, rgba(0,40,60,.6) 40%, rgba(0,0,0,0) 70%);
+    box-shadow:
+      0 -8px 12px rgba(0,255,255,0.6),
+      0 8px 16px rgba(0,150,255,0.4),
+      0 0 4px rgba(0,255,255,0.8) inset;
+    clip-path: polygon(
+      50% 0%, 60% 12%, 60% 40%, 70% 40%, 50% 100%, 30% 40%, 40% 40%, 40% 12%
+    );
+    opacity: 0.9;
+  }
+
+  .brand-texts {
+    line-height: 1.1;
+  }
+
+  .brand-name {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #e9feff;
+    text-shadow:
+      0 0 6px rgba(0,255,255,0.6),
+      0 0 24px rgba(0,180,255,0.4);
+  }
+
+  .sub-brand {
+    font-size: .8rem;
+    font-weight: 400;
+    color: rgba(180,240,255,0.6);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .tagline {
+    margin-top: .75rem;
+    font-size: .9rem;
+    font-weight: 400;
+    color: rgba(200,255,255,0.6);
+    max-width: 480px;
+  }
+
+  /* bottom section: progress info */
+  .footer {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    gap: .75rem;
+  }
+
+  .progress-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: .8rem;
+    font-weight: 500;
+    color: rgba(180,240,255,0.6);
+  }
+
+  .bar-shell {
+    width: 100%;
+    height: 10px;
+    background: rgba(0,40,60,0.6);
+    border-radius: 999px;
+    border: 1px solid rgba(0,255,255,0.25);
+    box-shadow:
+      0 0 10px rgba(0,120,255,0.4) inset,
+      0 0 20px rgba(0,200,255,0.3);
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      rgba(0,255,255,1) 0%,
+      rgba(0,120,255,1) 100%
+    );
+    box-shadow:
+      0 0 20px rgba(0,255,255,0.8),
+      0 0 60px rgba(0,120,255,0.6);
+    border-radius: 999px;
+    transition: width .18s linear;
+    position: relative;
+  }
+
+  /* shimmer scan line on top of the fill */
+  .bar-fill::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: -30px;
+    width: 60px;
+    height: 70px;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 70%);
+    opacity: .6;
+    filter: blur(8px);
+    mix-blend-mode: screen;
+    animation: sweep 1.2s infinite;
+  }
+
+  @keyframes sweep {
+    0%   { transform: translateX(-40px) translateY(0) rotate(15deg); opacity:.3; }
+    60%  { transform: translateX(80px) translateY(0) rotate(15deg); opacity:.6; }
+    100% { transform: translateX(160px) translateY(0) rotate(15deg); opacity:0; }
+  }
+
+  /* tiny “system text” */
+  .boot-hint {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .7rem;
+    color: rgba(140,200,220,0.4);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+</style>
+</head>
+<body>
+
+<div class="splash">
+  <div class="light-overlay"></div>
+  <div class="specks"></div>
+
+  <div class="header">
+    <div class="brand-row">
+      <div class="logo-mark"></div>
+      <div class="brand-texts">
+        <div class="brand-name">CALYPSO LABS</div>
+        <div class="sub-brand">Systems Initialization</div>
+      </div>
+    </div>
+    <div class="tagline">
+      Beneath the surface, the signal wakes.
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="progress-label-row">
+      <div id="statusText">Initializing core modules…</div>
+      <div id="percentText">0%</div>
+    </div>
+
+    <div class="bar-shell">
+      <div class="bar-fill" id="barFill"></div>
+    </div>
+
+    <div class="boot-hint" id="bootHint">
+      CL-BOOTSEQ › Handshake pending…
+    </div>
+  </div>
+</div>
+
+<script>
+  // Fake progress demo.
+  // In production: you’ll drive this from real startup milestones.
+  const barFill    = document.getElementById("barFill");
+  const percentTxt = document.getElementById("percentText");
+  const statusText = document.getElementById("statusText");
+  const bootHint   = document.getElementById("bootHint");
+
+  // You can map certain % ranges to human-readable steps.
+  const steps = [
+    {pct: 5,   label: "Calypso core online"},
+    {pct: 18,  label: "Authorizing local runtime"},
+    {pct: 32,  label: "Linking subsystems"},
+    {pct: 47,  label: "Verifying integrity"},
+    {pct: 63,  label: "Spinning up services"},
+    {pct: 78,  label: "Establishing signal channel"},
+    {pct: 90,  label: "Finalizing environment"},
+    {pct: 100, label: "Complete"},
+  ];
+
+  let currentStep = 0;
+  let pct = 0;
+
+  function tick() {
+    // advance percent in small jumps
+    pct += Math.random() * 3.5; // ~0-3.5%
+    if (pct > 100) pct = 100;
+
+    // update bar
+    barFill.style.width = pct.toFixed(1) + "%";
+    percentTxt.textContent = Math.floor(pct) + "%";
+
+    // update step text if we crossed threshold
+    if (currentStep < steps.length && pct >= steps[currentStep].pct) {
+      statusText.textContent = steps[currentStep].label + "…";
+      bootHint.textContent   = "CL-BOOTSEQ › " + steps[currentStep].label;
+      currentStep++;
+    }
+
+    // if you want to auto-close at 100, you could trigger your app here
+    if (pct < 100) {
+      requestAnimationFrame(tick);
+    } else {
+      // window.close() or hide splash, then reveal main app
+      // (handled by host app, not here)
+    }
+  }
+
+  // start animation
+  requestAnimationFrame(tick);
+</script>
+
+</body>
+</html>
