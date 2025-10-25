@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
+from fastapi import Body
+from plagiarism_check import analyze_plagiarism
+
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -514,8 +517,45 @@ def scan(inp: ScanIn):
         "category_note": adj["note"],
     }
 
+
+# -------------------- NEW PLAGIARISM ROUTE --------------------
+@app.post("/plagiarism_check")
+def plagiarism_check(payload: dict = Body(...)):
+    """
+    Accepts:
+    {
+        "text": "...full essay..."
+    }
+
+    Returns:
+    {
+        "summary": {...},
+        "per_sentence": [...],
+        "debug": {...}
+    }
+    """
+    essay_text = payload.get("text", "").strip()
+    if not essay_text:
+        return {
+            "error": "No text provided.",
+            "summary": {
+                "risky_sentence_count": 0,
+                "unique_source_urls_checked": 0,
+                "elapsed_sec": 0
+            },
+            "per_sentence": [],
+            "debug": {
+                "queries": [],
+                "urls": []
+            }
+        }
+
+    report = analyze_plagiarism(essay_text)
+    return report
+
+
 # -----------------------------------------------------------------
-# NEW: Serve index.html at "/" so the browser UI loads
+# Serve index.html at "/" so the browser UI loads
 # -----------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def serve_index():
@@ -525,6 +565,7 @@ def serve_index():
     """
     index_path = pathlib.Path(__file__).parent / "index.html"
     return index_path.read_text(encoding="utf-8")
+
 
 # Optional: silence favicon.ico 404 spam in logs
 @app.get("/favicon.ico")

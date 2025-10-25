@@ -11,6 +11,457 @@
       --blue:#347dff; --gray:#30363d;
       --t10:#b7f5c8; --t100:#d6fbdc; --t1000:#f2e9b0; --rest:#f2c6c6;
     }
+    html,body{
+      margin:0; padding:0;
+      background:var(--bg); color:var(--text);
+      font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+    }
+    .page{
+      max-width:1100px;
+      margin:24px auto 60px;
+      padding:0 16px;
+    }
+    h1{font-size:34px;margin:8px 0 18px;}
+    h2{font-size:20px;margin:32px 0 12px;font-weight:600;color:var(--muted);}
+    textarea{
+      width:100%; min-height:260px; resize:vertical; box-sizing:border-box;
+      background:#0b0e14; color:var(--text); border:1px solid var(--gray);
+      border-radius:8px; padding:12px 14px;
+      font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+      white-space:pre; overflow:auto;
+    }
+    .row{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;margin:12px 0 8px;}
+    .col-half{flex:1 1 520px;min-width:320px;display:flex;flex-direction:column;gap:12px;}
+    button{
+      background:var(--blue);border:none;color:#fff;
+      padding:9px 14px;border-radius:6px;
+      cursor:pointer;font-weight:600;
+    }
+    button:disabled{opacity:.5;cursor:not-allowed;}
+    select{
+      background:#0b0e14;color:var(--text);
+      border:1px solid var(--gray);
+      border-radius:6px;padding:8px 10px;
+      font-size:14px;
+    }
+    .pill{
+      background:#0b0e14;
+      border:1px solid var(--gray);
+      border-radius:8px;
+      padding:12px 16px;
+      font-size:14px;
+      line-height:1.4;
+      min-height:48px;
+      flex:1 1 auto;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    .pill-title{
+      font-size:12px;
+      text-transform:uppercase;
+      color:var(--muted);
+      letter-spacing:.04em;
+      margin-bottom:4px;
+      font-weight:500;
+    }
+    .pill-value{
+      font-size:16px;
+      font-weight:600;
+      color:var(--text);
+      min-height:1em;
+    }
+    .resultsBox{
+      background:#0b0e14;
+      border:1px solid var(--gray);
+      border-radius:8px;
+      padding:16px;
+      font-size:14px;
+      line-height:1.4;
+      color:var(--text);
+      max-height:200px;
+      overflow:auto;
+      white-space:pre-wrap;
+    }
+    .legendRow{
+      background:#0b0e14;
+      border:1px solid var(--gray);
+      border-radius:8px;
+      padding:12px 16px;
+      font-size:14px;
+      line-height:1.4;
+      color:var(--text);
+    }
+    .legendTag{
+      display:inline-flex;
+      align-items:center;
+      font-size:13px;
+      margin-right:16px;
+      margin-bottom:6px;
+    }
+    .legendSwatch{
+      width:12px;height:12px;border-radius:3px;
+      display:inline-block;margin-right:6px;
+      border:1px solid #0004;
+    }
+    .sw-t10{background:var(--t10);}
+    .sw-t100{background:var(--t100);}
+    .sw-t1000{background:var(--t1000);}
+    .sw-rest{background:#f5bcbc;}
+    .statusBar{
+      background:#0b0e14;
+      border:1px solid var(--gray);
+      border-radius:8px;
+      padding:12px 16px;
+      font-size:14px;
+      line-height:1.4;
+      color:var(--text);
+      min-height:48px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .riskLow{background:var(--green);color:#000;
+      font-weight:600;font-size:14px;
+      border-radius:999px;padding:6px 10px;
+      display:inline-block;margin-bottom:8px;
+    }
+    .riskHigh{background:var(--red);color:#fff;
+      font-weight:600;font-size:14px;
+      border-radius:999px;padding:6px 10px;
+      display:inline-block;margin-bottom:8px;
+    }
+    .riskMed{background:var(--orange);color:#000;
+      font-weight:600;font-size:14px;
+      border-radius:999px;padding:6px 10px;
+      display:inline-block;margin-bottom:8px;
+    }
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+    hr.section{
+      border:0;border-top:1px solid var(--gray);
+      margin:32px 0 24px;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>AI Text Scanner (MVP)</h1>
+
+  <!-- ===================== AI-LIKELIHOOD SECTION ===================== -->
+  <h2>1. AI-likeness / style scan</h2>
+
+  <textarea id="scanInput" placeholder="Paste text to scan..."></textarea>
+
+  <div class="row" style="align-items:flex-end;">
+    <div class="col-half" style="flex:0 1 auto;min-width:260px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;">
+        <button id="scanBtn">Scan</button>
+
+        <select id="userTag">
+          <option value="">(no label)</option>
+          <option value="ai">ai</option>
+          <option value="human">human</option>
+        </select>
+
+        <div id="scanStatus" class="statusBar" style="min-width:260px;max-width:420px;">
+          <div id="scanVerdictBadge" class="riskLow" style="display:none;">...</div>
+          <div id="scanSummary">–</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-half" style="flex:1 1 100%;">
+      <div class="row" style="margin:0;">
+        <div class="pill">
+          <div class="pill-title">Predictability</div>
+          <div class="pill-value" id="statPredict">–</div>
+        </div>
+        <div class="pill">
+          <div class="pill-title">Top-10 %</div>
+          <div class="pill-value" id="statTop10">–</div>
+        </div>
+        <div class="pill">
+          <div class="pill-title">Top-100 %</div>
+          <div class="pill-value" id="statTop100">–</div>
+        </div>
+        <div class="pill">
+          <div class="pill-title">Perplexity</div>
+          <div class="pill-value" id="statPPL">–</div>
+        </div>
+        <div class="pill">
+          <div class="pill-title">Burstiness</div>
+          <div class="pill-value" id="statBurst">–</div>
+        </div>
+        <div class="pill">
+          <div class="pill-title">Model</div>
+          <div class="pill-value" id="statModel">–</div>
+        </div>
+        <div class="pill">
+          <div class="pill-title">Device</div>
+          <div class="pill-value" id="statDevice">–</div>
+        </div>
+        <div class="pill">
+          <div class="pill-title">Tokens</div>
+          <div class="pill-value" id="statTokens">–</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusBar" id="tokenHighlightsBox" style="margin-top:12px;max-height:200px;overflow:auto;">
+    <div class="mono" id="tokenHighlights">Run a scan to see per-token highlights…</div>
+  </div>
+
+  <div class="legendRow" style="margin-top:12px;">
+    <strong>Legend:</strong>
+    <span class="legendTag"><span class="legendSwatch sw-t10"></span>Top-10</span>
+    <span class="legendTag"><span class="legendSwatch sw-t100"></span>Top-100</span>
+    <span class="legendTag"><span class="legendSwatch sw-t1000"></span>Top-1000</span>
+    <span class="legendTag"><span class="legendSwatch sw-rest"></span>Unpredictable</span>
+  </div>
+
+  <hr class="section"/>
+
+  <!-- ===================== PLAGIARISM SECTION ===================== -->
+  <h2>2. Source / citation risk check (beta)</h2>
+
+  <textarea id="plagInput" placeholder="Paste text to check for possible copied passages or missing citations…"></textarea>
+
+  <div class="row" style="align-items:flex-start;">
+    <div class="col-half" style="flex:0 1 auto;min-width:260px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;">
+        <button id="plagBtn">Check Sources</button>
+
+        <div id="plagStatus" class="statusBar" style="min-width:260px;max-width:420px;">
+          <div id="plagHeadlineBadge" class="riskLow" style="display:none;">…</div>
+          <div id="plagHeadline">–</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-half" style="flex:1 1 100%;">
+      <div class="resultsBox mono" id="plagDetails">
+        Run a source check to see potentially risky sentences, best-match URLs, and rewrite / cite suggestions…
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+async function postJSON(url, payload){
+  const res = await fetch(url,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
+  });
+  if(!res.ok){
+    throw new Error("HTTP "+res.status+" "+(await res.text()));
+  }
+  return res.json();
+}
+
+// ---------------- AI-LIKELIHOOD FLOW ----------------
+const scanBtn = document.getElementById("scanBtn");
+const scanInput = document.getElementById("scanInput");
+const userTag = document.getElementById("userTag");
+
+const scanVerdictBadge = document.getElementById("scanVerdictBadge");
+const scanSummary = document.getElementById("scanSummary");
+
+const statPredict = document.getElementById("statPredict");
+const statTop10 = document.getElementById("statTop10");
+const statTop100 = document.getElementById("statTop100");
+const statPPL = document.getElementById("statPPL");
+const statBurst = document.getElementById("statBurst");
+const statModel = document.getElementById("statModel");
+const statDevice = document.getElementById("statDevice");
+const statTokens = document.getElementById("statTokens");
+
+const tokenHighlightsBox = document.getElementById("tokenHighlightsBox");
+const tokenHighlights = document.getElementById("tokenHighlights");
+
+function badgeColorForProb(p){
+  const pct = Math.round(p*100);
+  if(pct >= 85) return {cls:"riskHigh", text:`High AI-likelihood (${pct}%)`};
+  if(pct >= 50) return {cls:"riskMed", text:`Possible AI (${pct}%)`};
+  return {cls:"riskLow", text:`Low AI-likelihood (${pct}%)`};
+}
+
+scanBtn.addEventListener("click", async () => {
+  const text = scanInput.value.trim();
+  if(!text){
+    alert("Please paste some text first.");
+    return;
+  }
+  scanBtn.disabled = true;
+  scanSummary.textContent = "Scanning…";
+  scanVerdictBadge.style.display = "none";
+
+  try{
+    const body = { text, tag: userTag.value || "" };
+    const data = await postJSON("/scan", body);
+
+    // top-line summary
+    const badgeInfo = badgeColorForProb(data.calibrated_prob ?? 0);
+    scanVerdictBadge.className = badgeInfo.cls;
+    scanVerdictBadge.textContent = badgeInfo.text;
+    scanVerdictBadge.style.display = "inline-block";
+
+    scanSummary.textContent = data.explanation || "(no summary)";
+
+    // stats
+    statPredict.textContent = (data.overall_score ?? "–").toString();
+    statTop10.textContent   = data.bins ? ((data.bins["10"]/Math.max(1,data.total)*100).toFixed(1)+"%") : "–";
+    statTop100.textContent  = data.bins ? ((data.bins["100"]/Math.max(1,data.total)*100).toFixed(1)+"%") : "–";
+    statPPL.textContent     = data.ppl !== undefined ? data.ppl.toFixed(1) : "–";
+    statBurst.textContent   = data.burstiness !== undefined ? data.burstiness.toFixed(2) : "–";
+    statModel.textContent   = data.model_name || "–";
+    statDevice.textContent  = data.device || "–";
+    statTokens.textContent  = data.total !== undefined ? data.total : "–";
+
+    // token-level coloring
+    if(Array.isArray(data.per_token)){
+      const chunks = data.per_token.map(tok => {
+        const r = tok.rank;
+        let bg = "var(--t1000)";
+        if(r<=10) bg="var(--t10)";
+        else if(r<=100) bg="var(--t100)";
+        else if(r<=1000) bg="var(--t1000)";
+        else bg="#f5bcbc"; // unpredictable
+        const safe = tok.t
+          .replace(/&/g,"&amp;")
+          .replace(/</g,"&lt;")
+          .replace(/>/g,"&gt;");
+        return `<span style="background:${bg};color:#000;padding:2px 3px;border-radius:3px;margin:1px;display:inline-block;font-size:13px;line-height:1.3;">${safe}</span>`;
+      });
+      tokenHighlights.innerHTML = chunks.join(" ");
+    }else{
+      tokenHighlights.textContent = "No token breakdown.";
+    }
+
+  }catch(err){
+    console.error(err);
+    scanSummary.textContent = "Scan failed: "+err.message;
+  }finally{
+    scanBtn.disabled = false;
+  }
+});
+
+// ---------------- PLAGIARISM FLOW ----------------
+const plagBtn = document.getElementById("plagBtn");
+const plagInput = document.getElementById("plagInput");
+const plagHeadline = document.getElementById("plagHeadline");
+const plagHeadlineBadge = document.getElementById("plagHeadlineBadge");
+const plagDetails = document.getElementById("plagDetails");
+
+plagBtn.addEventListener("click", async () => {
+  const text = plagInput.value.trim();
+  if(!text){
+    alert("Please paste some text to check.");
+    return;
+  }
+
+  plagBtn.disabled = true;
+  plagHeadline.textContent = "Checking sources / citations…";
+  plagHeadlineBadge.style.display = "none";
+  plagDetails.textContent = "Working…";
+
+  try{
+    const data = await postJSON("/plagiarism_check", { text });
+
+    // summary
+    const riskyCount = data?.summary?.risky_sentence_count ?? 0;
+    const checked    = data?.summary?.unique_source_urls_checked ?? 0;
+    const sec        = data?.summary?.elapsed_sec ?? 0;
+
+    // badge color
+    let badgeClass="riskLow", badgeText="Low overlap risk";
+    if(riskyCount >= 5) { badgeClass="riskHigh"; badgeText="High overlap risk"; }
+    else if(riskyCount >= 2) { badgeClass="riskMed"; badgeText="Some overlap risk"; }
+
+    plagHeadlineBadge.className = badgeClass;
+    plagHeadlineBadge.textContent = badgeText;
+    plagHeadlineBadge.style.display="inline-block";
+
+    plagHeadline.innerHTML =
+      `<strong>${riskyCount}</strong> potentially copied / citation-needed sentence(s). `+
+      `Compared against ${checked} web sources in ~${sec.toFixed?.(2) ?? sec}s.`;
+
+    // details table
+    if(Array.isArray(data.per_sentence) && data.per_sentence.length){
+      let html = "";
+      data.per_sentence.forEach((row, i)=>{
+        const sent = row.sentence || "";
+        const sim  = row.similarity!==undefined
+          ? (row.similarity*100).toFixed(1)+"%"
+          : "–";
+        const advice = row.advice || "";
+        const url = row.url || "(no URL)";
+        const matchExcerpt = row.match_excerpt || "";
+
+        html += `
+<div style="margin-bottom:16px;">
+  <div style="font-weight:600;color:var(--yellow);margin-bottom:4px;">
+    ${i+1}. similarity ${sim} – ${url}
+  </div>
+  <div style="color:var(--text);margin-bottom:4px;">
+    <span style="color:var(--muted)">Your text:</span>
+    ${escapeHTML(sent)}
+  </div>
+  <div style="color:var(--text);margin-bottom:4px;">
+    <span style="color:var(--muted)">Closest match:</span>
+    ${escapeHTML(matchExcerpt)}
+  </div>
+  <div style="color:var(--orange);font-style:italic;">
+    ${escapeHTML(advice)}
+  </div>
+</div>`;
+      });
+      plagDetails.innerHTML = html;
+    }else{
+      plagDetails.textContent = "No high-similarity passages detected.";
+    }
+
+    // debug (optional: show queries/urls if you want)
+    // console.log("debug queries:", data.debug?.queries);
+    // console.log("debug urls:", data.debug?.urls);
+
+  }catch(err){
+    console.error(err);
+    plagHeadlineBadge.style.display="none";
+    plagHeadline.textContent = "Source check failed: "+err.message;
+    plagDetails.textContent = "";
+  }finally{
+    plagBtn.disabled = false;
+  }
+});
+
+function escapeHTML(s){
+  return (s||"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;");
+}
+</script>
+</body>
+</html>
+
+
+<!-- <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AI Text Scanner (MVP)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0f1116; --panel:#161a22; --muted:#9aa4b2; --text:#e6edf3;
+      --green:#20a464; --yellow:#e3b341; --orange:#f66a0a; --red:#d73a49;
+      --blue:#347dff; --gray:#30363d;
+      --t10:#b7f5c8; --t100:#d6fbdc; --t1000:#f2e9b0; --rest:#f2c6c6;
+    }
     html,body { margin:0; padding:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"; }
     .container { max-width:1100px; margin:24px auto 60px; padding:0 16px; }
     h1 { font-size:34px; margin:8px 0 18px; }
@@ -223,3 +674,4 @@
   </script>
 </body>
 </html>
+ -->
