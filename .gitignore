@@ -1,5 +1,10 @@
+venv/
 __pycache__/
+build/
+dist/
+*.spec
 .DS_Store
+EOF
 scan_logs.csv
 scan_summaries.txt
 *.pdf
