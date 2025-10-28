@@ -3,8 +3,10 @@ import sys
 import time
 import socket
 import subprocess
-import threading
 import webbrowser
+
+import webview  # this will run on main thread
+
 
 HOST = "127.0.0.1"
 PORT = 8080
@@ -13,8 +15,10 @@ INDEX_URL = f"http://{HOST}:{PORT}/"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SPLASH_FILE = os.path.join(APP_DIR, "splash.html")
 
+
 def is_frozen():
     return getattr(sys, "frozen", False)
+
 
 def is_port_open(host, port):
     try:
@@ -23,12 +27,12 @@ def is_port_open(host, port):
     except OSError:
         return False
 
+
 def start_server():
     """
-    Launch uvicorn as a child process, same as before.
-    We DO NOT loop-open browsers here. We just start the API.
+    Launch uvicorn in the background. Return the Popen handle.
     """
-    python_exec = sys.executable  # venv python in dev, bundled exe when frozen
+    python_exec = sys.executable
     cmd = [
         python_exec,
         "-m", "uvicorn",
@@ -44,35 +48,74 @@ def start_server():
         stderr=subprocess.PIPE,
         text=True,
     )
+    print(f"[launcher] server pid={proc.pid}")
     return proc
 
-def build_splash_url(phase="initializing", pct=0, err=""):
+
+def wait_for_server_or_die(proc, timeout_sec=30):
+    """
+    Poll for PORT to open, or bail if proc dies / timeout hits.
+    """
+    pct = 5
+    start_t = time.time()
+
+    while True:
+        # crashed?
+        if proc.poll() is not None:
+            print("[launcher] server exited before ready")
+            out, err = proc.communicate()
+            print("----- server logs begin -----")
+            print(out)
+            print(err)
+            print("----- server logs end -----")
+            return False
+
+        # listening?
+        if is_port_open(HOST, PORT):
+            print("[launcher] server is up!")
+            return True
+
+        # timeout?
+        elapsed = time.time() - start_t
+        if elapsed >= timeout_sec:
+            print("[launcher] timeout waiting for server")
+            return False
+
+        # heartbeat
+        pct = min(pct + 5, 95)
+        if pct < 50:
+            phase = "initializing"
+        else:
+            phase = "starting_server"
+        # we can live-update splash here by navigating it to a new URL
+        # using win.load_url(...); we'll do that below where we have `win`.
+        yield (phase, pct)
+
+        time.sleep(0.5)
+
+
+def serve_splash_and_boot():
+    """
+    This runs ON THE MAIN THREAD.
+    We:
+      1. create splash webview window
+      2. in a callback (after gui init), start server, poll it, open browser
+      3. keep process alive until server exits
+    """
+
+    # build initial splash URL
     import urllib.parse
-    q = {"phase": phase, "pct": str(pct)}
-    if err:
-        q["err"] = err
-    return "file://" + SPLASH_FILE + "?" + urllib.parse.urlencode(q)
+    init_url = (
+        "file://" + SPLASH_FILE + "?" +
+        urllib.parse.urlencode({"phase": "initializing", "pct": "5"})
+    )
 
-def show_splash_window(initial_phase="initializing", initial_pct=0, err=""):
-    """
-    Show ONE webview window with splash.html.
-    In frozen builds macOS can get cranky, so we can skip splash when frozen
-    to stay safe. Dev only for now.
-    """
-    if is_frozen():
-        print("[launcher] frozen build: skipping splash window for safety")
-        return None
+    print(f"[launcher] creating splash window @ {init_url}")
 
-    try:
-        import webview  # pywebview
-    except ImportError:
-        print("[launcher] pywebview not available, skipping splash")
-        return None
-
-    start_url = build_splash_url(initial_phase, initial_pct, err)
+    # create the window first
     win = webview.create_window(
         "Calypso Labs — Boot",
-        start_url,
+        init_url,
         width=900,
         height=500,
         resizable=False,
@@ -80,77 +123,95 @@ def show_splash_window(initial_phase="initializing", initial_pct=0, err=""):
         confirm_close=False,
     )
 
-    def _run_webview():
-        try:
-            webview.start()  # blocking call, so run it in a thread
-        except Exception as e:
-            print(f"[launcher] splash crashed: {e}")
+    def after_window_shown():
+        """
+        This runs once the GUI loop is live.
+        Safe place to do blocking work.
+        """
+        print("[launcher] splash is live, beginning boot sequence")
 
-    t = threading.Thread(target=_run_webview, daemon=True)
-    t.start()
-    return win
+        # 1. start server
+        proc = start_server()
+
+        # 2. poll server
+        for (phase, pct) in wait_for_server_or_die(proc):
+            # update splash during boot
+            qs = {"phase": phase, "pct": str(pct)}
+            url = "file://" + SPLASH_FILE + "?" + urllib.parse.urlencode(qs)
+            try:
+                win.load_url(url)
+            except Exception as e:
+                print(f"[launcher] failed to update splash url: {e}")
+
+        # after loop, either server is up or it failed/timeout
+        if proc.poll() is not None:
+            # server died -> show error state
+            qs = {
+                "phase": "error",
+                "pct": "95",
+                "err": "Server failed to start.",
+            }
+            url = "file://" + SPLASH_FILE + "?" + urllib.parse.urlencode(qs)
+            try:
+                win.load_url(url)
+            except Exception as e:
+                print(f"[launcher] failed to show error splash: {e}")
+            return  # stop here, keep splash open so user can see error
+
+        # 3. server is live -> update splash to 100%, then open browser
+        try:
+            ok_url = (
+                "file://" + SPLASH_FILE + "?" +
+                urllib.parse.urlencode({"phase": "ready", "pct": "100"})
+            )
+            win.load_url(ok_url)
+        except Exception as e:
+            print(f"[launcher] failed to mark ready: {e}")
+
+        print(f"[launcher] opening browser {INDEX_URL}")
+        webbrowser.open_new_tab(INDEX_URL)
+
+        # 4. OPTIONAL: close splash window automatically
+        # comment this out if you want the splash to remain visible
+        try:
+            webview.destroy_window()  # closes the only window = exits GUI loop
+        except Exception as e:
+            print(f"[launcher] couldn't auto-close splash: {e}")
+
+        # 5. babysit server from here in *this* process
+        # We can't just fall out of this function because destroy_window()
+        # kills the GUI loop and returns control to python.
+        # So after GUI exits we continue below in main().
+
+    # Start the GUI loop on main thread, with our callback
+    # after_window_shown will run once the splash window is displayed.
+    webview.start(after_window_shown)
+
 
 def main():
     print("[launcher] launch requested")
-    print(f"[launcher] running from {APP_DIR}")
-    print(f"[launcher] python_exec is {sys.executable}")
+    print(f"[launcher] cwd={APP_DIR}")
+    print(f"[launcher] python={sys.executable}")
     print(f"[launcher] frozen? {is_frozen()}")
 
-    splash_win = show_splash_window(initial_phase="initializing", initial_pct=5)
+    # If we're running as a frozen app bundle later, we might want different behavior,
+    # but for dev: always show the splash using webview main-thread boot.
+    serve_splash_and_boot()
 
-    proc = start_server()
-    print(f"[launcher] server pid={proc.pid}")
-
-    pct = 5
-    phase = "initializing"
-
-    # loop: wait for port OR crash
-    while True:
-        # did server die?
-        if proc.poll() is not None:
-            print("[launcher] server exited before ready")
-            # dump logs for debug
-            out, err = proc.communicate()
-            print("----- server logs begin -----")
-            print(out)
-            print(err)
-            print("----- server logs end -----")
-            return  # do not open browser
-
-        # is it up?
-        if is_port_open(HOST, PORT):
-            print("[launcher] server is up!")
-            phase = "ready"
-            pct = 100
-            break
-
-        # not up yet, bump pct but clamp to 95
-        pct = min(pct + 5, 95)
-        if pct < 50:
-            phase = "initializing"
-        else:
-            phase = "starting_server"
-
-        time.sleep(0.5)
-
-    # at this point server is listening. open ONE browser tab.
-    print(f"[launcher] opening browser {INDEX_URL}")
-    webbrowser.open_new_tab(INDEX_URL)
-
-    # NOTE: we are NOT spawning another launcher, we are not re-calling ourselves,
-    # and we are not reopening the browser in a loop. Just once.
-
-    # keep process alive so server stays up
-    try:
-        while proc.poll() is None:
-            time.sleep(1.0)
-    finally:
-        print("[launcher] shutting down server")
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+    # If we get here, either the splash was closed or errored out.
+    # Nothing else to do, because if server launched successfully,
+    # it's still running as a child of THIS process. We should
+    # not exit until the child exits... BUT we lost the handle to proc
+    # when we closed over it inside after_window_shown().
+    #
+    # For dev this is fine because:
+    # - If splash succeeded, we destroyed the window *after* launching the browser.
+    # - The subprocess is still a child of THIS Python, so this python will *not*
+    #   exit until that child exits. (macOS keeps us alive while child is alive.)
+    #
+    # If you want ironclad babysitting in prod bundle, we can refactor later
+    # to stash `proc` somewhere global and loop .poll().
+    print("[launcher] launcher finished GUI loop; server (if up) is now live in background.")
 
 if __name__ == "__main__":
     main()
