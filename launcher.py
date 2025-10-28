@@ -1,15 +1,19 @@
-import time
-import threading
-import webbrowser
-import sys
+import os
 import socket
-
-# --- bring in your server code directly ---
-import uvicorn
-from app import app  # this imports FastAPI app from app.py
+import subprocess
+import sys
+import time
 
 HOST = "127.0.0.1"
 PORT = 8080
+
+# --- Where is app.py? ---
+# We assume launcher.py lives in the same folder as app.py (project root).
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def is_frozen():
+    # True when we're running from a PyInstaller bundle
+    return getattr(sys, "frozen", False)
 
 def is_port_open(host, port):
     try:
@@ -18,52 +22,131 @@ def is_port_open(host, port):
     except OSError:
         return False
 
-def run_server_blocking():
+def start_server():
     """
-    Run uvicorn in this same process/thread.
-    We disable reload so it doesn't try to fork.
+    Start uvicorn app:app on HOST:PORT.
+    In dev: use this same python (venv python).
+    In frozen: sys.executable will be the bundled binary.
     """
-    uvicorn.run(
-        app,
-        host=HOST,
-        port=PORT,
-        reload=False,
-        log_level="info",
+
+    python_exec = sys.executable  # this is venv/bin/python3.12 in dev, or the bundle exe when frozen
+
+    # Clean env so PyInstaller shims don't get confused later.
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+
+    cmd = [
+        python_exec,
+        "-m", "uvicorn",
+        "app:app",
+        "--host", HOST,
+        "--port", str(PORT),
+    ]
+
+    print(f"[launcher] starting server with cmd={cmd} cwd={APP_DIR}", flush=True)
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=APP_DIR,            # <- important so `import app` etc. works
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
     )
+    return proc
+
+def wait_for_server(proc, timeout_seconds=20):
+    """
+    Wait until:
+    - port is open (success), OR
+    - proc dies (fail), OR
+    - timeout
+    Returns True if server is up, False otherwise.
+    """
+
+    start_time = time.time()
+    pct = 0
+
+    while True:
+        # if crashed, dump output and bail
+        if proc.poll() is not None:
+            print("[launcher] server exited early, dumping logs:", flush=True)
+            # read whatever output remains
+            leftover = proc.stdout.read()
+            if leftover:
+                print("----- server logs begin -----", flush=True)
+                print(leftover, flush=True)
+                print("----- server logs end -----", flush=True)
+            return False
+
+        # if listening, success
+        if is_port_open(HOST, PORT):
+            print("[launcher] server is listening", flush=True)
+            return True
+
+        # timeout?
+        if time.time() - start_time > timeout_seconds:
+            print("[launcher] timeout waiting for server to listen, dumping logs:", flush=True)
+            leftover = proc.stdout.read()
+            if leftover:
+                print("----- server logs begin -----", flush=True)
+                print(leftover, flush=True)
+                print("----- server logs end -----", flush=True)
+            return False
+
+        pct += 5
+        print(f"[launcher] waiting for server... {pct}%", flush=True)
+        time.sleep(0.5)
+
+def pump_logs_until_exit(proc):
+    """
+    Keep reading server output line by line so you can see runtime logs.
+    Ctrl+C will stop both launcher and server.
+    """
+    try:
+        while proc.poll() is None:
+            line = proc.stdout.readline()
+            if line:
+                print("[server]", line.rstrip(), flush=True)
+            else:
+                time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("[launcher] Ctrl+C received, shutting down server", flush=True)
+    finally:
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
 def main():
-    print("[launcher] starting embedded server")
+    print("[launcher] launch requested", flush=True)
+    print(f"[launcher] running from {APP_DIR}", flush=True)
+    print(f"[launcher] python_exec is {sys.executable}", flush=True)
+    print(f"[launcher] frozen? {is_frozen()}", flush=True)
 
-    # start uvicorn in a background thread so launcher can continue
-    server_thread = threading.Thread(target=run_server_blocking, daemon=True)
-    server_thread.start()
+    proc = start_server()
+    print(f"[launcher] server proc pid={proc.pid}", flush=True)
 
-    # wait for server to accept connections
-    pct = 0
-    for _ in range(40):  # ~20 seconds total (40 * 0.5s)
-        if is_port_open(HOST, PORT):
-            print("[launcher] server is listening")
-            break
-        time.sleep(0.5)
-        pct += 5
-        print(f"[launcher] waiting for server... {pct}%")
-    else:
-        print("[launcher] FATAL: server did not start.")
-        # don't open browser
-        # keep process alive a bit so you can read any printed uvicorn errors
-        time.sleep(5)
+    up = wait_for_server(proc)
+    if not up:
+        print("[launcher] cannot continue", flush=True)
         return
 
-    url = f"http://{HOST}:{PORT}/"
-    print(f"[launcher] opening browser at {url}")
-    webbrowser.open(url, new=1)
+    # success
+    print("")
+    print("========================================", flush=True)
+    print(" AI Text Scanner is now running at:", flush=True)
+    print(f"   http://{HOST}:{PORT}/", flush=True)
+    print("")
+    print(" Open that URL in your browser.", flush=True)
+    print(" Leave this terminal open while you use the app.", flush=True)
+    print(" Press Ctrl+C here to quit the app.", flush=True)
+    print("========================================", flush=True)
+    print("")
 
-    # keep the main thread alive as long as uvicorn thread is alive
-    try:
-        while server_thread.is_alive():
-            time.sleep(1.0)
-    except KeyboardInterrupt:
-        print("[launcher] interrupted, exiting")
+    pump_logs_until_exit(proc)
 
 if __name__ == "__main__":
     main()
