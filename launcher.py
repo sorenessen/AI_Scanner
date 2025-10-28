@@ -3,30 +3,26 @@ import sys
 import time
 import socket
 import subprocess
-import webbrowser
-
+import threading
 import webview  # pywebview
-
 
 HOST = "127.0.0.1"
 PORT = 8080
-INDEX_URL = f"http://{HOST}:{PORT}/"
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
-
-def is_port_open(host, port):
+def is_port_open(host: str, port: int) -> bool:
     try:
-        with socket.create_connection((host, port), timeout=0.5):
+        with socket.create_connection((host, port), timeout=0.3):
             return True
     except OSError:
         return False
 
-
 def start_server():
     """
-    Launch uvicorn subprocess and return Popen handle.
+    Launch uvicorn server as a subprocess.
+    We do NOT use reload, we do NOT daemonize.
+    We capture the process so we can kill it when the window closes.
     """
-    python_exec = sys.executable  # should be venv/bin/python3 if venv is active
+    python_exec = sys.executable  # this will be venv/bin/python3 when run in venv
     cmd = [
         python_exec,
         "-m", "uvicorn",
@@ -35,139 +31,111 @@ def start_server():
         "--port", str(PORT),
     ]
 
-    env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-
+    print(f"[launcher] starting server: {cmd}")
     proc = subprocess.Popen(
         cmd,
-        cwd=APP_DIR,
-        env=env,
+        cwd=os.path.dirname(os.path.abspath(__file__)),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
     return proc
 
-
-def wait_for_server(proc, timeout_sec=20):
+def wait_for_server(timeout_sec=10):
     """
-    Wait for the server socket to listen.
-    Return True if up, False if crash/timeout.
+    Poll for the server to start listening on PORT.
+    timeout_sec = how long we wait before giving up.
+    Returns True if the port opened, False otherwise.
     """
     start_t = time.time()
+    pct = 0
     while True:
-        # Did server die?
-        if proc.poll() is not None:
-            print("[launcher] server exited early")
-            return False
-
-        # Is port open?
         if is_port_open(HOST, PORT):
             print("[launcher] server is UP")
             return True
 
-        # Timeout?
         if time.time() - start_t > timeout_sec:
-            print("[launcher] timeout waiting for server")
+            print("[launcher] ERROR: server did not come up in time")
             return False
 
-        time.sleep(0.4)
+        pct += 5
+        print(f"[launcher] waiting for server... {pct}%")
+        time.sleep(0.3)
 
-
-def build_splash_url(phase="initializing", pct=5, err=""):
-    import urllib.parse
-    splash_path = os.path.join(APP_DIR, "splash.html")
-    q = {"phase": phase, "pct": str(pct)}
-    if err:
-        q["err"] = err
-    return "file://" + splash_path + "?" + urllib.parse.urlencode(q)
-
-
-def show_splash_and_close_after(delay_sec, phase, pct, err=""):
+def pump_server_logs(proc):
     """
-    Create splash window, run webview.start() with a callback that will
-    sleep a moment, then destroy this specific window.
-    This call BLOCKS until the window is destroyed.
+    Background thread: read server stdout/stderr and mirror to console
+    so you can debug without the window hiding crashes.
     """
-    splash_url = build_splash_url(phase=phase, pct=pct, err=err)
-
-    win = webview.create_window(
-        "Calypso Labs — Boot",
-        splash_url,
-        width=900,
-        height=500,
-        resizable=False,
-        fullscreen=False,
-        confirm_close=False,
-    )
-
-    def close_after(win_obj):
-        # win_obj is the same window we created.
-        time.sleep(delay_sec)
-        try:
-            win_obj.destroy()
-        except Exception as e:
-            print(f"[launcher] splash destroy error (harmless): {e}")
-
-    # This will block until win_obj.destroy() is called.
-    webview.start(close_after, win)
-
-
-def babysit_server(proc):
-    """
-    Keep launcher alive as long as uvicorn is running.
-    When launcher ends (Ctrl+C), kill uvicorn.
-    """
-    print("[launcher] babysitting server process")
-    try:
-        while proc.poll() is None:
-            time.sleep(1.0)
-    finally:
-        print("[launcher] shutting down server process")
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-    print("[launcher] exiting cleanly")
-
+    def _pump(stream, label):
+        for line in iter(stream.readline, ''):
+            if not line:
+                break
+            print(f"[server:{label}] {line.rstrip()}")
+    t_out = threading.Thread(target=_pump, args=(proc.stdout, "stdout"), daemon=True)
+    t_err = threading.Thread(target=_pump, args=(proc.stderr, "stderr"), daemon=True)
+    t_out.start()
+    t_err.start()
 
 def main():
     print("[launcher] launch requested")
 
-    # 1. start backend
-    srv = start_server()
-    print(f"[launcher] server pid={srv.pid}")
+    # 1. start backend server
+    proc = start_server()
+    pump_server_logs(proc)
 
-    # 2. wait for ready
-    up = wait_for_server(srv, timeout_sec=20)
+    # 2. wait until it's actually listening
+    if not wait_for_server(timeout_sec=10):
+        print("[launcher] FATAL: backend never started, killing process and exiting")
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        return
 
-    if up:
-        # 3a. happy path splash: show "Complete 100%" ~0.8s then auto-close
-        show_splash_and_close_after(
-            delay_sec=0.8,
-            phase="complete",
-            pct=100,
-            err=""
-        )
+    # 3. create ONE desktop window that points at the local app
+    app_url = f"http://{HOST}:{PORT}/"
+    print(f"[launcher] creating client window at {app_url}")
 
-        # 4. open browser tab
-        print(f"[launcher] opening browser {INDEX_URL}")
-        webbrowser.open_new_tab(INDEX_URL)
+    window = webview.create_window(
+        title="Calypso Labs — AI Text Scanner",
+        url=app_url,
+        width=1000,
+        height=700,
+        resizable=True,
+        fullscreen=False,
+        confirm_close=True,  # we'll intercept close to stop the server
+    )
 
-        # 5. babysit until user stops launcher
-        babysit_server(srv)
+    # This runs on the main thread and blocks until the window closes.
+    # When it returns, user closed the window -> we stop the server.
+    def on_closed():
+        print("[launcher] window closed, shutting down server...")
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        print("[launcher] goodbye.")
 
-    else:
-        # 3b. error splash: show failure for ~3s, then close and quit
-        show_splash_and_close_after(
-            delay_sec=3.0,
-            phase="error",
-            pct=5,
-            err="Server failed to start. Please quit and relaunch."
-        )
-        # don't babysit, server is dead anyway
+    # pywebview doesn't have a "closed" callback param in create_window,
+    # but we can hook into gui exit by running webview.start() with a callback.
+    #
+    # The "func" we pass to start() will run *after* the window is ready,
+    # but start() itself doesn't return until the window is closed.
+    # So we wrap start() and then call on_closed() after start() returns.
+    #
+    def run_gui():
+        # start the GUI loop (blocks until user closes the window)
+        webview.start(gui='cocoa')  # cocoa = macOS native
 
+    try:
+        run_gui()
+    finally:
+        on_closed()
 
 if __name__ == "__main__":
     main()
