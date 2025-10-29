@@ -4,10 +4,17 @@ import time
 import socket
 import subprocess
 import threading
+
 import webview  # pywebview
 
 HOST = "127.0.0.1"
 PORT = 8080
+APP_MOD = "app:app"
+
+
+def is_frozen() -> bool:
+    return getattr(sys, "frozen", False)
+
 
 def is_port_open(host: str, port: int) -> bool:
     try:
@@ -16,86 +23,86 @@ def is_port_open(host: str, port: int) -> bool:
     except OSError:
         return False
 
-def start_server():
+
+def server_command():
     """
-    Launch uvicorn server as a subprocess.
-    We do NOT use reload, we do NOT daemonize.
-    We capture the process so we can kill it when the window closes.
+    Return (cmd, cwd) for launching uvicorn.
+    Dev mode:
+        [<venv python>, "-m", "uvicorn", "app:app", ...]
+        cwd = project dir
+    Frozen mode:
+        The PyInstaller bundle drops our files in the same dir as sys.executable
+        AND it bundles uvicorn. We can still call '<exe> -m uvicorn'.
+        But we MUST NOT recurse into launcher.main() again.
+
+        We solve that by setting CALYPSO_CHILD=1 for the child.
+        Child checks that env var and skips launching the GUI.
     """
-    python_exec = sys.executable  # this will be venv/bin/python3 when run in venv
+    if is_frozen():
+        app_dir = os.path.dirname(sys.executable)
+        python_exec = sys.executable
+    else:
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        python_exec = sys.executable
+
     cmd = [
         python_exec,
         "-m", "uvicorn",
-        "app:app",
+        APP_MOD,
         "--host", HOST,
         "--port", str(PORT),
     ]
+    return cmd, app_dir
 
-    print(f"[launcher] starting server: {cmd}")
+
+def start_server():
+    cmd, cwd = server_command()
+
+    env = os.environ.copy()
+    # mark child so it won't try to launch GUI logic if we're frozen
+    env["CALYPSO_CHILD"] = "1"
+
+    print(f"[launcher] starting server: {cmd} (cwd={cwd})")
     proc = subprocess.Popen(
         cmd,
-        cwd=os.path.dirname(os.path.abspath(__file__)),
+        cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
     return proc
 
-def wait_for_server(timeout_sec=10):
-    """
-    Poll for the server to start listening on PORT.
-    timeout_sec = how long we wait before giving up.
-    Returns True if the port opened, False otherwise.
-    """
-    start_t = time.time()
+
+def pump_logs(proc):
+    def _pump(stream, label):
+        for line in iter(stream.readline, ""):
+            if not line:
+                break
+            print(f"[server:{label}] {line.rstrip()}")
+    threading.Thread(target=_pump, args=(proc.stdout, "stdout"), daemon=True).start()
+    threading.Thread(target=_pump, args=(proc.stderr, "stderr"), daemon=True).start()
+
+
+def wait_for_server(timeout_sec=15):
+    start = time.time()
     pct = 0
     while True:
         if is_port_open(HOST, PORT):
             print("[launcher] server is UP")
             return True
-
-        if time.time() - start_t > timeout_sec:
-            print("[launcher] ERROR: server did not come up in time")
+        if time.time() - start > timeout_sec:
+            print("[launcher] ERROR: timeout waiting for server")
             return False
-
         pct += 5
         print(f"[launcher] waiting for server... {pct}%")
         time.sleep(0.3)
 
-def pump_server_logs(proc):
+
+def run_gui(app_url: str):
     """
-    Background thread: read server stdout/stderr and mirror to console
-    so you can debug without the window hiding crashes.
+    Create the pywebview window and BLOCK until the user closes it.
+    This is critical: we don't want to kill uvicorn early.
     """
-    def _pump(stream, label):
-        for line in iter(stream.readline, ''):
-            if not line:
-                break
-            print(f"[server:{label}] {line.rstrip()}")
-    t_out = threading.Thread(target=_pump, args=(proc.stdout, "stdout"), daemon=True)
-    t_err = threading.Thread(target=_pump, args=(proc.stderr, "stderr"), daemon=True)
-    t_out.start()
-    t_err.start()
-
-def main():
-    print("[launcher] launch requested")
-
-    # 1. start backend server
-    proc = start_server()
-    pump_server_logs(proc)
-
-    # 2. wait until it's actually listening
-    if not wait_for_server(timeout_sec=10):
-        print("[launcher] FATAL: backend never started, killing process and exiting")
-        try:
-            proc.terminate()
-        except Exception:
-            pass
-        return
-
-    # 3. create ONE desktop window that points at the local app
-    app_url = f"http://{HOST}:{PORT}/"
-    print(f"[launcher] creating client window at {app_url}")
 
     window = webview.create_window(
         title="Calypso Labs — AI Text Scanner",
@@ -103,14 +110,49 @@ def main():
         width=1000,
         height=700,
         resizable=True,
-        fullscreen=False,
-        confirm_close=True,  # we'll intercept close to stop the server
+        confirm_close=True,
     )
 
-    # This runs on the main thread and blocks until the window closes.
-    # When it returns, user closed the window -> we stop the server.
-    def on_closed():
-        print("[launcher] window closed, shutting down server...")
+    # IMPORTANT: webview.start() will block until the window is closed
+    # (on Cocoa, when we don't give it a separate gui loop thread).
+    print(f"[launcher] showing client window @ {app_url}")
+    webview.start(gui="cocoa")
+    print("[launcher] window closed")
+
+
+def main():
+    # if we are the CHILD uvicorn process inside frozen mode:
+    # bail immediately so we don't recurse into launching uvicorn again.
+    if os.environ.get("CALYPSO_CHILD") == "1":
+        # We're not supposed to be here in normal run,
+        # but just in case, don't spin up GUI again.
+        print("[launcher] CALYPSO_CHILD=1 -> child process context, exiting main() early")
+        return
+
+    print("[launcher] launch requested")
+    mode = "frozen" if is_frozen() else "dev"
+    print(f"[launcher] mode = {mode}")
+
+    # 1. start backend
+    proc = start_server()
+    pump_logs(proc)
+
+    # 2. wait for listen socket
+    if not wait_for_server(timeout_sec=20):
+        print("[launcher] backend failed, terminating")
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        return
+
+    # 3. GUI (blocking)
+    app_url = f"http://{HOST}:{PORT}/"
+    try:
+        run_gui(app_url)
+    finally:
+        # 4. cleanup server
+        print("[launcher] shutting down server process")
         try:
             proc.terminate()
             proc.wait(timeout=5)
@@ -119,23 +161,15 @@ def main():
                 proc.kill()
             except Exception:
                 pass
-        print("[launcher] goodbye.")
+        print("[launcher] server process ended")
+        print("[launcher] clean exit")
 
-    # pywebview doesn't have a "closed" callback param in create_window,
-    # but we can hook into gui exit by running webview.start() with a callback.
-    #
-    # The "func" we pass to start() will run *after* the window is ready,
-    # but start() itself doesn't return until the window is closed.
-    # So we wrap start() and then call on_closed() after start() returns.
-    #
-    def run_gui():
-        # start the GUI loop (blocks until user closes the window)
-        webview.start(gui='cocoa')  # cocoa = macOS native
-
-    try:
-        run_gui()
-    finally:
-        on_closed()
 
 if __name__ == "__main__":
+    # guard against double-launch loops in some weird macOS re-open flows
+    if os.environ.get("CALYPSO_LABS_LAUNCHED") == "1":
+        print("[launcher] already running, aborting duplicate launch")
+        sys.exit(0)
+    os.environ["CALYPSO_LABS_LAUNCHED"] = "1"
+
     main()
