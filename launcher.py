@@ -4,7 +4,6 @@ import time
 import socket
 import threading
 import subprocess
-
 import webview
 
 HOST = "127.0.0.1"
@@ -24,7 +23,7 @@ def is_port_open(host: str, port: int) -> bool:
 def is_frozen() -> bool:
     return getattr(sys, "frozen", False)
 
-def wait_for_server(timeout_sec=15):
+def wait_for_server(timeout_sec=20):
     start = time.time()
     pct = 0
     while True:
@@ -39,7 +38,7 @@ def wait_for_server(timeout_sec=15):
         time.sleep(0.3)
 
 def pump_logs(proc):
-    """Mirror the uvicorn subprocess output (dev mode only)."""
+    """Mirror uvicorn subprocess output in dev mode."""
     def _pump(stream, label):
         for line in iter(stream.readline, ''):
             if not line:
@@ -53,9 +52,12 @@ def pump_logs(proc):
 # -----------------------
 
 def start_server_dev():
-    """Run uvicorn as a subprocess using the venv python (dev)."""
+    """
+    Run uvicorn as a subprocess using the current interpreter (venv python).
+    This is only used when we're NOT frozen.
+    """
     app_dir = os.path.dirname(os.path.abspath(__file__))
-    python_exec = sys.executable  # this will be your venv/bin/python3
+    python_exec = sys.executable  # e.g. .../venv/bin/python3
 
     cmd = [
         python_exec,
@@ -80,11 +82,13 @@ def start_server_dev():
 # -----------------------
 
 def _run_uvicorn_inprocess():
-    """Target for background thread in frozen mode."""
-    # we import here so PyInstaller can collect uvicorn & app deps
+    """
+    Run uvicorn in this same process/thread pool.
+    This avoids trying to exec the bundled binary as if it were `python -m`.
+    """
     import uvicorn
-    # IMPORTANT: app.py must be bundled and importable
-    # PyInstaller normally adds the bundle dir to sys.path
+    # Just import the FastAPI app via string. PyInstaller bundled app.py,
+    # and adds the bundle dir to sys.path, so "app:app" should resolve.
     uvicorn.run(
         "app:app",
         host=HOST,
@@ -93,10 +97,12 @@ def _run_uvicorn_inprocess():
     )
 
 def start_server_frozen_thread():
-    """Start uvicorn in a thread instead of spawning a new exe."""
+    """
+    Launch uvicorn in a daemon thread when we're in a frozen app bundle.
+    """
     t = threading.Thread(target=_run_uvicorn_inprocess, daemon=True)
     t.start()
-    return t  # we won't kill it manually; closing the app exits process anyway
+    return t
 
 # -----------------------
 # main UI flow
@@ -108,17 +114,15 @@ def main():
     print(f"[launcher] mode = {mode}")
 
     server_proc = None
-    server_thread = None
 
     if mode == "dev":
-        # spawn uvicorn in a subprocess (your current happy path)
         server_proc = start_server_dev()
         pump_logs(server_proc)
     else:
-        # run uvicorn in-process thread
-        server_thread = start_server_frozen_thread()
+        # we're frozen -> run uvicorn in-process
+        start_server_frozen_thread()
 
-    # wait for port 8080 to be live
+    # wait until 127.0.0.1:8080 is live (or give up)
     if not wait_for_server(timeout_sec=20):
         print("[launcher] backend failed, terminating")
         if server_proc:
@@ -140,14 +144,14 @@ def main():
         confirm_close=True,
     )
 
-    # cocoa is correct on macOS
+    # cocoa for macOS
     webview.start(gui="cocoa")
 
-    # when the window closes:
+    # when GUI window closes:
     print("[launcher] window closed, shutting down server...")
 
     if server_proc:
-        # dev: stop subprocess cleanly
+        # dev mode cleanup
         try:
             server_proc.terminate()
             server_proc.wait(timeout=5)
