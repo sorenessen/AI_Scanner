@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Calypso Labs — Initializing...</title>
 <style>
-  /* --- layout --- */
+  /* --- layout / deep sea look --- */
   body {
     margin: 0;
     height: 100vh;
@@ -17,6 +17,7 @@
     color: #fff;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", Roboto, sans-serif;
     overflow: hidden;
+    background: radial-gradient(circle at 30% 20%, rgba(0,40,70,1) 0%, rgba(0,10,20,1) 60%, #000 100%);
   }
 
   .splash {
@@ -36,6 +37,7 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    color: #e9feff;
   }
 
   /* drifting caustic light overlay */
@@ -55,7 +57,7 @@
     100% { transform: translateY(-30px) translateX(15px) scale(1.05); opacity:0.4; }
   }
 
-  /* particle specks like plankton */
+  /* particle specks */
   .specks {
     position: absolute;
     inset: 0;
@@ -74,7 +76,6 @@
     100% { transform: translateY(-40px); }
   }
 
-  /* top section: logo + tagline */
   .header {
     position: relative;
     z-index: 2;
@@ -97,27 +98,13 @@
       inset 0 0 10px rgba(0,180,255,0.5);
     border: 1px solid rgba(0,255,255,0.4);
     position: relative;
-  }
-
-  /* subtle trident / wave slash mark using pure CSS */
-  .logo-mark::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 22%;
-    width: 18px;
-    height: 28px;
-    transform: translateX(-50%);
-    border-radius: 4px 4px 10px 10px;
-    background: radial-gradient(circle at 50% 0%, rgba(0,0,0,0) 0%, rgba(0,40,60,.6) 40%, rgba(0,0,0,0) 70%);
-    box-shadow:
-      0 -8px 12px rgba(0,255,255,0.6),
-      0 8px 16px rgba(0,150,255,0.4),
-      0 0 4px rgba(0,255,255,0.8) inset;
-    clip-path: polygon(
-      50% 0%, 60% 12%, 60% 40%, 70% 40%, 50% 100%, 30% 40%, 40% 40%, 40% 12%
-    );
-    opacity: 0.9;
+    color:#00121a;
+    font-size:28px;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-shadow:0 0 8px rgba(0,0,0,0.6);
   }
 
   .brand-texts {
@@ -150,7 +137,6 @@
     max-width: 480px;
   }
 
-  /* bottom section: progress info */
   .footer {
     position: relative;
     z-index: 2;
@@ -163,7 +149,12 @@
     justify-content: space-between;
     font-size: .8rem;
     font-weight: 500;
-    color: rgba(180,240,255,0.6);
+    color: rgba(180,240,255,0.8);
+    align-items: baseline;
+  }
+
+  .progress-label-row .left-status.error {
+    color: #ff8a8a;
   }
 
   .bar-shell {
@@ -190,11 +181,10 @@
       0 0 20px rgba(0,255,255,0.8),
       0 0 60px rgba(0,120,255,0.6);
     border-radius: 999px;
-    transition: width .18s linear;
     position: relative;
+    transition: width .18s linear;
   }
 
-  /* shimmer scan line on top of the fill */
   .bar-fill::after {
     content: "";
     position: absolute;
@@ -215,7 +205,6 @@
     100% { transform: translateX(160px) translateY(0) rotate(15deg); opacity:0; }
   }
 
-  /* tiny “system text” */
   .boot-hint {
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: .7rem;
@@ -223,8 +212,57 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
-
 </style>
+
+<script>
+  function getParams() {
+    const p = new URLSearchParams(window.location.search);
+    return {
+      phase: p.get('phase') || 'initializing',
+      pct:   p.get('pct')   || '0',
+      err:   p.get('err')   || ''
+    }
+  }
+
+  function applyState() {
+    const {phase, pct, err} = getParams();
+
+    const barFill    = document.getElementById("barFill");
+    const percentTxt = document.getElementById("percentText");
+    const statusText = document.getElementById("statusText");
+    const bootHint   = document.getElementById("bootHint");
+    const leftStatus = document.querySelector(".left-status");
+
+    const pctNum = parseInt(pct, 10) || 0;
+    barFill.style.width = pctNum + "%";
+    percentTxt.textContent = pctNum + "%";
+
+    let msg = "";
+    let hint = "";
+    if (phase === "initializing") {
+      msg  = "Initializing core modules…";
+      hint = "CL-BOOTSEQ › INIT";
+    } else if (phase === "starting_server") {
+      msg  = "Starting local server…";
+      hint = "CL-BOOTSEQ › SPIN-UP";
+    } else if (phase === "ready") {
+      msg  = "Complete";
+      hint = "CL-BOOTSEQ › COMPLETE";
+    } else if (phase === "error") {
+      msg  = err || "Error: server did not start. Please quit and relaunch.";
+      hint = "CL-BOOTSEQ › FAIL";
+      leftStatus.classList.add("error");
+    } else {
+      msg  = "Initializing core modules…";
+      hint = "CL-BOOTSEQ › INIT";
+    }
+
+    statusText.textContent = msg;
+    bootHint.textContent   = hint;
+  }
+
+  window.onload = applyState;
+</script>
 </head>
 <body>
 
@@ -234,7 +272,7 @@
 
   <div class="header">
     <div class="brand-row">
-      <div class="logo-mark"></div>
+      <div class="logo-mark">⬇︎</div>
       <div class="brand-texts">
         <div class="brand-name">CALYPSO LABS</div>
         <div class="sub-brand">Systems Initialization</div>
@@ -247,7 +285,7 @@
 
   <div class="footer">
     <div class="progress-label-row">
-      <div id="statusText">Initializing core modules…</div>
+      <div class="left-status" id="statusText">Initializing core modules…</div>
       <div id="percentText">0%</div>
     </div>
 
@@ -256,62 +294,10 @@
     </div>
 
     <div class="boot-hint" id="bootHint">
-      CL-BOOTSEQ › Handshake pending…
+      CL-BOOTSEQ › INIT
     </div>
   </div>
 </div>
-
-<script>
-  // Fake progress demo.
-  // In production: you’ll drive this from real startup milestones.
-  const barFill    = document.getElementById("barFill");
-  const percentTxt = document.getElementById("percentText");
-  const statusText = document.getElementById("statusText");
-  const bootHint   = document.getElementById("bootHint");
-
-  // You can map certain % ranges to human-readable steps.
-  const steps = [
-    {pct: 5,   label: "Calypso core online"},
-    {pct: 18,  label: "Authorizing local runtime"},
-    {pct: 32,  label: "Linking subsystems"},
-    {pct: 47,  label: "Verifying integrity"},
-    {pct: 63,  label: "Spinning up services"},
-    {pct: 78,  label: "Establishing signal channel"},
-    {pct: 90,  label: "Finalizing environment"},
-    {pct: 100, label: "Complete"},
-  ];
-
-  let currentStep = 0;
-  let pct = 0;
-
-  function tick() {
-    // advance percent in small jumps
-    pct += Math.random() * 3.5; // ~0-3.5%
-    if (pct > 100) pct = 100;
-
-    // update bar
-    barFill.style.width = pct.toFixed(1) + "%";
-    percentTxt.textContent = Math.floor(pct) + "%";
-
-    // update step text if we crossed threshold
-    if (currentStep < steps.length && pct >= steps[currentStep].pct) {
-      statusText.textContent = steps[currentStep].label + "…";
-      bootHint.textContent   = "CL-BOOTSEQ › " + steps[currentStep].label;
-      currentStep++;
-    }
-
-    // if you want to auto-close at 100, you could trigger your app here
-    if (pct < 100) {
-      requestAnimationFrame(tick);
-    } else {
-      // window.close() or hide splash, then reveal main app
-      // (handled by host app, not here)
-    }
-  }
-
-  // start animation
-  requestAnimationFrame(tick);
-</script>
 
 </body>
 </html>
