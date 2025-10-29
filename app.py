@@ -5,7 +5,7 @@ import os, csv, time, hashlib, pathlib, math, re
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 
@@ -34,6 +34,7 @@ elif torch.cuda.is_available():
     DEVICE = torch.device("cuda")
 else:
     DEVICE = torch.device("cpu")
+
 DTYPE = torch.float16 if (USE_FP16 and (DEVICE.type in {"cuda", "mps"})) else torch.float32
 
 # -------------------- App + CORS --------------------
@@ -46,13 +47,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------- Model --------------------
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-# Use 'dtype' to avoid deprecation warning
-model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, dtype=DTYPE)
-model.eval().to(DEVICE)
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
+# -------------------- Model (safe load) --------------------
+tokenizer = None
+model = None
+model_load_error = None
+
+print("[server] loading model...")
+try:
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
+    # Older transformers doesn't accept dtype=...
+    # So we load normally, then move to device/dtype ourselves.
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+
+    # move to device + dtype if possible
+    model.to(DEVICE)
+    if DTYPE == torch.float16 and hasattr(model, "half"):
+        # cast to FP16 only if we actually asked for it
+        model = model.half()
+    else:
+        # otherwise make sure we're at float32 for safety
+        if hasattr(model, "float"):
+            model = model.float()
+
+    model.eval()
+
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    print("[server] model loaded OK on", DEVICE, "dtype", DTYPE)
+
+except Exception as e:
+    model_load_error = str(e)
+    print("[server] FAILED TO LOAD MODEL:", model_load_error)
+    # leave tokenizer/model as None so we can detect it later
 
 # -------------------- IO Models --------------------
 class ScanIn(BaseModel):
@@ -113,9 +141,14 @@ def scan_chunk(input_ids: torch.Tensor) -> Dict:
 def chunked_scan(text: str) -> Dict:
     enc = tokenizer(text, return_tensors="pt", add_special_tokens=False)
     ids = enc["input_ids"][0]
+
+    # IMPORTANT: move IDs to DEVICE so model and data line up
+    def _scan_ids(slice_ids: torch.Tensor) -> Dict:
+        return scan_chunk(slice_ids.to(DEVICE))
+
     if ids.size(0) <= MAX_TOKENS_PER_PASS:
-        input_ids = ids.unsqueeze(0).to(DEVICE)
-        return scan_chunk(input_ids)
+        input_ids = ids.unsqueeze(0)
+        return _scan_ids(input_ids)
 
     all_tokens: List[Dict] = []
     agg_bins = {10: 0, 100: 0, 1000: 0, "rest": 0}
@@ -125,8 +158,8 @@ def chunked_scan(text: str) -> Dict:
     start = 0
     while start < ids.size(0):
         end = min(start + MAX_TOKENS_PER_PASS, ids.size(0))
-        chunk_ids = ids[start:end].unsqueeze(0).to(DEVICE)
-        result = scan_chunk(chunk_ids)
+        chunk_ids = ids[start:end].unsqueeze(0)
+        result = _scan_ids(chunk_ids)
 
         all_tokens.extend(result["per_token"])
         for k in agg_bins:
@@ -345,6 +378,7 @@ def create_pdf_summary(row: dict):
 
 def log_scan_row(row: dict):
     """Readable CSV (single schema) + per-scan PDF."""
+    LOG_PATH = os.path.join(".", "scan_logs.csv")
     pathlib.Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
     csv_exists = os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > 0
 
@@ -395,6 +429,13 @@ def log_scan_row(row: dict):
 # -------------------- Route --------------------
 @app.post("/scan")
 def scan(inp: ScanIn):
+    # if model didn't load, respond 500 instead of crashing the whole server
+    if model is None or tokenizer is None:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Model unavailable: {model_load_error}",
+        )
+
     text = inp.text.strip()
     if not text:
         return {
@@ -457,7 +498,7 @@ def scan(inp: ScanIn):
     # Log to CSV and generate PDF
     row = {
         "ts": int(time.time()),
-        "text_sha256": _sha256_text(text),
+        "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
         "text_len_chars": len(text),
         "text_len_tokens": total,
         "model_name": MODEL_NAME,
@@ -515,7 +556,7 @@ def scan(inp: ScanIn):
     }
 
 # -----------------------------------------------------------------
-# NEW: Serve index.html at "/" so the browser UI loads
+# Serve index.html at "/" so the browser UI loads
 # -----------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def serve_index():
