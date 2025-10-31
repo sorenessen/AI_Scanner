@@ -1,10 +1,9 @@
-# app.py — AI Text Scanner with Category Detection (incl. classic_literature),
-# category-aware calibration, readable CSV logging, and per-scan PDF reports.
+# app.py — AI Text Scanner with classic-literature guard (single-file, no extra modules)
 
 import os, csv, time, hashlib, pathlib, math, re
 from typing import List, Dict, Optional
-from pydantic import BaseModel
 
+from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
@@ -38,7 +37,7 @@ else:
 DTYPE = torch.float16 if (USE_FP16 and (DEVICE.type in {"cuda", "mps"})) else torch.float32
 
 # -------------------- App + CORS --------------------
-app = FastAPI(title="AI Text Scanner (Category-Aware + Classic Literature Fix)")
+app = FastAPI(title="AI Text Scanner (Classic Guard)")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,23 +54,15 @@ model_load_error = None
 print("[server] loading model...")
 try:
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-
-    # Older transformers doesn't accept dtype=...
-    # So we load normally, then move to device/dtype ourselves.
     model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
 
-    # move to device + dtype if possible
     model.to(DEVICE)
     if DTYPE == torch.float16 and hasattr(model, "half"):
-        # cast to FP16 only if we actually asked for it
         model = model.half()
-    else:
-        # otherwise make sure we're at float32 for safety
-        if hasattr(model, "float"):
-            model = model.float()
+    elif hasattr(model, "float"):
+        model = model.float()
 
     model.eval()
-
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -80,12 +71,11 @@ try:
 except Exception as e:
     model_load_error = str(e)
     print("[server] FAILED TO LOAD MODEL:", model_load_error)
-    # leave tokenizer/model as None so we can detect it later
 
 # -------------------- IO Models --------------------
 class ScanIn(BaseModel):
     text: str
-    tag: Optional[str] = None
+    tag: Optional[str] = None  # optional; if contains "classic" we apply the tighter cap
 
 # -------------------- Core scoring helpers --------------------
 def scan_chunk(input_ids: torch.Tensor) -> Dict:
@@ -142,7 +132,6 @@ def chunked_scan(text: str) -> Dict:
     enc = tokenizer(text, return_tensors="pt", add_special_tokens=False)
     ids = enc["input_ids"][0]
 
-    # IMPORTANT: move IDs to DEVICE so model and data line up
     def _scan_ids(slice_ids: torch.Tensor) -> Dict:
         return scan_chunk(slice_ids.to(DEVICE))
 
@@ -189,99 +178,29 @@ def chunked_scan(text: str) -> Dict:
         "burstiness": sum(bursts) / len(bursts) if bursts else 0.0,
     }
 
-# -------------------- Category detection --------------------
+# -------------------- Category / Classic detection (in-file, no extras) --------------------
 ARCHAIC_TOKENS = r"\b(thou|thee|thy|thine|ye|hath|doth|dost|art|shalt|whence|wherefore|ere|oft|nay|aye)\b"
-CLASSIC_CUES = r"\b(whilst|whereupon|thereof|therein|therewith|herein|hereby|forthwith|betwixt|methinks|thereupon|wherein)\b"
-ACADEMIC_CUES = [
-    r"\babstract\b", r"\bintroduction\b", r"\bmethod(s|ology)?\b", r"\bresults?\b",
-    r"\bdiscussion\b", r"\bconclusion(s)?\b", r"\breferences\b", r"\bdoi:\b",
-    r"\b(et al\.|ibid\.|cf\.)\b", r"\(\d{4}\)", r"\[[0-9]{1,3}\]"
-]
-JOURNALISM_CUES = [
-    r"\baccording to\b", r"\bspokes(person|man|woman)\b", r"\bofficials?\b",
-    r"\binterview\b", r"\breported\b", r"\bpress (conference|release)\b",
-    r"\b([A-Z][a-z]+ ){1,3}\([A-Z]{2,}\)\s?—"
-]
-TECH_CUES = [
-    r"\bAPI\b", r"\bSDK\b", r"\bthroughput\b", r"\blatency\b", r"\bBig\-O\b",
-    r"\bHTTP/\d\.\d\b", r"\bRFC\s?\d+\b", r"\balgorithm\b", r"def [a-zA-Z_]+\(", r"\bclass [A-Z]\w+\b"
-]
-POETRY_LINEBREAK_RATIO_CUTOFF = 0.20
-SHORT_AVG_LINE_LEN = 60
+CLASSIC_CUES   = r"\b(whilst|whereupon|thereof|therein|therewith|herein|hereby|forthwith|betwixt|methinks|thereupon|wherein)\b"
 
-def _ratio(n, d):
-    return (n / d) if d else 0.0
-
-def detect_category(text: str) -> dict:
-    lines = [ln for ln in text.splitlines() if ln.strip()]
-    avg_line_len = sum(len(l) for l in lines)/len(lines) if lines else len(text)
-    no_punct_ends = sum(1 for l in lines if not re.search(r"[\.!?;:—-]\s*$", l.strip()))
-    enj_ratio = _ratio(no_punct_ends, max(1, len(lines)))
+def looks_classic_like(text: str, metrics: Dict, frac10: float) -> bool:
     arch_hits = len(re.findall(ARCHAIC_TOKENS, text, flags=re.I))
-    classic_hits = len(re.findall(CLASSIC_CUES, text, flags=re.I))
-    acad_hits = sum(bool(re.search(p, text, flags=re.I)) for p in ACADEMIC_CUES)
-    jour_hits = sum(bool(re.search(p, text, flags=re.I)) for p in JOURNALISM_CUES)
-    tech_hits = sum(bool(re.search(p, text)) for p in TECH_CUES)
+    classic_hits = len(re.findall(CLASSIC_CUES,   text, flags=re.I))
+    ppl   = metrics.get("ppl", 99.0)
+    burst = metrics.get("burstiness", 99.0)
+    return (arch_hits >= 2 or classic_hits >= 2) and (ppl <= 20.0) and (burst <= 9.0) and (frac10 >= 0.55)
 
-    if arch_hits >= 3 and enj_ratio >= 0.15:
-        return {"category": "archaic_poetry", "confidence": 0.85, "signals": {"arch": arch_hits, "enj": enj_ratio}}
-    if acad_hits >= 3 and len(lines) >= 6:
-        return {"category": "academic", "confidence": 0.8, "signals": {"acad": acad_hits}}
-    if jour_hits >= 2:
-        return {"category": "journalism", "confidence": 0.7, "signals": {"jour": jour_hits}}
-    if tech_hits >= 2:
-        return {"category": "technical", "confidence": 0.75, "signals": {"tech": tech_hits}}
-    if enj_ratio >= POETRY_LINEBREAK_RATIO_CUTOFF and avg_line_len <= SHORT_AVG_LINE_LEN:
-        return {"category": "modern_poetry", "confidence": 0.7, "signals": {"enj": enj_ratio}}
-    # First-person narrative clues (light)
-    if re.search(r"\b(I|we|my|our)\b.*\b(said|thought|felt|remember|walked|looked)\b", text, flags=re.I):
-        # If classic cues are present, tip toward classic literature here (pre-metric)
-        if classic_hits >= 2:
-            return {"category": "classic_literature", "confidence": 0.7, "signals": {"classic": classic_hits}}
-        return {"category": "creative_narrative", "confidence": 0.6, "signals": {}}
-    if re.search(r"\bI think\b|\bmy view\b|\bin my opinion\b", text, flags=re.I):
-        return {"category": "blog_opinion", "confidence": 0.6, "signals": {}}
-    # Classic cues without FP to poetry
-    if classic_hits >= 3:
-        return {"category": "classic_literature", "confidence": 0.65, "signals": {"classic": classic_hits}}
-    return {"category": "other", "confidence": 0.5, "signals": {}}
+def tag_says_classic(tag: Optional[str]) -> bool:
+    if not tag:
+        return False
+    t = tag.lower()
+    return any(k in t for k in ("classic", "pre-1920", "public_domain", "public-domain", "pre1920"))
 
-def category_adjustments(cat: str) -> dict:
-    # defaults
-    w = {"score": 2.3, "ppl": 0.9, "burst": 0.6, "t10": 0.5, "bias": -1.5}
-    note = "Default calibration."
-    if cat == "journalism":
-        w = {"score": 2.0, "ppl": 0.9, "burst": 0.7, "t10": 0.4, "bias": -1.3}
-        note = "Journalism: edited prose; stricter threshold."
-    elif cat == "academic":
-        w = {"score": 1.9, "ppl": 1.0, "burst": 0.9, "t10": 0.35, "bias": -1.25}
-        note = "Academic: citations inflate predictability; weight burstiness more."
-    elif cat == "technical":
-        w = {"score": 1.8, "ppl": 0.9, "burst": 0.7, "t10": 0.35, "bias": -1.2}
-        note = "Technical: repetitive terminology; avoid false positives."
-    elif cat == "modern_poetry":
-        w = {"score": 1.2, "ppl": 0.7, "burst": 1.4, "t10": 0.25, "bias": -1.8}
-        note = "Modern poetry: emphasize burstiness; down-weight predictability."
-    elif cat == "archaic_poetry":
-        w = {"score": 1.0, "ppl": 0.7, "burst": 1.6, "t10": 0.2, "bias": -2.0}
-        note = "Archaic poetry: lexical correction to avoid false positives."
-    elif cat == "creative_narrative":
-        w = {"score": 1.6, "ppl": 0.9, "burst": 1.1, "t10": 0.35, "bias": -1.55}
-        note = "Creative narrative: style variation expected."
-    elif cat == "blog_opinion":
-        w = {"score": 1.8, "ppl": 0.9, "burst": 0.9, "t10": 0.35, "bias": -1.45}
-        note = "Opinion/blog: conversational; moderate thresholds."
-    elif cat == "classic_literature":
-        # NEW: dampen AI-likelihood for Twain-like prose (low ppl + low burstiness)
-        w = {"score": 1.2, "ppl": 0.7, "burst": 1.4, "t10": 0.25, "bias": -2.05}
-        note = "Classic literature: dampened predictability; emphasize stylistic variation to avoid false positives."
-    return {"weights": w, "note": note}
+def category_note_for_report(is_classic: bool) -> str:
+    return ("Classic literature: dampened predictability; avoiding false positives."
+            if is_classic else "Default calibration.")
 
 # -------------------- Logging + PDF --------------------
 LOG_PATH = os.path.join(".", "scan_logs.csv")
-
-def _sha256_text(s: str) -> str:
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 def create_pdf_summary(row: dict):
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(row["ts"]))
@@ -331,7 +250,6 @@ def create_pdf_summary(row: dict):
     story.append(table)
     story.append(Spacer(1, 0.2 * inch))
 
-    # Likelihood indicator bar
     story.append(Paragraph("<b>Likelihood Indicator</b>", styles["Heading3"]))
     color = (colors.red if likelihood_pct >= 85 else
              colors.orange if likelihood_pct >= 60 else
@@ -344,8 +262,6 @@ def create_pdf_summary(row: dict):
     story.append(d)
     story.append(Spacer(1, 0.25 * inch))
 
-    # Metrics bar chart
-    story.append(Paragraph("<b>Metrics Overview</b>", styles["Heading3"]))
     chart = VerticalBarChart()
     chart.x, chart.y = 50, 30
     chart.height, chart.width = 150, 400
@@ -359,25 +275,10 @@ def create_pdf_summary(row: dict):
     d2.add(chart)
     story.append(d2)
 
-    expected = {
-        "journalism": "Expected: Top-10 60–80%, PPL 10–25, Burstiness 4–7. High predictability is normal.",
-        "academic": "Expected: Top-10 55–75%, PPL 12–30, Burstiness 5–8. Citations raise predictability.",
-        "technical": "Expected: Top-10 55–75%, PPL 12–28, Burstiness 5–8. Repetition is normal.",
-        "modern_poetry": "Expected: Top-10 30–55%, PPL 20–60, Burstiness 7–12 (high).",
-        "archaic_poetry": "Expected: Top-10 35–60%, PPL 18–55, Burstiness 8–13. Archaic lexicon lowers AI-likelihood.",
-        "creative_narrative": "Expected: Top-10 40–65%, PPL 16–45, Burstiness 6–11.",
-        "classic_literature": "Expected: Top-10 55–75%, PPL 12–30, Burstiness 5–9. Older diction lowers burstiness; avoid false positives.",
-        "blog_opinion": "Expected: Top-10 45–65%, PPL 15–35, Burstiness 6–10.",
-        "other": "Expected: Mixed; interpret with caution.",
-    }
-    story.append(Spacer(1, 0.15 * inch))
-    story.append(Paragraph(f"<i>{expected.get(row.get('category','other'), expected['other'])}</i>", styles["Normal"]))
-
     doc.build(story)
     return pdf_path
 
 def log_scan_row(row: dict):
-    """Readable CSV (single schema) + per-scan PDF."""
     LOG_PATH = os.path.join(".", "scan_logs.csv")
     pathlib.Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
     csv_exists = os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > 0
@@ -386,11 +287,9 @@ def log_scan_row(row: dict):
         writer = csv.writer(f)
 
         if not csv_exists:
-            writer.writerow([
-                "# Legend:", "Each row = one scan result.",
-                "Likelihood % = probability text was AI-generated.",
-                "Verdict interprets likelihood; Category is auto-detected."
-            ])
+            writer.writerow(["# Legend:", "Each row = one scan result.",
+                             "Likelihood % = probability text was AI-generated.",
+                             "Verdict interprets likelihood; Category is auto-detected (with classic guard)."])
             writer.writerow([])
             writer.writerow([
                 "Timestamp","Verdict","Likelihood %","Predictability Score",
@@ -426,23 +325,15 @@ def log_scan_row(row: dict):
     pdf_path = create_pdf_summary(row)
     print(f"[+] PDF report created: {pdf_path}")
 
-# -------------------- Route --------------------
+# -------------------- Main route --------------------
 @app.post("/scan")
 def scan(inp: ScanIn):
-    # if model didn't load, respond 500 instead of crashing the whole server
     if model is None or tokenizer is None:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Model unavailable: {model_load_error}",
-        )
+        raise HTTPException(status_code=500, detail=f"Model unavailable: {model_load_error}")
 
     text = inp.text.strip()
     if not text:
-        return {
-            "overall_score": 0.0,
-            "per_token": [],
-            "explanation": "Empty text",
-        }
+        return {"overall_score": 0.0, "per_token": [], "explanation": "Empty text"}
 
     out = chunked_scan(text)
 
@@ -451,51 +342,55 @@ def scan(inp: ScanIn):
     frac10 = bins[10] / total
     frac100 = bins[100] / total
 
-    # features for calibration
+    # crude “score” + helpers
     fPpl   = max(0, min(1, (25 - (out['ppl'] or 25)) / 20))
     fBurst = max(0, min(1, (8 - (out['burstiness'] or 8)) / 6))
 
-    # --- Category detection ---
-    cat_info = detect_category(text)
-    cat = cat_info["category"]
-    cat_conf = cat_info["confidence"]
+    # category-ish detection (only classic vs other for now)
+    is_classic_auto = looks_classic_like(text, out, frac10)
+    cat = "classic_literature" if is_classic_auto else "other"
+    cat_conf = 0.75 if is_classic_auto else 0.5
 
-    # --- Classic-literature override using metrics (NEW) ---
-    classic_metric_trigger = (
-        out["ppl"] <= 15.0
-        and out["burstiness"] <= 7.0
-        and frac10 >= 0.65
-    )
-    if cat in ("creative_narrative", "other") and classic_metric_trigger:
-        cat = "classic_literature"
-        classic_hits = len(
-            re.findall(
-                r"\b(whilst|whereupon|thereof|therein|therewith|herein|hereby|forthwith|betwixt|methinks|thereupon|wherein)\b",
-                text,
-                flags=re.I,
-            )
-        )
-        cat_conf = (
-            0.75 if classic_hits >= 1
-            else max(cat_conf, 0.65)
-        )
-
-    # Get category-specific weights
-    adj = category_adjustments(cat)
-    w = adj["weights"]
-
-    # Calibrated probability (category-aware)
-    z = (
-        (w["score"] * out["score"])
-        + (w["ppl"] * fPpl)
-        + (w["burst"] * fBurst)
-        + (w["t10"] * frac10)
-        + w["bias"]
-    )
+    # basic logistic combiner
+    z = (2.0 * out["score"]) + (0.9 * fPpl) + (0.8 * fBurst) + (0.35 * frac10) - 1.6
     calP = 1 / (1 + math.exp(-4 * z))
-    calP = max(0, min(1, calP))
+    calP = max(0.0, min(1.0, calP))
 
-    # Log to CSV and generate PDF
+    # --- Classic guard caps ---
+    user_says_classic = tag_says_classic(inp.tag)
+    machine_artifact  = ((out["burstiness"] <= 4.0 and out["ppl"] <= 12.0) or (frac10 >= 0.90))
+
+    if (is_classic_auto and not machine_artifact):
+        calP = min(calP, 0.25)   # auto classic cap
+    if (user_says_classic and not machine_artifact):
+        calP = min(calP, 0.10)   # user-tagged classic cap
+
+    # --- Classic literature hard catch & override ---
+    classic_keywords = re.findall(r"\b(thee|thou|thy|shall|whilst|hath|doth|ere|nay|aye|captain|monsieur|sir)\b",
+                                  text, flags=re.I)
+    proper_nouns = re.findall(r"\b[A-Z][a-z]{2,}\b", text)
+    dialogue = re.findall(r"[“\"].+?[”\"]", text)
+
+    proper_noun_ratio = len(proper_nouns) / max(1, len(text.split()))
+    dialogue_ratio = len(dialogue) / max(1, len(text.splitlines()))
+
+    classic_signal = (len(classic_keywords) >= 3 or proper_noun_ratio > 0.02 or dialogue_ratio > 0.15)
+    human_lit_metrics = (
+        15 <= out['ppl'] <= 45 and
+        4 <= out['burstiness'] <= 12 and
+        frac10 < 0.90
+    )
+
+    if classic_signal and human_lit_metrics and not machine_artifact:
+        calP = max(0, calP - 0.65)  # strong push toward human
+        cat = "classic_literature"
+        cat_conf = max(cat_conf, 0.8)
+        note = "Classic-literature safeguard triggered — overridden to human"
+        print("[guard] CLASSIC OVERRIDE APPLIED")
+    else:
+        note = category_note_for_report(is_classic_auto)
+
+    # Build row AFTER all adjustments
     row = {
         "ts": int(time.time()),
         "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
@@ -513,20 +408,22 @@ def scan(inp: ScanIn):
         "tag": (inp.tag or ""),
         "category": cat,
         "category_conf": round(cat_conf, 3),
-        "category_note": adj["note"],
+        "category_note": note,
     }
     log_scan_row(row)
 
     percent = round(calP * 100)
-    summary = (
-        "almost certain."
-        if percent >= 85 else
-        "high likelihood."
-        if percent >= 70 else
-        "moderate likelihood."
-        if percent >= 50 else
-        "low likelihood."
-    )
+    summary = ("almost certain." if percent >= 85 else
+               "high likelihood." if percent >= 70 else
+               "moderate likelihood." if percent >= 50 else
+               "low likelihood.")
+
+    cap_msgs = []
+    if is_classic_auto and not machine_artifact:
+        cap_msgs.append("classic-guard (auto)")
+    if user_says_classic and not machine_artifact:
+        cap_msgs.append("classic-guard (tag)")
+    cap_note = f" Caps applied: {', '.join(cap_msgs)}." if cap_msgs else ""
 
     exp = (
         f"{round(100*frac10)}% of tokens in Top-10; "
@@ -534,8 +431,8 @@ def scan(inp: ScanIn):
         f"Perplexity≈{out['ppl']:.1f}; Burstiness≈{out['burstiness']:.3f}. "
         "Higher Top-10 fractions and lower perplexity typically correlate with model-like text. "
         f"Likelihood this was AI-generated: {percent}% — {summary} "
-        f"Detected style: {cat.replace('_',' ')} (conf≈{cat_conf:.0%}). "
-        f"{adj['note']}"
+        f"Detected: {cat.replace('_',' ')} (conf≈{cat_conf:.0%}). "
+        f"{note}{cap_note}"
     )
 
     return {
@@ -552,22 +449,15 @@ def scan(inp: ScanIn):
         "calibrated_prob": calP,
         "category": cat,
         "category_conf": cat_conf,
-        "category_note": adj["note"],
+        "category_note": note,
     }
 
-# -----------------------------------------------------------------
-# Serve index.html at "/" so the browser UI loads
-# -----------------------------------------------------------------
+# -------------------- Serve static UI --------------------
 @app.get("/", response_class=HTMLResponse)
 def serve_index():
-    """
-    Serve the local index.html so visiting http://127.0.0.1:8080/
-    loads the scanner UI.
-    """
     index_path = pathlib.Path(__file__).parent / "index.html"
     return index_path.read_text(encoding="utf-8")
 
-# Optional: silence favicon.ico 404 spam in logs
 @app.get("/favicon.ico")
 def favicon():
     return Response(status_code=204)
