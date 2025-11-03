@@ -72,10 +72,25 @@ def stylometric_fingerprint(text: str, token_logps: List[float]) -> Dict[str, fl
             "punct_entropy":float(punct_entropy)}
 
 # -------------------- Config --------------------
+VERSION = "0.1.4"  # bumped to reflect confidence hardening
 MODEL_NAME = os.getenv("REF_MODEL", "EleutherAI/gpt-neo-1.3B")
 MAX_TOKENS_PER_PASS = 768
 STRIDE = 128
 USE_FP16 = True
+
+# --- Confidence hardening knobs ---
+MIN_TOKENS_STRONG = int(os.getenv("MIN_TOKENS_STRONG", "180"))  # tokens for full-strength confidence
+SHORT_CAP = os.getenv("SHORT_CAP", "0")  # set to "1" to cap short excerpts
+
+def _binom_ci_halfwidth(p: float, n: int, z: float = 1.96) -> float:
+    if n <= 0:
+        return 0.5
+    var = p * (1 - p) / n
+    return z * math.sqrt(max(var, 0.0))
+
+def _shrink_toward_half(prob: float, reliability: float) -> float:
+    # reliability in [0,1]; 0 -> 0.5; 1 -> unchanged
+    return 0.5 + (prob - 0.5) * max(0.0, min(1.0, reliability))
 
 # -------------------- Device setup --------------------
 if torch.backends.mps.is_available():
@@ -478,6 +493,12 @@ def scan(inp: ScanIn):
     fPpl   = max(0, min(1, (25 - (out['ppl'] or 25)) / 20))
     fBurst = max(0, min(1, (8 - (out['burstiness'] or 8)) / 6))
 
+    # --- Evidence strength / reliability ---
+    ci10 = _binom_ci_halfwidth(frac10, total)
+    len_factor = min(1.0, total / float(MIN_TOKENS_STRONG))   # 0..1
+    shape_factor = 1.0 - min(0.6, ci10 * 1.8)                 # damp when CI wide
+    reliability = max(0.15, len_factor * shape_factor)        # floor
+
     # classic detector
     is_classic_auto = looks_classic_like(text, out, frac10)
     cat = "classic_literature" if is_classic_auto else "other"
@@ -489,7 +510,12 @@ def scan(inp: ScanIn):
     calP = max(0.0, min(1.0, calP))
 
     # MUCH stricter artifact block (only for obvious machine text)
-    machine_artifact = (frac10 >= 0.98 and out["ppl"] <= 2.0)
+    machine_artifact = (
+        frac10 >= 0.985 and
+        frac100 <= 0.03 and
+        out["ppl"] <= 2.5 and
+        out["burstiness"] <= 3.5
+    )
 
     # classic caps
     user_says_classic = tag_says_classic(inp.tag)
@@ -499,7 +525,7 @@ def scan(inp: ScanIn):
     # default note (can be overwritten by guards below)
     note = category_note_for_report(is_classic_auto)
 
-    # stronger classic-prose override for dialog-heavy 19th-century chapters (Monte Cristo)
+    # stronger classic-prose override for dialog-heavy 19th-century chapters
     if is_classic_auto and not machine_artifact:
         sigs = prose_classic_signals(text)
         strong_prose = (
@@ -528,6 +554,13 @@ def scan(inp: ScanIn):
                 f"lex_hits={nonsense['signals']['lex_hits']}, "
                 f"sem_disc={nonsense['signals']['semantic_disc']}")
         print("[guard] NONSENSE-VERSE OVERRIDE APPLIED", nonsense["signals"])
+
+    # Final reliability shrink (prevents overconfident extremes on thin evidence)
+    calP = _shrink_toward_half(calP, reliability)
+
+    # Optional short-excerpt cap
+    if SHORT_CAP == "1" and total < 160 and not machine_artifact:
+        calP = min(calP, 0.35)
 
     # stylometry diagnostics
     token_logps = [math.log(max(t.get("p", 0.0), 1e-12)) for t in out["per_token"]]
@@ -588,6 +621,14 @@ def scan(inp: ScanIn):
 def serve_index():
     index_path = pathlib.Path(__file__).parent / "index.html"
     return index_path.read_text(encoding="utf-8")
+
+@app.get("/version")
+def version():
+    return {"version": VERSION, "model": MODEL_NAME, "device": str(DEVICE), "dtype": str(DTYPE)}
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
 
 @app.get("/favicon.ico")
 def favicon():
