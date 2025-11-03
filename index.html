@@ -1,4 +1,436 @@
-<!doctype html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AI Text Scanner</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#181c2f; --muted:#8ea0c2; --text:#e8ecf6; --accent:#6ea8fe; --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a;
+    --border:#2a3250;
+  }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;}
+  a{color:var(--accent)}
+  .wrap{max-width:1200px;margin:32px auto;padding:0 16px;}
+  .grid{display:grid;gap:16px}
+  .cols{grid-template-columns: 1.1fr 1fr}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 16px}
+  .card h2{margin:0 0 12px 0;font-size:18px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  label{font-size:14px;color:var(--muted)}
+  input[type="text"], input[type="number"], select, textarea{
+    width:100%;background:#101426;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;
+  }
+  textarea{min-height:180px;resize:vertical}
+  .btn{background:var(--accent);border:none;color:#091120;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer}
+  .btn.secondary{background:#253055;color:var(--text)}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .kv{display:grid;grid-template-columns: 1fr auto;gap:6px 12px;font-size:14px}
+  .muted{color:var(--muted);font-size:13px}
+  .bar{height:18px;border:1px solid var(--border);border-radius:10px;position:relative;background:#0c1122}
+  .bar > .fill{position:absolute;left:0;top:0;height:100%;border-radius:10px}
+  .fill.good{background:var(--good)} .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
+  .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{border-bottom:1px solid var(--border);padding:6px 8px;text-align:left}
+  th{color:var(--muted);font-weight:600}
+  .pill{padding:2px 8px;border-radius:999px;background:#223055;color:#c9d8ff;border:1px solid var(--border);font-size:12px}
+  .flex-between{display:flex;align-items:center;justify-content:space-between}
+  .spacer{height:8px}
+  .footer{margin-top:18px;color:var(--muted);font-size:12px}
+  .grid-3{display:grid;grid-template-columns: repeat(3,minmax(0,1fr));gap:12px}
+  .grid-2{display:grid;grid-template-columns: repeat(2,minmax(0,1fr));gap:12px}
+  .right{ text-align:right;}
+  .switch{display:inline-flex;align-items:center;gap:8px}
+  .switch input{transform:scale(1.1)}
+  .small{font-size:12px}
+  .badge{display:inline-block;padding:3px 8px;border:1px solid var(--border);border-radius:8px;background:#131a33;color:#b9c7ea;font-size:12px}
+  .err{color:#ff9999}
+</style>
+</head>
+<body>
+<div class="wrap grid cols">
+  <!-- Left: Scanner -->
+  <div class="card">
+    <h2>AI Text Scanner</h2>
+    <div class="row">
+      <button id="btnDemo" class="btn secondary">Load Demo Samples</button>
+      <button id="btnClear" class="btn ghost">Clear</button>
+      <span id="version" class="muted"></span>
+    </div>
+    <div class="spacer"></div>
+    <label for="text">Text to scan</label>
+    <textarea id="text" placeholder="Paste or type text to analyze…"></textarea>
+
+    <div class="grid-3" style="margin-top:12px">
+      <div>
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option>Balanced</option>
+          <option>Strict</option>
+          <option>Academic</option>
+        </select>
+        <div class="muted small">Overrides current runtime mode for this scan only.</div>
+      </div>
+      <div>
+        <label for="tag">Optional tag</label>
+        <input id="tag" type="text" placeholder="e.g., classic, pre-1920, …" />
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button id="btnScan" class="btn">Scan</button>
+        <span id="scanStatus" class="muted"></span>
+      </div>
+    </div>
+
+    <div id="result" style="margin-top:16px; display:none">
+      <div class="flex-between">
+        <h2 style="margin:0">Result</h2>
+        <span id="verdictPill" class="pill">—</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="kv">
+        <div>Calibrated probability (AI likelihood)</div>
+        <div class="right mono" id="probPct">—</div>
+        <div style="grid-column:1 / -1">
+          <div class="bar"><div class="fill" id="probFill" style="width:0%"></div></div>
+        </div>
+
+        <div>Explanation</div><div class="right small muted" id="explainShort">—</div>
+        <div>Top-10 tokens</div><div class="right mono" id="top10">—</div>
+        <div>Top-100 tokens</div><div class="right mono" id="top100">—</div>
+        <div>Perplexity</div><div class="right mono" id="ppl">—</div>
+        <div>Burstiness</div><div class="right mono" id="burst">—</div>
+        <div>Category</div><div class="right mono" id="category">—</div>
+        <div>Model</div><div class="right mono" id="modelName">—</div>
+        <div>Mode</div><div class="right mono" id="modeEcho">—</div>
+        <div>PD overlap J</div><div class="right mono" id="pdj">—</div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="grid-2">
+        <div class="card" style="padding:12px">
+          <div class="muted small">Stylometry</div>
+          <div class="kv small">
+            <div>Function word ratio</div><div class="right mono" id="sty_func">—</div>
+            <div>Hapax ratio</div><div class="right mono" id="sty_hapax">—</div>
+            <div>Sent. mean</div><div class="right mono" id="sty_smean">—</div>
+            <div>Sent. var</div><div class="right mono" id="sty_svar">—</div>
+            <div>Δlogp mean</div><div class="right mono" id="sty_mlps">—</div>
+            <div>Δlogp var</div><div class="right mono" id="sty_mlpsv">—</div>
+            <div>Punct entropy</div><div class="right mono" id="sty_pent">—</div>
+          </div>
+        </div>
+        <div class="card" style="padding:12px">
+          <div class="muted small">Nonsense guard</div>
+          <div class="kv small">
+            <div>Rhyme density</div><div class="right mono" id="ns_rhyme">—</div>
+            <div>Meter CV</div><div class="right mono" id="ns_meter">—</div>
+            <div>Invented word ratio</div><div class="right mono" id="ns_inv">—</div>
+            <div>Lex hits</div><div class="right mono" id="ns_lex">—</div>
+            <div>Semantic discontinuity</div><div class="right mono" id="ns_sem">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <details>
+        <summary class="small">Per-token ranks & probs</summary>
+        <div style="max-height:260px;overflow:auto;margin-top:8px;border:1px solid var(--border);border-radius:10px">
+          <table id="tokTable">
+            <thead><tr><th>#</th><th>token</th><th>rank</th><th>p</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+
+      <div class="footer muted small">
+        CSV log and a PDF report are generated server-side per scan.
+      </div>
+    </div>
+
+    <div id="err" class="err" style="margin-top:8px;display:none"></div>
+  </div>
+
+  <!-- Right: Settings -->
+  <div class="card">
+    <h2>Runtime Settings</h2>
+    <div class="row">
+      <span class="badge" id="secondModelBadge">Ensemble: unavailable</span>
+      <span class="badge" id="activeModeBadge">Mode: —</span>
+    </div>
+    <div class="spacer"></div>
+
+    <div class="grid">
+      <div class="switch">
+        <input id="use_ensemble" type="checkbox" />
+        <label for="use_ensemble">Use ensemble (if secondary model loaded)</label>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label for="cfg_mode">Default mode</label>
+          <select id="cfg_mode">
+            <option>Balanced</option>
+            <option>Strict</option>
+            <option>Academic</option>
+          </select>
+        </div>
+        <div>
+          <label for="cfg_min_tokens">Min tokens strong</label>
+          <input id="cfg_min_tokens" type="number" min="1" step="1" />
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="switch">
+          <input id="cfg_short_cap" type="checkbox" />
+          <label for="cfg_short_cap">Cap short excerpts</label>
+        </div>
+        <div>
+          <label for="cfg_max_conf_short">Max conf (short)</label>
+          <input id="cfg_max_conf_short" type="number" step="0.01" min="0" max="1" />
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label for="cfg_non_en_cap">Non-EN cap</label>
+          <input id="cfg_non_en_cap" type="number" step="0.01" min="0" max="1" />
+        </div>
+        <div>
+          <label for="cfg_en_thresh">EN threshold</label>
+          <input id="cfg_en_thresh" type="number" step="0.01" min="0" max="1" />
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label for="cfg_max_unstable">Max conf (unstable)</label>
+          <input id="cfg_max_unstable" type="number" step="0.01" min="0" max="1" />
+        </div>
+        <div></div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label for="cfg_abstain_low">Abstain low</label>
+          <input id="cfg_abstain_low" type="number" step="0.01" min="0" max="1" />
+        </div>
+        <div>
+          <label for="cfg_abstain_high">Abstain high</label>
+          <input id="cfg_abstain_high" type="number" step="0.01" min="0" max="1" />
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:flex-end">
+        <button id="btnReset" class="btn ghost">Reset (reload)</button>
+        <button id="btnSave" class="btn">Save Settings</button>
+      </div>
+      <div id="saveStatus" class="muted small"></div>
+    </div>
+
+    <div class="footer">
+      PD fingerprints: place JSONs in <span class="mono">./pd_fingerprints/</span> on the server.
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = sel => document.querySelector(sel);
+const api = (p,opts={}) => fetch(p,opts).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.json(); });
+
+function setProbFill(p){
+  const fill = $("#probFill");
+  const pct = Math.round(p*100);
+  fill.style.width = pct + "%";
+  fill.classList.remove("good","warn","bad");
+  let cls = "good";
+  if (p >= 0.65) cls = "bad";
+  else if (p >= 0.35) cls = "warn";
+  fill.classList.add(cls);
+  $("#probPct").textContent = pct + "%";
+}
+
+function setVerdict(v){
+  const pill = $("#verdictPill");
+  pill.textContent = v;
+  pill.style.background = v.includes("human") ? "#163626" : (v.includes("Inconclusive") ? "#2f2a12" : "#3a1b1b");
+  pill.style.borderColor = "var(--border)";
+}
+
+function setModeBadge(m){ $("#activeModeBadge").textContent = "Mode: "+m; }
+
+function fillTokenTable(tokens){
+  const tbody = $("#tokTable tbody");
+  tbody.innerHTML = "";
+  tokens.forEach((t,i)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="mono">${i+1}</td><td class="mono">${t.t}</td><td class="mono">${t.rank}</td><td class="mono">${t.p.toFixed(6)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function shortExplain(resp){
+  return resp.explanation || `${resp.verdict} — PPL≈${(resp.ppl||0).toFixed(1)}, Top10≈${Math.round(resp.bins[10]/Math.max(1,resp.total)*100)}%`;
+}
+
+async function loadVersion(){
+  try{
+    const v = await api("/version");
+    $("#version").textContent = `v${v.version} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble ? "on" : "off"}`;
+  }catch(e){ $("#version").textContent = "version error"; }
+}
+
+async function loadConfig(){
+  try{
+    const j = await api("/config");
+    const s = j.settings || {};
+    $("#secondModelBadge").textContent = "Ensemble: " + (j.second_model_available ? "available" : "unavailable");
+    $("#cfg_mode").value = s.mode || "Balanced";
+    $("#use_ensemble").checked = !!s.use_ensemble;
+    $("#cfg_min_tokens").value = s.min_tokens_strong ?? 180;
+    $("#cfg_short_cap").checked = !!s.short_cap;
+    $("#cfg_max_conf_short").value = (s.max_conf_short ?? 0.35);
+    $("#cfg_non_en_cap").value = (s.non_en_cap ?? 0.15);
+    $("#cfg_en_thresh").value = (s.en_thresh ?? 0.70);
+    $("#cfg_max_unstable").value = (s.max_conf_unstable ?? 0.35);
+    $("#cfg_abstain_low").value = (s.abstain_low ?? 0.35);
+    $("#cfg_abstain_high").value = (s.abstain_high ?? 0.65);
+    setModeBadge(s.mode || "Balanced");
+    $("#mode").value = s.mode || "Balanced";
+  }catch(e){
+    $("#saveStatus").textContent = "Failed to load settings: "+e.message;
+  }
+}
+
+async function saveConfig(){
+  const body = {
+    mode: $("#cfg_mode").value,
+    short_cap: $("#cfg_short_cap").checked,
+    min_tokens_strong: parseInt($("#cfg_min_tokens").value || "180"),
+    use_ensemble: $("#use_ensemble").checked,
+    non_en_cap: parseFloat($("#cfg_non_en_cap").value || "0.15"),
+    en_thresh: parseFloat($("#cfg_en_thresh").value || "0.70"),
+    max_conf_unstable: parseFloat($("#cfg_max_unstable").value || "0.35"),
+    max_conf_short: parseFloat($("#cfg_max_conf_short").value || "0.35"),
+    abstain_low: parseFloat($("#cfg_abstain_low").value || "0.35"),
+    abstain_high: parseFloat($("#cfg_abstain_high").value || "0.65"),
+  };
+  try{
+    $("#btnSave").disabled = true;
+    $("#saveStatus").textContent = "Saving…";
+    const j = await api("/config", {
+      method:"POST", headers:{ "content-type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    $("#saveStatus").textContent = "Saved.";
+    setModeBadge(j.settings.mode);
+    $("#mode").value = j.settings.mode;
+    await loadVersion();
+  }catch(e){
+    $("#saveStatus").textContent = "Save failed: "+e.message;
+  }finally{
+    $("#btnSave").disabled = false;
+  }
+}
+
+async function runScan(){
+  const text = $("#text").value.trim();
+  if(!text){ $("#err").style.display="block"; $("#err").textContent="Please enter some text."; return; }
+  $("#err").style.display="none";
+  $("#btnScan").disabled = true;
+  $("#scanStatus").textContent = "Scanning…";
+  try{
+    const body = {
+      text,
+      tag: $("#tag").value.trim() || null,
+      mode: $("#mode").value || null
+    };
+    const resp = await api("/scan", {
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    // fill result panel
+    $("#result").style.display = "block";
+    setProbFill(resp.calibrated_prob || 0);
+    setVerdict(resp.verdict || "—");
+    $("#top10").textContent = resp.bins ? Math.round((resp.bins[10]/Math.max(1,resp.total))*100) + "%" : "—";
+    $("#top100").textContent = resp.bins ? Math.round((resp.bins[100]/Math.max(1,resp.total))*100) + "%" : "—";
+    $("#ppl").textContent = (resp.ppl ?? 0).toFixed(2);
+    $("#burst").textContent = (resp.burstiness ?? 0).toFixed(3);
+    $("#category").textContent = `${resp.category} (${Math.round((resp.category_conf||0)*100)}%)`;
+    $("#modelName").textContent = resp.model_name || "—";
+    $("#modeEcho").textContent = resp.mode || "—";
+    $("#pdj").textContent = (resp.pd_overlap_j ?? 0).toFixed(3);
+    $("#explainShort").textContent = shortExplain(resp);
+
+    // stylometry
+    const st = resp.stylometry || {};
+    $("#sty_func").textContent = (st.func_ratio ?? 0).toFixed(3);
+    $("#sty_hapax").textContent = (st.hapax_ratio ?? 0).toFixed(3);
+    $("#sty_smean").textContent = (st.sent_mean ?? 0).toFixed(2);
+    $("#sty_svar").textContent = (st.sent_var ?? 0).toFixed(2);
+    $("#sty_mlps").textContent = (st.mlps ?? 0).toFixed(4);
+    $("#sty_mlpsv").textContent = (st.mlps_var ?? 0).toFixed(4);
+    $("#sty_pent").textContent = (st.punct_entropy ?? 0).toFixed(3);
+
+    // nonsense
+    const ns = resp.nonsense_signals || {};
+    $("#ns_rhyme").textContent = (ns.rhyme_density ?? 0).toFixed(3);
+    $("#ns_meter").textContent = (ns.meter_cv ?? 0).toFixed(3);
+    $("#ns_inv").textContent = (ns.invented_ratio ?? 0).toFixed(3);
+    $("#ns_lex").textContent = (ns.lex_hits ?? 0);
+    $("#ns_sem").textContent = (ns.semantic_disc ?? 0).toFixed(3);
+
+    fillTokenTable(resp.per_token || []);
+  }catch(e){
+    $("#err").style.display="block";
+    $("#err").textContent = "Scan failed: " + e.message;
+  }finally{
+    $("#btnScan").disabled = false;
+    $("#scanStatus").textContent = "";
+  }
+}
+
+async function loadDemos(){
+  $("#btnDemo").disabled = true;
+  try{
+    const list = await api("/demo");
+    if(!Array.isArray(list) || list.length === 0){ $("#text").value = "Demo unavailable."; return; }
+    const lines = [];
+    list.forEach((d,i)=>{
+      lines.push(`// ${d.label} — expect: ${d.expect}`);
+      lines.push(d.text);
+      if(i < list.length-1) lines.push("");
+    });
+    $("#text").value = lines.join("\n");
+  }catch(e){
+    $("#text").value = "Failed to load demo samples: "+e.message;
+  }finally{
+    $("#btnDemo").disabled = false;
+  }
+}
+
+function resetPage(){ location.reload(); }
+
+$("#btnScan").addEventListener("click", runScan);
+$("#btnDemo").addEventListener("click", loadDemos);
+$("#btnClear").addEventListener("click", ()=>{ $("#text").value=""; $("#result").style.display="none"; $("#err").style.display="none"; });
+$("#btnSave").addEventListener("click", saveConfig);
+$("#btnReset").addEventListener("click", resetPage);
+
+(async function init(){
+  await loadVersion();
+  await loadConfig();
+})();
+</script>
+</body>
+</html>
+
+
+<!-- <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -223,3 +655,4 @@
   </script>
 </body>
 </html>
+ -->
