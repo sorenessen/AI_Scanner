@@ -122,6 +122,22 @@ details > summary {
   cursor: pointer;
 }
 
+/* Visible focus outlines for keyboard users */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #7eb4ff;
+  outline-offset: 2px;
+}
+
+/* Respect “reduced motion” */
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .progress > span {
+    transition: none !important;
+  }
+}
 
 </style>
 </head>
@@ -168,7 +184,7 @@ details > summary {
         </div>
         <div style="display:flex;align-items:flex-end;gap:10px">
           <button id="btnScan" class="btn">Scan</button>
-          <span id="scanStatus" class="muted"></span>
+          <span id="scanStatus" class="muted" aria-live="polite" role="status"></span>
         </div>
       </div>
 
@@ -217,6 +233,11 @@ details > summary {
               <div>Semantic discontinuity</div><div id="ns_sem" class="right mono">—</div>
             </div>
           </div>
+          <details id="rawJsonBox" style="margin-top:8px">
+            <summary>Raw /scan JSON</summary>
+            <pre id="rawDump" style="white-space:pre-wrap; font-size:12px"></pre>
+          </details>
+
         </div>
 
         <details style="margin-top:12px">
@@ -384,6 +405,37 @@ function shortExplain(r){
   return `${r?.verdict||""} — PPL≈${(r?.ppl||0).toFixed(1)}, Top10≈${top10}%`.trim();
 }
 
+const fmt = (v, digits) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(digits) : "—";
+};
+
+const fmtInt = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? String(Math.round(n)) : "—";
+};
+
+// picks the first numeric value from several candidates
+const pickNum = (...candidates) => {
+  for (const v of candidates) {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+};
+
+// pretty-set helper
+const setTxt = (sel, val, digits=3) => {
+  const el = document.querySelector(sel);
+  if (!el) return;
+  if (val === null || val === undefined) { el.textContent = "—"; return; }
+  const n = Number(val);
+  el.textContent = Number.isFinite(n) ? n.toFixed(digits) : String(val);
+};
+
+
+
+
 /* Load version/config */
 async function loadVersion(){
   try{
@@ -431,18 +483,79 @@ async function saveConfig(){
 }
 
 /* Scan */
+function cleanTok(t) {
+  if (t === "Ċ") return "↵";      // newline
+  if (t === "Ġ") return "␠";      // stand-alone space token
+  return t
+    .replace(/^Ġ/, " ")           // leading-space marker -> real space
+    .replace(/âĢĿ/g, "“")
+    .replace(/âĢĺ/g, "”")
+    .replace(/âĢĶ/g, "‘")
+    .replace(/âĢĺ/g, "’");
+}
+
+function fillTokenTable(tokens){
+  const tb = $("#tokTable tbody"); tb.innerHTML = "";
+  (tokens||[]).forEach((t,i)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td class="mono">${i+1}</td>`+
+      `<td class="mono">${cleanTok(t.t)}</td>`+
+      `<td class="mono">${t.rank}</td>`+
+      `<td class="mono">${(t.p||0).toFixed(6)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
 async function runScan(){
   const text = $("#text").value.trim();
-  if(!text){ $("#err").style.display="block"; $("#err").textContent="Please enter some text."; return; }
-  $("#err").style.display="none"; $("#btnScan").disabled = true; $("#scanStatus").textContent = "Scanning…";
-  try{
+  if (!text) {
+    $("#err").style.display = "block";
+    $("#err").textContent = "Please enter some text.";
+    return;
+  }
+  $("#err").style.display = "none";
+  $("#btnScan").disabled = true;
+  $("#scanStatus").textContent = "Scanning…";
+
+  try {
     const body = { text, tag: $("#tag").value.trim() || null, mode: $("#mode").value || null };
-    const r = await api("/scan",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+    const r = await api("/scan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    // after `const r = await api("/scan", …)`
+    const NS = r.nonsense_signals || {};
+    const top10Pct  = Number.isFinite(NS.top10)  ? Math.round(NS.top10  * 100) : (r.bins ? Math.round((r.bins[10]  / Math.max(1,r.total))*100) : null);
+    const top100Pct = Number.isFinite(NS.top100) ? Math.round(NS.top100 * 100) : (r.bins ? Math.round((r.bins[100] / Math.max(1,r.total))*100) : null);
+
+    $("#top10").textContent  = top10Pct  ?? "—";
+    $("#top100").textContent = top100Pct ?? "—";
+
+    // prefer server copies if present
+    $("#ppl").textContent   = (NS.ppl   ?? r.ppl   ?? 0).toFixed(2);
+    $("#burst").textContent = (NS.burst ?? r.burstiness ?? 0).toFixed(3);
+
+    // Show raw JSON and force the details panel open (ONE declaration of rawBox!)
+    console.log("SCAN response:", r);
+    const rawBox = document.getElementById("rawDump");
+    if (rawBox) rawBox.textContent = JSON.stringify(r, null, 2);
+    const rawDetails = document.getElementById("rawJsonBox");
+    if (rawDetails) {
+    const autoOpen = document.getElementById("showRaw")?.checked;
+    if (autoOpen) rawDetails.setAttribute("open", "open");
+    else rawDetails.removeAttribute("open");
+  }
+
+
+    // Top summary
     $("#result").style.display = "block";
     setProbFill(r.calibrated_prob || 0);
     setVerdict(r.verdict || "—");
-    $("#top10").textContent  = r.bins ? Math.round((r.bins[10]/Math.max(1,r.total))*100) + "%" : "—";
-    $("#top100").textContent = r.bins ? Math.round((r.bins[100]/Math.max(1,r.total))*100) + "%" : "—";
+    $("#top10").textContent  = r.bins ? Math.round((r.bins[10] / Math.max(1, r.total)) * 100) + "%" : "—";
+    $("#top100").textContent = r.bins ? Math.round((r.bins[100] / Math.max(1, r.total)) * 100) + "%" : "—";
     $("#ppl").textContent    = (r.ppl ?? 0).toFixed(2);
     $("#burst").textContent  = (r.burstiness ?? 0).toFixed(3);
     $("#category").textContent  = r.category ? `${r.category} (${Math.round((r.category_conf||0)*100)}%)` : "—";
@@ -452,17 +565,40 @@ async function runScan(){
     $("#tagEcho").textContent   = (body.tag || "—");
     $("#explainShort").textContent = shortExplain(r);
 
+    // Token table
     fillTokenTable(r.per_token || []);
 
-    // Enable live verification after first scan
+    // --- tolerant mapping for bottom metrics ---
+    const S = r.stylometry || r.style || r.metrics?.stylometry || r.stats?.stylometry || {};
+    const N = r.nonsense_signals || r.nonsense || r.metrics?.nonsense || r.stats?.nonsense || {};
+
+    setTxt("#sty_func",  pickNum(S.func_ratio, S.function_word_ratio, S.funcWordsRatio), 3);
+    setTxt("#sty_hapax", pickNum(S.hapax_ratio, S.hapax, S.hapaxRatio), 3);
+    setTxt("#sty_smean", pickNum(S.sent_mean, S.sentence_mean, S.sentMean), 2);
+    setTxt("#sty_svar",  pickNum(S.sent_var, S.sentence_var, S.sentVar), 2);
+    setTxt("#sty_mlps",  pickNum(S.mlps, S.delta_logp_mean, S.dlogp_mean, S.deltaLogpMean), 4);
+    setTxt("#sty_mlpsv", pickNum(S.mlps_var, S.delta_logp_var, S.dlogp_var, S.deltaLogpVar), 4);
+    setTxt("#sty_pent",  pickNum(S.punct_entropy, S.punctuation_entropy, S.punctEntropy), 3);
+
+    setTxt("#ns_rhyme", pickNum(N.rhyme_density, N.rhyme, N.rhymeDensity), 3);
+    setTxt("#ns_meter", pickNum(N.meter_cv, N.meter, N.meterCV), 3);
+    setTxt("#ns_inv",   pickNum(N.invented_ratio, N.invented, N.inventedRatio), 3);
+    setTxt("#ns_lex",   pickNum(N.lex_hits, N.lexHits), 0);
+    setTxt("#ns_sem",   pickNum(N.semantic_disc, N.semantic_discontinuity, N.semanticDisc), 3);
+
+    // Live section enable
     $("#btnStartLive").disabled = false;
     $("#liveInput").disabled = false;
-  }catch(e){
-    $("#err").style.display="block"; $("#err").textContent = "Scan failed: " + e.message;
-  }finally{
-    $("#btnScan").disabled = false; $("#scanStatus").textContent = "";
+
+  } catch (e) {
+    $("#err").style.display = "block";
+    $("#err").textContent = "Scan failed: " + e.message;
+  } finally {
+    $("#btnScan").disabled = false;
+    $("#scanStatus").textContent = "";
   }
 }
+
 
 /* Demos */
 async function loadDemos(){
