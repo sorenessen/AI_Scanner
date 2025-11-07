@@ -2,291 +2,399 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>AI Text Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Text Scanner — CopyCat</title>
 <style>
   :root{
-    --bg:#0f1220; --panel:#181c2f; --muted:#8ea0c2; --text:#e8ecf6; --accent:#6ea8fe; --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a;
-    --border:#2a3250;
+    --bg:#0f1220; --panel:#181c2f; --muted:#c4cbe3; --text:#f1f4ff; --accent:#7eb4ff;
+    --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a; --border:#2a3250; --panel-2:#13182b;
+    --scale:1.50;                /* default ~150% for readability */
+    --wrap-max:1800px;           /* allow to stretch wide */
   }
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;}
-  a{color:var(--accent)}
-  .wrap{max-width:1200px;margin:32px auto;padding:0 16px;}
-  .grid{display:grid;gap:16px}
-  .cols{grid-template-columns: 1.1fr 1fr}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 16px}
-  .card h2{margin:0 0 12px 0;font-size:18px}
+  html,body{
+    margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+    font-size:calc(16px * var(--scale)); line-height:1.55;
+  }
+  .wrap{max-width:var(--wrap-max); width:98vw; margin:22px auto;}
+  .grid{display:grid;gap:18px}
+  .cols{grid-template-columns: 1.25fr 1fr} /* original feel, just roomier */
+  @media (max-width: 1100px){ .cols{grid-template-columns: 1fr} }
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  label{font-size:14px;color:var(--muted)}
+  label{color:var(--muted)}
   input[type="text"], input[type="number"], select, textarea{
-    width:100%;background:#101426;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;
+    width:100%;background:#101426;color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px;min-height:42px;font-size:1em;
   }
-  textarea{min-height:180px;resize:vertical}
-  .btn{background:var(--accent);border:none;color:#091120;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer}
+  textarea{min-height:360px;resize:vertical}
+  .btn{background:var(--accent);border:none;color:#091120;padding:11px 16px;border-radius:10px;font-weight:700;cursor:pointer;min-height:42px}
   .btn.secondary{background:#253055;color:var(--text)}
   .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .kv{display:grid;grid-template-columns: 1fr auto;gap:6px 12px;font-size:14px}
-  .muted{color:var(--muted);font-size:13px}
-  .bar{height:18px;border:1px solid var(--border);border-radius:10px;position:relative;background:#0c1122}
-  .bar > .fill{position:absolute;left:0;top:0;height:100%;border-radius:10px}
-  .fill.good{background:var(--good)} .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .muted{color:var(--muted)}
   .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
-  table{width:100%;border-collapse:collapse;font-size:12px}
-  th,td{border-bottom:1px solid var(--border);padding:6px 8px;text-align:left}
-  th{color:var(--muted);font-weight:600}
-  .pill{padding:2px 8px;border-radius:999px;background:#223055;color:#c9d8ff;border:1px solid var(--border);font-size:12px}
-  .flex-between{display:flex;align-items:center;justify-content:space-between}
-  .spacer{height:8px}
-  .footer{margin-top:18px;color:var(--muted);font-size:12px}
-  .grid-3{display:grid;grid-template-columns: repeat(3,minmax(0,1fr));gap:12px}
-  .grid-2{display:grid;grid-template-columns: repeat(2,minmax(0,1fr));gap:12px}
-  .right{ text-align:right;}
-  .switch{display:inline-flex;align-items:center;gap:8px}
-  .switch input{transform:scale(1.1)}
-  .small{font-size:12px}
-  .badge{display:inline-block;padding:3px 8px;border:1px solid var(--border);border-radius:8px;background:#131a33;color:#b9c7ea;font-size:12px}
-  .err{color:#ff9999}
+  .pill{padding:4px 10px;border-radius:999px;background:#1a2346;color:#cfe0ff;border:1px solid var(--border)}
+  .bar{height:22px;border:1px solid var(--border);border-radius:12px;background:#0c1122;position:relative}
+  .bar>.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:12px}
+  .fill.good{background:var(--good)} .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
+  .kv{display:grid;grid-template-columns: 1fr auto;gap:8px 16px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left}
+  th{color:var(--muted)}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .footer{margin-top:14px;color:var(--muted);font-size:.95em}
+
+  /* Live Verification drawer (unchanged behavior) */
+  .drawer{position:fixed;left:0;right:0;bottom:0;background:var(--panel-2);
+    border-top:1px solid var(--border);transform:translateY(100%);transition:transform .25s ease;z-index:50}
+  .drawer.open{transform:translateY(0)}
+  .drawer-inner{max-width:var(--wrap-max); width:98vw; margin:0 auto; padding:14px 0}
+  .split{display:grid;grid-template-columns: 1fr 400px; gap:18px}
+  @media (max-width: 1024px){ .split{grid-template-columns: 1fr} }
+  .progress{height:10px;border-radius:6px;background:#2a3240;overflow:hidden}
+  .progress>span{display:block;height:100%;width:0;background:#3b82f6;transition:width .25s}
+
+  /* Make “Open Live Verification” noticeable, but keep layout */
+  #btnLive{position:relative}
+  #btnLive::after{
+    content:'opens drawer at bottom'; position:absolute; left:100%; top:50%;
+    transform:translate(10px,-50%); font-size:.9em; color:var(--muted); white-space:nowrap;
+  }
+
+  /* UI scale slider */
+  .scale-wrap{display:flex;align-items:center;gap:10px}
+  input[type="range"]{accent-color:#7eb4ff}
+
+  /* ===== Accessibility / Action Button Size Boost ===== */
+
+/* Make *all* buttons readable (even ones without .btn) */
+button,
+.btn,
+.drawer button {
+  font-size: 1.05em;           /* bigger text */
+  padding: 12px 18px;          /* bigger hit area */
+  min-height: 46px;            /* consistent height */
+  border-radius: 12px;
+}
+
+/* Ensure the tiny inline utility buttons match size */
+.card .row button,
+.card > button {
+  font-size: 1.05em;
+  padding: 12px 18px;
+  min-height: 46px;
+}
+
+/* Keep ghost buttons visible at larger size */
+.btn.ghost {
+  border-width: 1.5px;
+}
+
+/* Inputs/selects next to those buttons should match height */
+input[type="text"],
+input[type="number"],
+select {
+  min-height: 46px;
+  font-size: 1.05em;
+  padding: 12px 14px;
+}
+
+/* Make the UI scale slider and checkboxes easier to use */
+input[type="range"] {
+  height: 12px;
+}
+input[type="checkbox"] {
+  transform: scale(1.35);
+  transform-origin: left center;
+}
+
+/* Per-token table readability */
+table th, table td {
+  padding: 10px 12px;
+  font-size: 1.02em;
+}
+
+/* Details summary (toggle) should be easy to click */
+details > summary {
+  font-size: 1.05em;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+
 </style>
 </head>
 <body>
-<div class="wrap grid cols">
-  <!-- Left: Scanner -->
-  <div class="card">
-    <h2>AI Text Scanner</h2>
+<div class="wrap">
+  <div class="topbar">
     <div class="row">
-      <button id="btnDemo" class="btn secondary">Load Demo Samples</button>
-      <button id="btnClear" class="btn ghost">Clear</button>
+      <strong>CopyCat — AI Text Scanner</strong>
       <span id="version" class="muted"></span>
     </div>
-    <div class="spacer"></div>
-    <label for="text">Text to scan</label>
-    <textarea id="text" placeholder="Paste or type text to analyze…"></textarea>
-
-    <div class="grid-3" style="margin-top:12px">
-      <div>
-        <label for="mode">Mode</label>
-        <select id="mode">
-          <option>Balanced</option>
-          <option>Strict</option>
-          <option>Academic</option>
-        </select>
-        <div class="muted small">Overrides current runtime mode for this scan only.</div>
-      </div>
-      <div>
-        <label for="tag">Optional tag</label>
-        <input id="tag" type="text" placeholder="e.g., classic, pre-1920, …" />
-      </div>
-      <div style="display:flex;align-items:flex-end;gap:8px">
-        <button id="btnScan" class="btn">Scan</button>
-        <span id="scanStatus" class="muted"></span>
-      </div>
+    <div class="scale-wrap">
+      <label class="muted" for="uiScale">UI scale</label>
+      <input id="uiScale" type="range" min="120" max="220" value="150" />
     </div>
-
-    <div id="result" style="margin-top:16px; display:none">
-      <div class="flex-between">
-        <h2 style="margin:0">Result</h2>
-        <span id="verdictPill" class="pill">—</span>
-      </div>
-      <div class="spacer"></div>
-      <div class="kv">
-        <div>Calibrated probability (AI likelihood)</div>
-        <div class="right mono" id="probPct">—</div>
-        <div style="grid-column:1 / -1">
-          <div class="bar"><div class="fill" id="probFill" style="width:0%"></div></div>
-        </div>
-
-        <div>Explanation</div><div class="right small muted" id="explainShort">—</div>
-        <div>Top-10 tokens</div><div class="right mono" id="top10">—</div>
-        <div>Top-100 tokens</div><div class="right mono" id="top100">—</div>
-        <div>Perplexity</div><div class="right mono" id="ppl">—</div>
-        <div>Burstiness</div><div class="right mono" id="burst">—</div>
-        <div>Category</div><div class="right mono" id="category">—</div>
-        <div>Model</div><div class="right mono" id="modelName">—</div>
-        <div>Mode</div><div class="right mono" id="modeEcho">—</div>
-        <div>PD overlap J</div><div class="right mono" id="pdj">—</div>
-      </div>
-
-      <div class="spacer"></div>
-      <div class="grid-2">
-        <div class="card" style="padding:12px">
-          <div class="muted small">Stylometry</div>
-          <div class="kv small">
-            <div>Function word ratio</div><div class="right mono" id="sty_func">—</div>
-            <div>Hapax ratio</div><div class="right mono" id="sty_hapax">—</div>
-            <div>Sent. mean</div><div class="right mono" id="sty_smean">—</div>
-            <div>Sent. var</div><div class="right mono" id="sty_svar">—</div>
-            <div>Δlogp mean</div><div class="right mono" id="sty_mlps">—</div>
-            <div>Δlogp var</div><div class="right mono" id="sty_mlpsv">—</div>
-            <div>Punct entropy</div><div class="right mono" id="sty_pent">—</div>
-          </div>
-        </div>
-        <div class="card" style="padding:12px">
-          <div class="muted small">Nonsense guard</div>
-          <div class="kv small">
-            <div>Rhyme density</div><div class="right mono" id="ns_rhyme">—</div>
-            <div>Meter CV</div><div class="right mono" id="ns_meter">—</div>
-            <div>Invented word ratio</div><div class="right mono" id="ns_inv">—</div>
-            <div>Lex hits</div><div class="right mono" id="ns_lex">—</div>
-            <div>Semantic discontinuity</div><div class="right mono" id="ns_sem">—</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="spacer"></div>
-      <details>
-        <summary class="small">Per-token ranks & probs</summary>
-        <div style="max-height:260px;overflow:auto;margin-top:8px;border:1px solid var(--border);border-radius:10px">
-          <table id="tokTable">
-            <thead><tr><th>#</th><th>token</th><th>rank</th><th>p</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </details>
-
-      <div class="footer muted small">
-        CSV log and a PDF report are generated server-side per scan.
-      </div>
-    </div>
-
-    <div id="err" class="err" style="margin-top:8px;display:none"></div>
   </div>
 
-  <!-- Right: Settings -->
-  <div class="card">
-    <h2>Runtime Settings</h2>
-    <div class="row">
-      <span class="badge" id="secondModelBadge">Ensemble: unavailable</span>
-      <span class="badge" id="activeModeBadge">Mode: —</span>
-    </div>
-    <div class="spacer"></div>
-
-    <div class="grid">
-      <div class="switch">
-        <input id="use_ensemble" type="checkbox" />
-        <label for="use_ensemble">Use ensemble (if secondary model loaded)</label>
+  <div class="grid cols">
+    <!-- Left: Scanner -->
+    <section class="card" aria-label="AI Text Scanner">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">AI Text Scanner</h2>
+        <span class="muted" id="ensemBadge"></span>
+      </div>
+      <div class="row">
+        <button id="btnDemo" class="btn secondary">Load Demo Samples</button>
+        <button id="btnClear" class="btn ghost">Clear</button>
+        <button id="btnLive" class="btn ghost" aria-controls="liveDrawer">Open Live Verification</button>
       </div>
 
-      <div class="grid-2">
+      <label for="text">Text to scan</label>
+      <textarea id="text" placeholder="Paste or type text to analyze…"></textarea>
+
+      <div class="grid" style="grid-template-columns: 1fr 1fr auto; gap:12px; margin-top:12px">
         <div>
-          <label for="cfg_mode">Default mode</label>
-          <select id="cfg_mode">
-            <option>Balanced</option>
-            <option>Strict</option>
-            <option>Academic</option>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option>Balanced</option><option>Strict</option><option>Academic</option>
           </select>
+          <div class="muted" style="font-size:.95em">Overrides current runtime mode for this scan only.</div>
         </div>
         <div>
-          <label for="cfg_min_tokens">Min tokens strong</label>
-          <input id="cfg_min_tokens" type="number" min="1" step="1" />
+          <label for="tag">Optional tag</label>
+          <input id="tag" type="text" placeholder="e.g., classic, pre-1920, …" />
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:10px">
+          <button id="btnScan" class="btn">Scan</button>
+          <span id="scanStatus" class="muted"></span>
         </div>
       </div>
 
-      <div class="grid-2">
-        <div class="switch">
-          <input id="cfg_short_cap" type="checkbox" />
-          <label for="cfg_short_cap">Cap short excerpts</label>
+      <!-- RESULTS -->
+      <div id="result" style="margin-top:16px; display:none">
+        <div class="row" style="justify-content:space-between">
+          <h3 style="margin:0">Result</h3>
+          <span id="verdictPill" class="pill">—</span>
         </div>
-        <div>
-          <label for="cfg_max_conf_short">Max conf (short)</label>
-          <input id="cfg_max_conf_short" type="number" step="0.01" min="0" max="1" />
+        <div class="kv" style="margin-top:8px">
+          <div>Calibrated probability (AI likelihood)</div><div id="probPct" class="right mono">—</div>
+          <div style="grid-column:1 / -1"><div class="bar"><div class="fill" id="probFill"></div></div></div>
+
+          <div>Explanation</div><div id="explainShort" class="right muted">—</div>
+          <div>Top-10 tokens</div><div id="top10" class="right mono">—</div>
+          <div>Top-100 tokens</div><div id="top100" class="right mono">—</div>
+          <div>Perplexity</div><div id="ppl" class="right mono">—</div>
+          <div>Burstiness</div><div id="burst" class="right mono">—</div>
+          <div>Category</div><div id="category" class="right mono">—</div>
+          <div>Model</div><div id="modelName" class="right mono">—</div>
+          <div>Mode</div><div id="modeEcho" class="right mono">—</div>
+          <div>PD overlap J</div><div id="pdj" class="right mono">—</div>
+          <div>Tag</div><div id="tagEcho" class="right mono">—</div>
         </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:18px; margin-top:14px">
+          <div class="card" style="padding:12px">
+            <div class="muted">Stylometry</div>
+            <div class="kv">
+              <div>Function word ratio</div><div id="sty_func" class="right mono">—</div>
+              <div>Hapax ratio</div><div id="sty_hapax" class="right mono">—</div>
+              <div>Sent. mean</div><div id="sty_smean" class="right mono">—</div>
+              <div>Sent. var</div><div id="sty_svar" class="right mono">—</div>
+              <div>Δlogp mean</div><div id="sty_mlps" class="right mono">—</div>
+              <div>Δlogp var</div><div id="sty_mlpsv" class="right mono">—</div>
+              <div>Punct entropy</div><div id="sty_pent" class="right mono">—</div>
+            </div>
+          </div>
+          <div class="card" style="padding:12px">
+            <div class="muted">Nonsense guard</div>
+            <div class="kv">
+              <div>Rhyme density</div><div id="ns_rhyme" class="right mono">—</div>
+              <div>Meter CV</div><div id="ns_meter" class="right mono">—</div>
+              <div>Invented word ratio</div><div id="ns_inv" class="right mono">—</div>
+              <div>Lex hits</div><div id="ns_lex" class="right mono">—</div>
+              <div>Semantic discontinuity</div><div id="ns_sem" class="right mono">—</div>
+            </div>
+          </div>
+        </div>
+
+        <details style="margin-top:12px">
+          <summary>Per-token ranks & probs</summary>
+          <div style="max-height:420px;overflow:auto;margin-top:8px;border:1px solid var(--border);border-radius:10px">
+            <table id="tokTable">
+              <thead><tr><th>#</th><th>token</th><th>rank</th><th>p</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
+
+        <div class="footer">CSV log and a PDF report are generated server-side per scan.</div>
       </div>
 
-      <div class="grid-2">
-        <div>
-          <label for="cfg_non_en_cap">Non-EN cap</label>
-          <input id="cfg_non_en_cap" type="number" step="0.01" min="0" max="1" />
-        </div>
-        <div>
-          <label for="cfg_en_thresh">EN threshold</label>
-          <input id="cfg_en_thresh" type="number" step="0.01" min="0" max="1" />
-        </div>
+      <div id="err" class="footer" style="color:#ff9f9f;display:none"></div>
+    </section>
+
+    <!-- Right: Settings (same column as before, just bigger) -->
+    <section class="card" aria-label="Runtime Settings">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Runtime Settings</h2>
+        <span class="pill" id="activeModeBadge">Mode: —</span>
       </div>
 
-      <div class="grid-2">
-        <div>
-          <label for="cfg_max_unstable">Max conf (unstable)</label>
-          <input id="cfg_max_unstable" type="number" step="0.01" min="0" max="1" />
+      <div class="grid" style="gap:16px">
+        <div class="row"><input id="use_ensemble" type="checkbox" /> <label for="use_ensemble">Use ensemble (if secondary model loaded)</label></div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:14px">
+          <div>
+            <label for="cfg_mode">Default mode</label>
+            <select id="cfg_mode"><option>Balanced</option><option>Strict</option><option>Academic</option></select>
+          </div>
+          <div>
+            <label for="cfg_min_tokens">Min tokens strong</label>
+            <input id="cfg_min_tokens" type="number" min="1" step="1" />
+          </div>
         </div>
-        <div></div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:14px">
+          <div class="row"><input id="cfg_short_cap" type="checkbox" /> <label for="cfg_short_cap">Cap short excerpts</label></div>
+          <div>
+            <label for="cfg_max_conf_short">Max conf (short)</label>
+            <input id="cfg_max_conf_short" type="number" step="0.01" min="0" max="1" />
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:14px">
+          <div>
+            <label for="cfg_non_en_cap">Non-EN cap</label>
+            <input id="cfg_non_en_cap" type="number" step="0.01" min="0" max="1" />
+          </div>
+          <div>
+            <label for="cfg_en_thresh">EN threshold</label>
+            <input id="cfg_en_thresh" type="number" step="0.01" min="0" max="1" />
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap:14px">
+          <div>
+            <label for="cfg_max_unstable">Max conf (unstable)</label>
+            <input id="cfg_max_unstable" type="number" step="0.01" min="0" max="1" />
+          </div>
+          <div>
+            <label for="cfg_abstain_low">Abstain low</label>
+            <input id="cfg_abstain_low" type="number" step="0.01" min="0" max="1" />
+          </div>
+          <div>
+            <label for="cfg_abstain_high">Abstain high</label>
+            <input id="cfg_abstain_high" type="number" step="0.01" min="0" max="1" />
+          </div>
+        </div>
+
+        <div class="row" style="justify-content:flex-end;gap:12px">
+          <button id="btnReset" class="btn ghost">Reset (reload)</button>
+          <button id="btnSave" class="btn">Save Settings</button>
+        </div>
+        <div id="saveStatus" class="muted"></div>
       </div>
 
-      <div class="grid-2">
-        <div>
-          <label for="cfg_abstain_low">Abstain low</label>
-          <input id="cfg_abstain_low" type="number" step="0.01" min="0" max="1" />
-        </div>
-        <div>
-          <label for="cfg_abstain_high">Abstain high</label>
-          <input id="cfg_abstain_high" type="number" step="0.01" min="0" max="1" />
-        </div>
-      </div>
+      <div class="footer">PD fingerprints: place JSONs in <span class="mono">./pd_fingerprints/</span> on the server.</div>
+    </section>
+  </div>
+</div>
 
-      <div class="row" style="justify-content:flex-end">
-        <button id="btnReset" class="btn ghost">Reset (reload)</button>
-        <button id="btnSave" class="btn">Save Settings</button>
-      </div>
-      <div id="saveStatus" class="muted small"></div>
+<!-- Live Verification Drawer -->
+<div id="liveDrawer" class="drawer" aria-hidden="true">
+  <div class="drawer-inner">
+    <div class="row" style="justify-content:space-between;align-items:center;padding:0 6px 8px">
+      <h3 style="margin:0">Live Verification (CopyCat)</h3>
+      <button id="btnCloseLive" class="btn ghost">Close</button>
     </div>
 
-    <div class="footer">
-      PD fingerprints: place JSONs in <span class="mono">./pd_fingerprints/</span> on the server.
+    <div id="liveHint" class="muted" style="padding:0 6px 10px">
+      Paste text above and run a scan first. Then start a live sample to compare your typing style.
+    </div>
+
+    <div class="split" style="padding:0 6px 14px">
+      <div>
+        <textarea id="liveInput" placeholder="Type here for 60–120 words…" rows="7"
+                  style="width:100%; resize:vertical; font-family:system-ui, sans-serif;" disabled></textarea>
+        <div class="row" style="margin-top:10px">
+          <button id="btnStartLive" class="btn" disabled>Start Live Sample (90s)</button>
+          <button id="btnFinalize" class="btn ghost" disabled>Finalize</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="row" style="gap:18px; margin-bottom:8px;">
+          <div>Time: <span id="liveTimer">—</span></div>
+          <div>Tokens: <span id="liveTokens">0</span></div>
+          <div>Match: <span id="liveRough">0%</span></div>
+        </div>
+        <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
+        <div id="liveResult" style="margin-top:10px;"></div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-const $ = sel => document.querySelector(sel);
+const $ = s => document.querySelector(s);
 const api = (p,opts={}) => fetch(p,opts).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.json(); });
 
-function setProbFill(p){
-  const fill = $("#probFill");
-  const pct = Math.round(p*100);
-  fill.style.width = pct + "%";
-  fill.classList.remove("good","warn","bad");
-  let cls = "good";
-  if (p >= 0.65) cls = "bad";
-  else if (p >= 0.35) cls = "warn";
-  fill.classList.add(cls);
-  $("#probPct").textContent = pct + "%";
-}
+/* UI scale */
+$("#uiScale").addEventListener("input", (e)=>{
+  const v = Math.max(120, Math.min(220, parseInt(e.target.value||"150",10)));
+  document.documentElement.style.setProperty("--scale", (v/100).toString());
+});
 
+/* Drawer */
+const drawer = $("#liveDrawer");
+const openLive = ()=>{ drawer.classList.add("open"); drawer.setAttribute("aria-hidden","false"); };
+const closeLive = ()=>{ drawer.classList.remove("open"); drawer.setAttribute("aria-hidden","true"); };
+$("#btnLive").addEventListener("click", openLive);
+$("#btnCloseLive").addEventListener("click", closeLive);
+
+/* Result helpers */
+function setProbFill(p){
+  const pct = Math.round((p||0)*100);
+  $("#probPct").textContent = pct + "%";
+  const f = $("#probFill"); f.style.width = pct + "%";
+  f.classList.remove("good","warn","bad");
+  f.classList.add(p>=0.65?"bad":(p>=0.35?"warn":"good"));
+}
 function setVerdict(v){
   const pill = $("#verdictPill");
-  pill.textContent = v;
-  pill.style.background = v.includes("human") ? "#163626" : (v.includes("Inconclusive") ? "#2f2a12" : "#3a1b1b");
-  pill.style.borderColor = "var(--border)";
+  pill.textContent = v || "—";
+  const c = (v||"").toLowerCase().includes("human") ? "#163626" :
+            (v||"").includes("Inconclusive") ? "#2f2a12" : "#3a1b1b";
+  pill.style.background = c; pill.style.borderColor = "var(--border)";
 }
-
-function setModeBadge(m){ $("#activeModeBadge").textContent = "Mode: "+m; }
-
+function setModeBadge(m){ $("#activeModeBadge").textContent = "Mode: " + (m||"—"); }
 function fillTokenTable(tokens){
-  const tbody = $("#tokTable tbody");
-  tbody.innerHTML = "";
-  tokens.forEach((t,i)=>{
+  const tb = $("#tokTable tbody"); tb.innerHTML = "";
+  (tokens||[]).forEach((t,i)=>{
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="mono">${i+1}</td><td class="mono">${t.t}</td><td class="mono">${t.rank}</td><td class="mono">${t.p.toFixed(6)}</td>`;
-    tbody.appendChild(tr);
+    tr.innerHTML = `<td class="mono">${i+1}</td><td class="mono">${t.t}</td><td class="mono">${t.rank}</td><td class="mono">${(t.p||0).toFixed(6)}</td>`;
+    tb.appendChild(tr);
   });
 }
-
-function shortExplain(resp){
-  return resp.explanation || `${resp.verdict} — PPL≈${(resp.ppl||0).toFixed(1)}, Top10≈${Math.round(resp.bins[10]/Math.max(1,resp.total)*100)}%`;
+function shortExplain(r){
+  if (r?.explanation) return r.explanation;
+  const top10 = r?.bins ? Math.round((r.bins[10]/Math.max(1,r.total))*100) : 0;
+  return `${r?.verdict||""} — PPL≈${(r?.ppl||0).toFixed(1)}, Top10≈${top10}%`.trim();
 }
 
+/* Load version/config */
 async function loadVersion(){
   try{
     const v = await api("/version");
-    $("#version").textContent = `v${v.version} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble ? "on" : "off"}`;
-  }catch(e){ $("#version").textContent = "version error"; }
+    $("#version").textContent = `v${v.version} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
+    $("#ensemBadge").textContent = v.ensemble ? "Ensemble: on" : "Ensemble: off";
+  }catch{ $("#version").textContent = "version error"; }
 }
-
 async function loadConfig(){
   try{
-    const j = await api("/config");
-    const s = j.settings || {};
-    $("#secondModelBadge").textContent = "Ensemble: " + (j.second_model_available ? "available" : "unavailable");
+    const j = await api("/config"); const s = j.settings || {};
     $("#cfg_mode").value = s.mode || "Balanced";
     $("#use_ensemble").checked = !!s.use_ensemble;
     $("#cfg_min_tokens").value = s.min_tokens_strong ?? 180;
@@ -299,16 +407,12 @@ async function loadConfig(){
     $("#cfg_abstain_high").value = (s.abstain_high ?? 0.65);
     setModeBadge(s.mode || "Balanced");
     $("#mode").value = s.mode || "Balanced";
-  }catch(e){
-    $("#saveStatus").textContent = "Failed to load settings: "+e.message;
-  }
+  }catch(e){ $("#saveStatus").textContent = "Failed to load settings: "+e.message; }
 }
-
 async function saveConfig(){
   const body = {
-    mode: $("#cfg_mode").value,
-    short_cap: $("#cfg_short_cap").checked,
-    min_tokens_strong: parseInt($("#cfg_min_tokens").value || "180"),
+    mode: $("#cfg_mode").value, short_cap: $("#cfg_short_cap").checked,
+    min_tokens_strong: parseInt($("#cfg_min_tokens").value || "180",10),
     use_ensemble: $("#use_ensemble").checked,
     non_en_cap: parseFloat($("#cfg_non_en_cap").value || "0.15"),
     en_thresh: parseFloat($("#cfg_en_thresh").value || "0.70"),
@@ -318,341 +422,91 @@ async function saveConfig(){
     abstain_high: parseFloat($("#cfg_abstain_high").value || "0.65"),
   };
   try{
-    $("#btnSave").disabled = true;
-    $("#saveStatus").textContent = "Saving…";
-    const j = await api("/config", {
-      method:"POST", headers:{ "content-type":"application/json" },
-      body: JSON.stringify(body)
-    });
-    $("#saveStatus").textContent = "Saved.";
-    setModeBadge(j.settings.mode);
-    $("#mode").value = j.settings.mode;
+    $("#btnSave").disabled = true; $("#saveStatus").textContent = "Saving…";
+    const j = await api("/config",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+    $("#saveStatus").textContent = "Saved."; setModeBadge(j.settings.mode); $("#mode").value = j.settings.mode;
     await loadVersion();
-  }catch(e){
-    $("#saveStatus").textContent = "Save failed: "+e.message;
-  }finally{
-    $("#btnSave").disabled = false;
-  }
+  }catch(e){ $("#saveStatus").textContent = "Save failed: "+e.message; }
+  finally{ $("#btnSave").disabled = false; }
 }
 
+/* Scan */
 async function runScan(){
   const text = $("#text").value.trim();
   if(!text){ $("#err").style.display="block"; $("#err").textContent="Please enter some text."; return; }
-  $("#err").style.display="none";
-  $("#btnScan").disabled = true;
-  $("#scanStatus").textContent = "Scanning…";
+  $("#err").style.display="none"; $("#btnScan").disabled = true; $("#scanStatus").textContent = "Scanning…";
   try{
-    const body = {
-      text,
-      tag: $("#tag").value.trim() || null,
-      mode: $("#mode").value || null
-    };
-    const resp = await api("/scan", {
-      method:"POST",
-      headers:{ "content-type":"application/json" },
-      body: JSON.stringify(body)
-    });
-    // fill result panel
+    const body = { text, tag: $("#tag").value.trim() || null, mode: $("#mode").value || null };
+    const r = await api("/scan",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
     $("#result").style.display = "block";
-    setProbFill(resp.calibrated_prob || 0);
-    setVerdict(resp.verdict || "—");
-    $("#top10").textContent = resp.bins ? Math.round((resp.bins[10]/Math.max(1,resp.total))*100) + "%" : "—";
-    $("#top100").textContent = resp.bins ? Math.round((resp.bins[100]/Math.max(1,resp.total))*100) + "%" : "—";
-    $("#ppl").textContent = (resp.ppl ?? 0).toFixed(2);
-    $("#burst").textContent = (resp.burstiness ?? 0).toFixed(3);
-    $("#category").textContent = `${resp.category} (${Math.round((resp.category_conf||0)*100)}%)`;
-    $("#modelName").textContent = resp.model_name || "—";
-    $("#modeEcho").textContent = resp.mode || "—";
-    $("#pdj").textContent = (resp.pd_overlap_j ?? 0).toFixed(3);
-    $("#explainShort").textContent = shortExplain(resp);
+    setProbFill(r.calibrated_prob || 0);
+    setVerdict(r.verdict || "—");
+    $("#top10").textContent  = r.bins ? Math.round((r.bins[10]/Math.max(1,r.total))*100) + "%" : "—";
+    $("#top100").textContent = r.bins ? Math.round((r.bins[100]/Math.max(1,r.total))*100) + "%" : "—";
+    $("#ppl").textContent    = (r.ppl ?? 0).toFixed(2);
+    $("#burst").textContent  = (r.burstiness ?? 0).toFixed(3);
+    $("#category").textContent  = r.category ? `${r.category} (${Math.round((r.category_conf||0)*100)}%)` : "—";
+    $("#modelName").textContent = r.model_name || "—";
+    $("#modeEcho").textContent  = r.mode || "—";
+    $("#pdj").textContent       = (r.pd_overlap_j ?? 0).toFixed(3);
+    $("#tagEcho").textContent   = (body.tag || "—");
+    $("#explainShort").textContent = shortExplain(r);
 
-    // stylometry
-    const st = resp.stylometry || {};
-    $("#sty_func").textContent = (st.func_ratio ?? 0).toFixed(3);
-    $("#sty_hapax").textContent = (st.hapax_ratio ?? 0).toFixed(3);
-    $("#sty_smean").textContent = (st.sent_mean ?? 0).toFixed(2);
-    $("#sty_svar").textContent = (st.sent_var ?? 0).toFixed(2);
-    $("#sty_mlps").textContent = (st.mlps ?? 0).toFixed(4);
-    $("#sty_mlpsv").textContent = (st.mlps_var ?? 0).toFixed(4);
-    $("#sty_pent").textContent = (st.punct_entropy ?? 0).toFixed(3);
+    fillTokenTable(r.per_token || []);
 
-    // nonsense
-    const ns = resp.nonsense_signals || {};
-    $("#ns_rhyme").textContent = (ns.rhyme_density ?? 0).toFixed(3);
-    $("#ns_meter").textContent = (ns.meter_cv ?? 0).toFixed(3);
-    $("#ns_inv").textContent = (ns.invented_ratio ?? 0).toFixed(3);
-    $("#ns_lex").textContent = (ns.lex_hits ?? 0);
-    $("#ns_sem").textContent = (ns.semantic_disc ?? 0).toFixed(3);
-
-    fillTokenTable(resp.per_token || []);
+    // Enable live verification after first scan
+    $("#btnStartLive").disabled = false;
+    $("#liveInput").disabled = false;
   }catch(e){
-    $("#err").style.display="block";
-    $("#err").textContent = "Scan failed: " + e.message;
+    $("#err").style.display="block"; $("#err").textContent = "Scan failed: " + e.message;
   }finally{
-    $("#btnScan").disabled = false;
-    $("#scanStatus").textContent = "";
+    $("#btnScan").disabled = false; $("#scanStatus").textContent = "";
   }
 }
 
+/* Demos */
 async function loadDemos(){
   $("#btnDemo").disabled = true;
   try{
     const list = await api("/demo");
     if(!Array.isArray(list) || list.length === 0){ $("#text").value = "Demo unavailable."; return; }
     const lines = [];
-    list.forEach((d,i)=>{
-      lines.push(`// ${d.label} — expect: ${d.expect}`);
-      lines.push(d.text);
-      if(i < list.length-1) lines.push("");
-    });
+    list.forEach((d,i)=>{ lines.push(`// ${d.label} — expect: ${d.expect}`); lines.push(d.text); if(i<list.length-1) lines.push(""); });
     $("#text").value = lines.join("\n");
-  }catch(e){
-    $("#text").value = "Failed to load demo samples: "+e.message;
-  }finally{
-    $("#btnDemo").disabled = false;
-  }
+  }catch(e){ $("#text").value = "Failed to load demo samples: "+e.message; }
+  finally{ $("#btnDemo").disabled = false; }
 }
 
-function resetPage(){ location.reload(); }
+/* Live typing stub */
+let liveStartTs=null, liveTimerId=null;
+function tickTimer(){ if(!liveStartTs) return; const s=Math.max(0,Math.floor((Date.now()-liveStartTs)/1000)); $("#liveTimer").textContent=s+"s"; if(s>=90) stopLive(); }
+function startLive(){
+  $("#liveInput").value=""; $("#liveResult").textContent="";
+  $("#btnStartLive").disabled=true; $("#btnFinalize").disabled=false; $("#liveProgress").style.width="0%";
+  liveStartTs=Date.now();
+  liveTimerId=setInterval(()=>{
+    tickTimer();
+    const words=$("#liveInput").value.trim().split(/\s+/).filter(Boolean);
+    $("#liveTokens").textContent=words.length.toString();
+    const pct=Math.min(100,Math.round((words.length/120)*100));
+    $("#liveProgress").style.width=pct+"%";
+    $("#liveRough").textContent=pct+"%";
+  },500);
+}
+function stopLive(){ clearInterval(liveTimerId); liveTimerId=null; liveStartTs=null;
+  $("#btnStartLive").disabled=false; $("#btnFinalize").disabled=true;
+  $("#liveResult").textContent="Sample captured. Use server-side tools if you want a formal style comparison.";
+}
+$("#btnStartLive").addEventListener("click", startLive);
+$("#btnFinalize").addEventListener("click", stopLive);
 
+/* Wire up */
 $("#btnScan").addEventListener("click", runScan);
 $("#btnDemo").addEventListener("click", loadDemos);
 $("#btnClear").addEventListener("click", ()=>{ $("#text").value=""; $("#result").style.display="none"; $("#err").style.display="none"; });
 $("#btnSave").addEventListener("click", saveConfig);
-$("#btnReset").addEventListener("click", resetPage);
-
-(async function init(){
-  await loadVersion();
-  await loadConfig();
-})();
+$("#btnReset").addEventListener("click", ()=>location.reload());
+(async function init(){ await loadVersion(); await loadConfig(); })();
 </script>
 </body>
 </html>
-
-
-<!-- <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>AI Text Scanner (MVP)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root{
-      --bg:#0f1116; --panel:#161a22; --muted:#9aa4b2; --text:#e6edf3;
-      --green:#20a464; --yellow:#e3b341; --orange:#f66a0a; --red:#d73a49;
-      --blue:#347dff; --gray:#30363d;
-      --t10:#b7f5c8; --t100:#d6fbdc; --t1000:#f2e9b0; --rest:#f2c6c6;
-    }
-    html,body { margin:0; padding:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"; }
-    .container { max-width:1100px; margin:24px auto 60px; padding:0 16px; }
-    h1 { font-size:34px; margin:8px 0 18px; }
-    textarea {
-      width:100%; min-height:260px; resize:vertical; box-sizing:border-box;
-      background:#0b0e14; color:var(--text); border:1px solid var(--gray); border-radius:8px; padding:12px 14px;
-      font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-      white-space:pre; overflow:auto;
-    }
-    .controls { display:flex; gap:10px; align-items:center; margin:12px 0 8px; }
-    button { background:var(--blue); border:none; color:#fff; padding:9px 14px; border-radius:8px; cursor:pointer; font-weight:600; }
-    button:disabled{ opacity:.6; cursor:not-allowed; }
-    select, .pill { background:var(--panel); color:var(--text); border:1px solid var(--gray); border-radius:8px; padding:8px 10px; }
-    .pill { display:inline-block; font-weight:700; }
-    .badge { display:inline-block; padding:6px 10px; border-radius:999px; font-weight:800; color:#fff; margin-right:10px; }
-    .row { display:flex; gap:16px; flex-wrap:wrap; }
-    .card { background:var(--panel); border:1px solid var(--gray); border-radius:12px; padding:14px; }
-    .metrics { display:grid; grid-template-columns: repeat(4, minmax(120px,1fr)); gap:10px; }
-    .metric { background:#0b0e14; border:1px solid var(--gray); border-radius:10px; padding:10px; text-align:center; }
-    .metric .k { font-size:12px; color:var(--muted); }
-    .metric .v { font-size:18px; font-weight:800; margin-top:4px; }
-    .legend { display:flex; gap:10px; align-items:center; flex-wrap:wrap; color:var(--muted); }
-    .key { display:inline-flex; align-items:center; gap:6px; }
-    .sw { width:16px; height:12px; border-radius:3px; display:inline-block; border:1px solid var(--gray); }
-    .heat { background:#0b0e14; border:1px solid var(--gray); border-radius:10px; padding:10px; font:14px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
-    .tok { padding:1px 2px; border-radius:4px; margin:0 1px; }
-    .t10   { background:var(--t10); color:#053b1a; }
-    .t100  { background:var(--t100); color:#0b3d23; }
-    .t1000 { background:var(--t1000); color:#3a2d00; }
-    .trest { background:var(--rest); color:#5b1111; }
-    .muted { color:var(--muted); }
-    a { color:#7aa2ff; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>AI Text Scanner (MVP)</h1>
-
-    <textarea id="input" spellcheck="false" placeholder="Paste text to scan..."></textarea>
-
-    <div class="controls">
-      <button id="scanBtn">Scan</button>
-      <select id="labelSel" title="Optional label for your CSV logs">
-        <option value="">(no label)</option>
-        <option value="ai">ai</option>
-        <option value="human">human</option>
-      </select>
-      <span id="status" class="muted"></span>
-    </div>
-
-    <div class="row" style="align-items:flex-start; margin-top:8px;">
-      <div class="card" style="flex:1; min-width:280px;">
-        <div id="badge" class="badge" style="background:#555;">—</div>
-        <span id="summary" class="pill"></span>
-        <div id="catline" class="muted" style="margin-top:8px;"></div>
-        <div id="note" class="muted" style="margin-top:6px;"></div>
-      </div>
-      <div class="card" style="flex:2; min-width:320px;">
-        <div class="metrics">
-          <div class="metric"><div class="k">Predictability</div><div id="m-score" class="v">—</div></div>
-          <div class="metric"><div class="k">Top-10 %</div><div id="m-t10" class="v">—</div></div>
-          <div class="metric"><div class="k">Top-100 %</div><div id="m-t100" class="v">—</div></div>
-          <div class="metric"><div class="k">Perplexity</div><div id="m-ppl" class="v">—</div></div>
-          <div class="metric"><div class="k">Burstiness</div><div id="m-burst" class="v">—</div></div>
-          <div class="metric"><div class="k">Model</div><div id="m-model" class="v" style="font-size:12px;">—</div></div>
-          <div class="metric"><div class="k">Device</div><div id="m-dev" class="v">—</div></div>
-          <div class="metric"><div class="k">Tokens</div><div id="m-tok" class="v">—</div></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:12px;">
-      <div id="explanation" class="muted"></div>
-    </div>
-
-    <div class="card" style="margin-top:12px;">
-      <div class="legend" style="margin-bottom:8px;">
-        <span>Legend:</span>
-        <span class="key"><span class="sw" style="background:var(--t10)"></span> Top-10</span>
-        <span class="key"><span class="sw" style="background:var(--t100)"></span> Top-100</span>
-        <span class="key"><span class="sw" style="background:var(--t1000)"></span> Top-1000</span>
-        <span class="key"><span class="sw" style="background:var(--rest)"></span> Unpredictable</span>
-      </div>
-      <div id="heat" class="heat">Run a scan to see per-token highlights…</div>
-    </div>
-  </div>
-
-  <script>
-    // ===== Configure your API base (works from file:// or any static server) =====
-    const API_BASE = 'http://127.0.0.1:8080'; // change if your backend runs elsewhere
-
-    const els = {
-      input: document.getElementById('input'),
-      scan: document.getElementById('scanBtn'),
-      labelSel: document.getElementById('labelSel'),
-      status: document.getElementById('status'),
-      badge: document.getElementById('badge'),
-      summary: document.getElementById('summary'),
-      catline: document.getElementById('catline'),
-      note: document.getElementById('note'),
-      mScore: document.getElementById('m-score'),
-      mT10: document.getElementById('m-t10'),
-      mT100: document.getElementById('m-t100'),
-      mPpl: document.getElementById('m-ppl'),
-      mBurst: document.getElementById('m-burst'),
-      mModel: document.getElementById('m-model'),
-      mDev: document.getElementById('m-dev'),
-      mTok: document.getElementById('m-tok'),
-      explanation: document.getElementById('explanation'),
-      heat: document.getElementById('heat'),
-    };
-
-    function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
-
-    function setBadge(prob){
-      let label = "Low AI-likelihood";
-      let color = getCss('--green');
-      if (prob >= 0.85){ label = "Almost certainly AI"; color = getCss('--red'); }
-      else if (prob >= 0.70){ label = "High AI-likelihood"; color = getCss('--orange'); }
-      else if (prob >= 0.50){ label = "Medium AI-likelihood"; color = getCss('--yellow'); }
-      els.badge.textContent = label;
-      els.badge.style.backgroundColor = color; els.badge.style.color = '#fff';
-    }
-
-    function renderHeat(tokens){
-      if (!tokens || !tokens.length){ els.heat.textContent = 'No tokens (empty or too short).'; return; }
-      const frag = document.createDocumentFragment();
-      for (const tok of tokens){
-        const span = document.createElement('span');
-        span.className = 'tok ' + (tok.rank<=10?'t10':tok.rank<=100?'t100':tok.rank<=1000?'t1000':'trest');
-        let t = tok.t.replace(/^Ġ/g,''); // nicer spacing for BPE
-        span.textContent = t;
-        frag.appendChild(span);
-        frag.appendChild(document.createTextNode(' '));
-      }
-      els.heat.innerHTML = ''; els.heat.appendChild(frag);
-    }
-
-    function formatPct(x){ return Number.isFinite(x) ? (Math.round(x*1000)/10).toFixed(1)+'%' : '—'; }
-    function formatNum(x, d=2){ return Number.isFinite(x) ? x.toFixed(d) : '—'; }
-
-    async function doScan(){
-      const text = els.input.value || '';
-      const tag = els.labelSel.value || '';
-      if (!text.trim()) return;
-
-      els.scan.disabled = true;
-      els.status.textContent = 'Scanning…';
-
-      try{
-        const resp = await fetch(`${API_BASE}/scan`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, tag })
-        });
-        if (!resp.ok){
-          const msg = await resp.text();
-          throw new Error(`Server ${resp.status}: ${msg}`);
-        }
-        const data = await resp.json();
-        renderResult(data);
-        els.status.textContent = 'Done.';
-      }catch(err){
-        console.error(err);
-        els.status.textContent = 'Error: ' + (err?.message ?? err);
-      }finally{
-        els.scan.disabled = false;
-      }
-    }
-
-    function renderResult(data){
-      const prob = (typeof data.calibrated_prob === 'number')
-        ? data.calibrated_prob
-        : (typeof data.overall_score === 'number' ? data.overall_score : 0);
-      const pct = Math.round(prob * 100);
-      setBadge(prob);
-
-      els.summary.textContent =
-        `Likelihood this was AI-generated: ${pct}% — ` +
-        (prob >= 0.85 ? 'almost certain.' :
-         prob >= 0.70 ? 'high likelihood.' :
-         prob >= 0.50 ? 'moderate likelihood.' : 'low likelihood.');
-
-      const cat = (data.category || 'other').replaceAll('_',' ');
-      const cconf = data.category_conf ? Math.round(data.category_conf*100) : null;
-      els.catline.textContent = `Detected style: ${cat}` + (cconf!=null ? ` (conf≈${cconf}%)` : '');
-      els.note.textContent = data.category_note || '';
-
-      els.mScore.textContent = formatNum(data.overall_score);
-      const bins = data.bins || {}; const total = data.total || 1;
-      const frac10 = bins[10] ? bins[10]/total : 0;
-      const frac100 = bins[100] ? bins[100]/total : 0;
-      els.mT10.textContent = formatPct(frac10);
-      els.mT100.textContent = formatPct(frac100);
-      els.mPpl.textContent = formatNum(data.ppl, 1);
-      els.mBurst.textContent = formatNum(data.burstiness, 3);
-      els.mModel.textContent = data.model_name || '—';
-      els.mDev.textContent = data.device || '—';
-      els.mTok.textContent = String(data.total ?? '—');
-
-      els.explanation.textContent = data.explanation || '';
-      renderHeat(data.per_token);
-    }
-
-    // UI bindings
-    document.getElementById('scanBtn').addEventListener('click', doScan);
-    document.getElementById('input').addEventListener('keydown', (e)=>{
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') doScan();
-    });
-  </script>
-</body>
-</html>
- -->

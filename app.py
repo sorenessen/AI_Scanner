@@ -34,6 +34,11 @@ within between about above below through across against because therefore
 said says say asked replied
 """.split())
 
+# --- Live verification scratch state (in-memory) ---
+LAST_SCAN_STYLO = None   # set on each /scan
+LAST_SCAN_META  = None   # store token counts etc.
+
+
 def stylometric_fingerprint(text: str, token_logps: List[float]) -> Dict[str, float]:
     words = [w.strip(string.punctuation).lower() for w in text.split()]
     words = [w for w in words if w]
@@ -983,6 +988,187 @@ def scan(inp: ScanIn):
             "total": out2["total"], "score": out2["score"]
         }
     return resp
+
+    # -------------------- Live Typing Verification (Hybrid streaming) --------------------
+import uuid
+
+LIVE_SESSIONS: Dict[str, Dict] = {}
+
+def _norm(x, lo, hi):
+    if hi <= lo: return 0.0
+    x = (x - lo) / (hi - lo)
+    return max(0.0, min(1.0, x))
+
+def _stylometry_vector(sty: Dict[str, float]) -> List[float]:
+    # Order matters; keep stable across ref vs sample
+    return [
+        float(sty.get("func_ratio", 0.0)),
+        float(sty.get("hapax_ratio", 0.0)),
+        float(sty.get("sent_mean", 0.0)),
+        float(sty.get("sent_var", 0.0)),
+        float(sty.get("mlps", 0.0)),
+        float(sty.get("mlps_var", 0.0)),
+        float(sty.get("punct_entropy", 0.0)),
+    ]
+
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    import math
+    if not a or not b or len(a) != len(b): return 0.0
+    num = sum(x*y for x,y in zip(a,b))
+    da = math.sqrt(sum(x*x for x in a))
+    db = math.sqrt(sum(y*y for y in b))
+    if da == 0 or db == 0: return 0.0
+    return max(0.0, min(1.0, num/(da*db)))
+
+def _compare_reference_vs_sample(ref_text: str, live_text: str) -> Dict[str, float]:
+    """
+    Compute a composite 'match' between the pasted reference text and the user's live-typed text.
+    Uses stylometry and model rhythm (ppl/burst/top10/top100) from the primary scanner.
+    Returns a dict with sub-scores and an overall match in [0,1].
+    """
+    # Stylometry signatures
+    ref_scan = chunked_scan_primary(ref_text)
+    live_scan = chunked_scan_primary(live_text) if live_text.strip() else {"total":0, "ppl":0.0, "burstiness":0.0, "bins":{10:0,100:0,"rest":0}}
+    ref_lps = [math.log(max(t.get("p", 0.0), 1e-12)) for t in ref_scan.get("per_token",[])]
+    live_lps= [math.log(max(t.get("p", 0.0), 1e-12)) for t in live_scan.get("per_token",[])]
+
+    ref_sty = stylometric_fingerprint(ref_text, ref_lps)
+    live_sty= stylometric_fingerprint(live_text, live_lps)
+
+    # Vector similarity
+    sim_sty = _cosine_similarity(_stylometry_vector(ref_sty), _stylometry_vector(live_sty))
+
+    # Rhythm resemblance (normalize diffs)
+    # Typical ranges (rough): ppl∈[5,60], burst∈[0,20], top10/top100 in [0,1]
+    def _top_fracs(scan):
+        total = max(1, scan.get("total", 0))
+        b = scan.get("bins", {10:0,100:0,"rest":0})
+        return b.get(10,0)/total, b.get(100,0)/total
+
+    r_top10, r_top100 = _top_fracs(ref_scan)
+    s_top10, s_top100 = _top_fracs(live_scan)
+
+    ppl_ref, ppl_live = float(ref_scan.get("ppl", 0.0)), float(live_scan.get("ppl", 0.0))
+    burst_ref, burst_live = float(ref_scan.get("burstiness", 0.0)), float(live_scan.get("burstiness", 0.0))
+
+    # Convert differences into similarities
+    ppl_sim   = 1.0 - _norm(abs(ppl_ref - ppl_live), 0.0, 40.0)
+    burst_sim = 1.0 - _norm(abs(burst_ref - burst_live), 0.0, 12.0)
+    t10_sim   = 1.0 - _norm(abs(r_top10 - s_top10), 0.0, 0.40)
+    t100_sim  = 1.0 - _norm(abs(r_top100 - s_top100), 0.0, 0.50)
+
+    # Short sample penalty (need ~80+ tokens for stable matching)
+    len_penalty = 1.0
+    if live_scan.get("total", 0) < 80:
+        len_penalty = 0.85
+    if live_scan.get("total", 0) < 40:
+        len_penalty = 0.70
+
+    # Composite (weights sum ≈ 1.0 before length penalty)
+    match = (
+        0.45 * sim_sty +
+        0.18 * ppl_sim +
+        0.18 * burst_sim +
+        0.10 * t10_sim +
+        0.09 * t100_sim
+    ) * len_penalty
+
+    match = _clamp(match, 0.0, 1.0)
+
+    return {
+        "sim_sty": round(sim_sty, 4),
+        "sim_ppl": round(ppl_sim, 4),
+        "sim_burst": round(burst_sim, 4),
+        "sim_top10": round(t10_sim, 4),
+        "sim_top100": round(t100_sim, 4),
+        "len_penalty": round(len_penalty, 3),
+        "match": round(match, 6),
+        "live_tokens": int(live_scan.get("total", 0))
+    }
+
+class SampleStartIn(BaseModel):
+    reference_text: str
+    duration_sec: Optional[int] = 90  # UI timer; not enforced server-side beyond guidance
+
+class SampleSubmitIn(BaseModel):
+    session_id: str
+    text_chunk: str
+    done: Optional[bool] = False
+
+class SampleFinalizeIn(BaseModel):
+    session_id: str
+
+@app.post("/auth/sample/start")
+def auth_sample_start(inp: SampleStartIn):
+    ref = inp.reference_text.strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="reference_text is empty")
+    sid = str(uuid.uuid4())
+    LIVE_SESSIONS[sid] = {
+        "ts": time.time(),
+        "duration_sec": int(inp.duration_sec or 90),
+        "reference": ref,
+        "accum": [],
+        "final": None
+    }
+    return {"session_id": sid, "duration_sec": LIVE_SESSIONS[sid]["duration_sec"]}
+
+@app.post("/auth/sample/submit")
+def auth_sample_submit(inp: SampleSubmitIn):
+    sess = LIVE_SESSIONS.get(inp.session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="session not found")
+    chunk = (inp.text_chunk or "").strip()
+    if chunk:
+        sess["accum"].append(chunk)
+    live_text = " ".join(sess["accum"]).strip()
+    # Provide progressive feedback (tokens typed + rough similarity)
+    if live_text:
+        cmpd = _compare_reference_vs_sample(sess["reference"], live_text)
+        prog = {
+            "live_tokens": cmpd["live_tokens"],
+            "rough_match_0_1": cmpd["match"]
+        }
+    else:
+        prog = {"live_tokens": 0, "rough_match_0_1": 0.0}
+
+    if inp.done:
+        # Finalize now
+        cmpd = _compare_reference_vs_sample(sess["reference"], live_text)
+        sess["final"] = cmpd
+        return {"ok": True, "final": True, "result": cmpd}
+    return {"ok": True, "final": False, "progress": prog}
+
+@app.post("/auth/sample/finalize")
+def auth_sample_finalize(inp: SampleFinalizeIn):
+    sess = LIVE_SESSIONS.get(inp.session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="session not found")
+    live_text = " ".join(sess["accum"]).strip()
+    cmpd = _compare_reference_vs_sample(sess["reference"], live_text) if live_text else {
+        "sim_sty":0,"sim_ppl":0,"sim_burst":0,"sim_top10":0,"sim_top100":0,"len_penalty":0,"match":0,"live_tokens":0
+    }
+    sess["final"] = cmpd
+
+    # Simple verdict thresholds
+    m = cmpd["match"]
+    if m >= 0.70 and cmpd["live_tokens"] >= 80:
+        verdict = "Strong match"
+        note = "Live stylometry & rhythm align with the reference sample."
+    elif m >= 0.50 and cmpd["live_tokens"] >= 60:
+        verdict = "Moderate match"
+        note = "Core style signals align; consider longer sample to strengthen."
+    else:
+        verdict = "Weak/No match"
+        note = "Insufficient alignment or sample too short to confirm."
+
+    return {
+        "session_id": inp.session_id,
+        "match_score": round(m*100),
+        "verdict": verdict,
+        "explanation": note,
+        "details": cmpd
+    }
 
 # -------------------- Demo route --------------------
 DEMO_TEXTS = [
