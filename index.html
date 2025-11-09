@@ -1,225 +1,745 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>AI Text Scanner (MVP)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root{
-      --bg:#0f1116; --panel:#161a22; --muted:#9aa4b2; --text:#e6edf3;
-      --green:#20a464; --yellow:#e3b341; --orange:#f66a0a; --red:#d73a49;
-      --blue:#347dff; --gray:#30363d;
-      --t10:#b7f5c8; --t100:#d6fbdc; --t1000:#f2e9b0; --rest:#f2c6c6;
-    }
-    html,body { margin:0; padding:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"; }
-    .container { max-width:1100px; margin:24px auto 60px; padding:0 16px; }
-    h1 { font-size:34px; margin:8px 0 18px; }
-    textarea {
-      width:100%; min-height:260px; resize:vertical; box-sizing:border-box;
-      background:#0b0e14; color:var(--text); border:1px solid var(--gray); border-radius:8px; padding:12px 14px;
-      font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-      white-space:pre; overflow:auto;
-    }
-    .controls { display:flex; gap:10px; align-items:center; margin:12px 0 8px; }
-    button { background:var(--blue); border:none; color:#fff; padding:9px 14px; border-radius:8px; cursor:pointer; font-weight:600; }
-    button:disabled{ opacity:.6; cursor:not-allowed; }
-    select, .pill { background:var(--panel); color:var(--text); border:1px solid var(--gray); border-radius:8px; padding:8px 10px; }
-    .pill { display:inline-block; font-weight:700; }
-    .badge { display:inline-block; padding:6px 10px; border-radius:999px; font-weight:800; color:#fff; margin-right:10px; }
-    .row { display:flex; gap:16px; flex-wrap:wrap; }
-    .card { background:var(--panel); border:1px solid var(--gray); border-radius:12px; padding:14px; }
-    .metrics { display:grid; grid-template-columns: repeat(4, minmax(120px,1fr)); gap:10px; }
-    .metric { background:#0b0e14; border:1px solid var(--gray); border-radius:10px; padding:10px; text-align:center; }
-    .metric .k { font-size:12px; color:var(--muted); }
-    .metric .v { font-size:18px; font-weight:800; margin-top:4px; }
-    .legend { display:flex; gap:10px; align-items:center; flex-wrap:wrap; color:var(--muted); }
-    .key { display:inline-flex; align-items:center; gap:6px; }
-    .sw { width:16px; height:12px; border-radius:3px; display:inline-block; border:1px solid var(--gray); }
-    .heat { background:#0b0e14; border:1px solid var(--gray); border-radius:10px; padding:10px; font:14px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
-    .tok { padding:1px 2px; border-radius:4px; margin:0 1px; }
-    .t10   { background:var(--t10); color:#053b1a; }
-    .t100  { background:var(--t100); color:#0b3d23; }
-    .t1000 { background:var(--t1000); color:#3a2d00; }
-    .trest { background:var(--rest); color:#5b1111; }
-    .muted { color:var(--muted); }
-    a { color:#7aa2ff; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Text Scanner — CopyCat</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#181c2f; --muted:#c4cbe3; --text:#f1f4ff; --accent:#7eb4ff;
+    --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a; --border:#2a3250; --panel-2:#13182b;
+    --scale:1.50; --wrap-max:1800px;
+    --tip-bg: rgba(11,16,34,.92);
+    --tip-border: rgba(126,180,255,.25);
+  }
+  html,body{ margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+    font-size:calc(16px * var(--scale)); line-height:1.55; }
+  .wrap{max-width:var(--wrap-max); width:98vw; margin:22px auto;}
+  .grid{display:grid;gap:18px}
+  .cols{grid-template-columns: 1.25fr 1fr}
+  @media (max-width:1100px){ .cols{grid-template-columns:1fr} }
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px; overflow:visible}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap; overflow:visible}
+  .right{text-align:right}
+  label{color:var(--muted)}
+  input[type="text"], input[type="number"], select, textarea{
+    width:100%;background:#101426;color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px;min-height:42px;font-size:1em;
+  }
+  textarea{min-height:360px;resize:vertical}
+  .btn{background:var(--accent);border:none;color:#091120;padding:11px 16px;border-radius:10px;font-weight:700;cursor:pointer;min-height:42px}
+  .btn.secondary{background:#253055;color:var(--text)}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .muted{color:var(--muted)}
+  .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+  .pill{padding:4px 10px;border-radius:999px;background:#1a2346;color:#cfe0ff;border:1px solid var(--border)}
+  .bar{height:22px;border:1px solid var(--border);border-radius:12px;background:#0c1122;position:relative}
+  .bar>.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:12px}
+  .fill.good{background:var(--good)} .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
+  .kv{display:grid;grid-template-columns: 1fr auto;gap:8px 16px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left}
+  th{color:var(--muted)}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .footer{margin-top:14px;color:var(--muted);font-size:.95em}
+
+  .drawer{position:fixed;left:0;right:0;bottom:0;background:var(--panel-2);
+    border-top:1px solid var(--border);transform:translateY(100%);transition:transform .25s ease;z-index:50}
+  .drawer.open{transform:translateY(0)}
+  .drawer-inner{max-width:var(--wrap-max); width:98vw; margin:0 auto; padding:14px 0}
+  .split{display:grid;grid-template-columns: 1fr 400px; gap:18px}
+  @media (max-width:1024px){ .split{grid-template-columns: 1fr} }
+  .progress{height:10px;border-radius:6px;background:#2a3240;overflow:hidden}
+  .progress>span{display:block;height:100%;width:0;background:#3b82f6;transition:width .25s}
+
+  #btnLive{position:relative}
+  #btnLive::after{content:'opens drawer at bottom'; position:absolute; left:100%; top:50%;
+    transform:translate(10px,-50%); font-size:.9em; color:var(--muted); white-space:nowrap;}
+
+  .scale-wrap{display:flex;align-items:center;gap:10px}
+  input[type="range"]{accent-color:#7eb4ff}
+
+  /* ---- HELP DOT + BALLOON ---- */
+  .help-wrap{display:inline-flex; align-items:center; gap:8px; overflow:visible}
+  .help-dot{
+    position:relative; display:inline-flex; align-items:center; justify-content:center;
+    width:1.4em; height:1.4em; min-width:1.4em; min-height:1.4em;
+    border:1.5px solid var(--border); border-radius:999px; color:#cfe0ff; background:#10162a;
+    font-weight:800; line-height:1; user-select:none; cursor:help; overflow:visible;
+  }
+  .help-dot::after{ content:"?"; font-size:.9em; transform:translateY(-1px); }
+
+  /* balloon defaults (RIGHT side) */
+  .help-dot > .tip{
+    position:absolute; inset:auto auto auto 100%;
+    transform:translate(10px,-50%); top:50%;
+    min-width:240px; max-width:360px;
+    background:var(--tip-bg); color:#eaf0ff;
+    border:1px solid var(--tip-border); border-radius:12px; padding:10px 12px;
+    font-size:.95em; line-height:1.4; box-shadow:0 18px 40px rgba(0,0,0,.55);
+    z-index:9999; white-space:normal; word-break:normal; overflow-wrap:anywhere;
+    opacity:0; visibility:hidden; pointer-events:none;
+    transition:opacity .14s ease, transform .14s ease, visibility .14s;
+    backface-visibility:hidden;
+  }
+  .help-dot::before{
+    content:""; position:absolute; left:100%; top:50%; transform:translate(2px,-50%) rotate(90deg);
+    border:7px solid transparent; border-top-color:var(--tip-border);
+    filter:drop-shadow(0 2px 0 rgba(0,0,0,.22));
+    opacity:0; visibility:hidden; transition:opacity .14s ease, transform .14s ease, visibility .14s;
+    z-index:10000;
+  }
+
+  /* show states */
+  .help-dot:hover > .tip,
+  .help-dot:focus-visible > .tip,
+  .help-dot[data-open="1"] > .tip{
+    opacity:1; visibility:visible; transform:translate(10px,-50%) scale(1);
+    pointer-events:auto;
+  }
+  .help-dot:hover::before,
+  .help-dot:focus-visible::before,
+  .help-dot[data-open="1"]::before{
+    opacity:1; visibility:visible;
+  }
+
+  /* top/bottom variants if you ever need them */
+  .tip-t.help-dot > .tip{ inset:auto auto 100% 0; transform:translate(0,-10px); top:auto; left:0; }
+  .tip-t.help-dot::before{ left:16px; top:auto; bottom:100%; transform:translateY(-2px) rotate(0deg); }
+  .tip-b.help-dot > .tip{ inset:100% auto auto 0; transform:translate(0,10px); top:auto; left:0; }
+  .tip-b.help-dot::before{ left:16px; top:100%; transform:translateY(2px) rotate(180deg); }
+
+  @media (prefers-reduced-motion: reduce){
+    .help-dot > .tip, .help-dot::before, .drawer, .progress>span{ transition:none !important; }
+  }
+
+  /* Accessibility */
+  button,.btn,.drawer button{font-size:1.05em;padding:12px 18px;min-height:46px;border-radius:12px}
+  .btn.ghost{border-width:1.5px}
+  input[type="text"],input[type="number"],select{min-height:46px;font-size:1.05em;padding:12px 14px}
+  table th,table td{padding:10px 12px;font-size:1.02em}
+  details>summary{font-size:1.05em;padding:6px 0;cursor:pointer}
+  button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #7eb4ff;outline-offset:2px}
+
+  /* --- Light tooltip override (paste at END of <style>) --- */
+:root{
+  --tip-bg: rgba(248, 251, 255, 0.96);   /* light card */
+  --tip-border: rgba(126, 180, 255, 0.45);
+  --tip-text: #0f1630;                   /* dark ink on light card */
+}
+
+.help-dot > .tip{
+  background: var(--tip-bg);
+  color: var(--tip-text);
+  border-color: var(--tip-border);
+  box-shadow: 0 18px 40px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.05) inset;
+  backdrop-filter: saturate(120%) blur(0.5px);
+}
+
+.help-dot::before{
+  /* arrow matches light balloon */
+  border-top-color: var(--tip-bg);
+  filter: drop-shadow(0 2px 0 rgba(0,0,0,.18));
+}
+
+</style>
 </head>
 <body>
-  <div class="container">
-    <h1>AI Text Scanner (MVP)</h1>
-
-    <textarea id="input" spellcheck="false" placeholder="Paste text to scan..."></textarea>
-
-    <div class="controls">
-      <button id="scanBtn">Scan</button>
-      <select id="labelSel" title="Optional label for your CSV logs">
-        <option value="">(no label)</option>
-        <option value="ai">ai</option>
-        <option value="human">human</option>
-      </select>
-      <span id="status" class="muted"></span>
+<div class="wrap">
+  <div class="topbar">
+    <div class="row">
+      <strong>CopyCat — AI Text Scanner</strong>
+      <span id="version" class="muted"></span>
     </div>
-
-    <div class="row" style="align-items:flex-start; margin-top:8px;">
-      <div class="card" style="flex:1; min-width:280px;">
-        <div id="badge" class="badge" style="background:#555;">—</div>
-        <span id="summary" class="pill"></span>
-        <div id="catline" class="muted" style="margin-top:8px;"></div>
-        <div id="note" class="muted" style="margin-top:6px;"></div>
-      </div>
-      <div class="card" style="flex:2; min-width:320px;">
-        <div class="metrics">
-          <div class="metric"><div class="k">Predictability</div><div id="m-score" class="v">—</div></div>
-          <div class="metric"><div class="k">Top-10 %</div><div id="m-t10" class="v">—</div></div>
-          <div class="metric"><div class="k">Top-100 %</div><div id="m-t100" class="v">—</div></div>
-          <div class="metric"><div class="k">Perplexity</div><div id="m-ppl" class="v">—</div></div>
-          <div class="metric"><div class="k">Burstiness</div><div id="m-burst" class="v">—</div></div>
-          <div class="metric"><div class="k">Model</div><div id="m-model" class="v" style="font-size:12px;">—</div></div>
-          <div class="metric"><div class="k">Device</div><div id="m-dev" class="v">—</div></div>
-          <div class="metric"><div class="k">Tokens</div><div id="m-tok" class="v">—</div></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:12px;">
-      <div id="explanation" class="muted"></div>
-    </div>
-
-    <div class="card" style="margin-top:12px;">
-      <div class="legend" style="margin-bottom:8px;">
-        <span>Legend:</span>
-        <span class="key"><span class="sw" style="background:var(--t10)"></span> Top-10</span>
-        <span class="key"><span class="sw" style="background:var(--t100)"></span> Top-100</span>
-        <span class="key"><span class="sw" style="background:var(--t1000)"></span> Top-1000</span>
-        <span class="key"><span class="sw" style="background:var(--rest)"></span> Unpredictable</span>
-      </div>
-      <div id="heat" class="heat">Run a scan to see per-token highlights…</div>
+    <div class="scale-wrap">
+      <label class="muted" for="uiScale">UI scale</label>
+      <input id="uiScale" type="range" min="120" max="220" value="150" />
     </div>
   </div>
 
-  <script>
-    // ===== Configure your API base (works from file:// or any static server) =====
-    const API_BASE = 'http://127.0.0.1:8080'; // change if your backend runs elsewhere
+  <div class="grid cols">
+    <!-- Left -->
+    <section class="card" aria-label="AI Text Scanner">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">AI Text Scanner</h2>
+        <span class="muted" id="ensemBadge"></span>
+      </div>
 
-    const els = {
-      input: document.getElementById('input'),
-      scan: document.getElementById('scanBtn'),
-      labelSel: document.getElementById('labelSel'),
-      status: document.getElementById('status'),
-      badge: document.getElementById('badge'),
-      summary: document.getElementById('summary'),
-      catline: document.getElementById('catline'),
-      note: document.getElementById('note'),
-      mScore: document.getElementById('m-score'),
-      mT10: document.getElementById('m-t10'),
-      mT100: document.getElementById('m-t100'),
-      mPpl: document.getElementById('m-ppl'),
-      mBurst: document.getElementById('m-burst'),
-      mModel: document.getElementById('m-model'),
-      mDev: document.getElementById('m-dev'),
-      mTok: document.getElementById('m-tok'),
-      explanation: document.getElementById('explanation'),
-      heat: document.getElementById('heat'),
+      <div class="row">
+        <div class="help-wrap">
+          <button id="btnDemo" class="btn secondary">Load Demo Samples</button>
+          <span class="help-dot" tabindex="0"><span class="tip">Load a few example passages that demonstrate the detector’s outputs.</span></span>
+        </div>
+
+        <div class="help-wrap">
+          <button id="btnClear" class="btn ghost">Clear</button>
+          <span class="help-dot" tabindex="0"><span class="tip">Clear the input and results. Also disables Live/Finalize until the next Scan.</span></span>
+        </div>
+
+        <div class="help-wrap">
+          <button id="btnLive" class="btn ghost" aria-controls="liveDrawer">Open Live Verification</button>
+          <span class="help-dot" tabindex="0"><span class="tip">Open the Live Verification drawer to type a short sample for comparison.</span></span>
+        </div>
+      </div>
+
+      <label for="text">Text to scan</label>
+      <textarea id="text" placeholder="Paste or type text to analyze…"></textarea>
+
+      <div class="grid" style="grid-template-columns: 1fr 1fr auto; gap:12px; margin-top:12px">
+        <div>
+          <div class="row" style="justify-content:space-between">
+            <label for="mode">Mode</label>
+            <span class="help-dot" tabindex="0"><span class="tip">Override the runtime mode for this one scan (Balanced / Strict / Academic).</span></span>
+          </div>
+          <select id="mode">
+            <option>Balanced</option><option>Strict</option><option>Academic</option>
+          </select>
+          <div class="muted" style="font-size:.95em">Overrides current runtime mode for this scan only.</div>
+        </div>
+
+        <div>
+          <div class="row" style="justify-content:space-between">
+            <label for="tag">Optional tag</label>
+            <span class="help-dot" tabindex="0"><span class="tip">Free-form flag (e.g., “classic”, “pre-1920”) saved into the scan log.</span></span>
+          </div>
+          <input id="tag" type="text" placeholder="e.g., classic, pre-1920, …" />
+        </div>
+
+        <div style="display:flex;align-items:flex-end;gap:10px">
+          <div class="help-wrap">
+            <button id="btnScan" class="btn">Scan</button>
+            <span class="help-dot" tabindex="0"><span class="tip">Send the text to the server and compute detection metrics.</span></span>
+          </div>
+          <span id="scanStatus" class="muted" aria-live="polite" role="status"></span>
+        </div>
+      </div>
+
+      <!-- RESULTS -->
+      <div id="result" style="margin-top:16px; display:none">
+        <div class="row" style="justify-content:space-between">
+          <h3 style="margin:0">Result</h3>
+          <span id="verdictPill" class="pill">—</span>
+        </div>
+        <div class="kv" style="margin-top:8px">
+          <div>Calibrated probability (AI likelihood)</div><div id="probPct" class="right mono">—</div>
+          <div style="grid-column:1 / -1"><div class="bar"><div class="fill" id="probFill"></div></div></div>
+
+          <div>Explanation</div><div id="explainShort" class="right muted">—</div>
+          <div>Top-10 tokens</div><div id="top10" class="right mono">—</div>
+          <div>Top-100 tokens</div><div id="top100" class="right mono">—</div>
+          <div>Perplexity</div><div id="ppl" class="right mono">—</div>
+          <div>Burstiness</div><div id="burst" class="right mono">—</div>
+          <div>Category</div><div id="category" class="right mono">—</div>
+          <div>Model</div><div id="modelName" class="right mono">—</div>
+          <div>Mode</div><div id="modeEcho" class="right mono">—</div>
+          <div>PD overlap J</div><div id="pdj" class="right mono">—</div>
+          <div>Tag</div><div id="tagEcho" class="right mono">—</div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:18px; margin-top:14px">
+          <div class="card" style="padding:12px">
+            <div class="muted">Stylometry</div>
+            <div class="kv">
+              <div>Function word ratio</div><div id="sty_func" class="right mono">—</div>
+              <div>Hapax ratio</div><div id="sty_hapax" class="right mono">—</div>
+              <div>Sent. mean</div><div id="sty_smean" class="right mono">—</div>
+              <div>Sent. var</div><div id="sty_svar" class="right mono">—</div>
+              <div>Δlogp mean</div><div id="sty_mlps" class="right mono">—</div>
+              <div>Δlogp var</div><div id="sty_mlpsv" class="right mono">—</div>
+              <div>Punct entropy</div><div id="sty_pent" class="right mono">—</div>
+            </div>
+          </div>
+          <div class="card" style="padding:12px">
+            <div class="muted">Nonsense guard</div>
+            <div class="kv">
+              <div>Rhyme density</div><div id="ns_rhyme" class="right mono">—</div>
+              <div>Meter CV</div><div id="ns_meter" class="right mono">—</div>
+              <div>Invented word ratio</div><div id="ns_inv" class="right mono">—</div>
+              <div>Lex hits</div><div id="ns_lex" class="right mono">—</div>
+              <div>Semantic discontinuity</div><div id="ns_sem" class="right mono">—</div>
+            </div>
+          </div>
+          <details id="rawJsonBox" style="margin-top:8px">
+            <summary>Raw /scan JSON</summary>
+            <pre id="rawDump" style="white-space:pre-wrap; font-size:12px"></pre>
+          </details>
+        </div>
+
+        <details style="margin-top:12px">
+          <summary>Per-token ranks & probs</summary>
+          <div style="max-height:420px;overflow:auto;margin-top:8px;border:1px solid var(--border);border-radius:10px">
+            <table id="tokTable">
+              <thead><tr><th>#</th><th>token</th><th>rank</th><th>p</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
+
+        <div class="footer">CSV log and a PDF report are generated server-side per scan.</div>
+      </div>
+
+      <div id="err" class="footer" style="color:#ff9f9f;display:none"></div>
+    </section>
+
+    <!-- Right -->
+    <section class="card" aria-label="Runtime Settings">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Runtime Settings</h2>
+        <span class="pill" id="activeModeBadge">Mode: —</span>
+      </div>
+
+      <div class="grid" style="gap:16px">
+        <div class="row">
+          <input id="use_ensemble" type="checkbox" />
+          <label for="use_ensemble">Use ensemble (if secondary model loaded)</label>
+          <span class="help-dot" tabindex="0"><span class="tip">If a secondary model is available, combine its judgment with the primary model for a steadier verdict. Slightly slower, often more stable.</span></span>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:14px">
+          <div>
+            <div class="row" style="justify-content:space-between">
+              <label for="cfg_mode">Default mode</label>
+              <span class="help-dot" tabindex="0"><span class="tip">Balanced = general. Strict = more conservative on “human”. Academic = tuned to longer formal prose.</span></span>
+            </div>
+            <select id="cfg_mode"><option>Balanced</option><option>Strict</option><option>Academic</option></select>
+          </div>
+          <div>
+            <div class="row" style="justify-content:space-between">
+              <label for="cfg_min_tokens">Min tokens strong</label>
+              <span class="help-dot" tabindex="0"><span class="tip">Minimum token count before we allow a strong decision. Below this size, detector stays cautious.</span></span>
+            </div>
+            <input id="cfg_min_tokens" type="number" min="1" step="1" />
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:14px">
+          <div class="row">
+            <input id="cfg_short_cap" type="checkbox" />
+            <label for="cfg_short_cap">Cap short excerpts</label>
+            <span class="help-dot" tabindex="0"><span class="tip">Short inputs can look over-confident. This applies a ceiling when the text is tiny.</span></span>
+          </div>
+          <div>
+            <div class="row" style="justify-content:space-between">
+              <label for="cfg_max_conf_short">Max conf (short)</label>
+              <span class="help-dot" tabindex="0"><span class="tip">Confidence ceiling (0–1) when text length is below the short-excerpt threshold.</span></span>
+            </div>
+            <input id="cfg_max_conf_short" type="number" step="0.01" min="0" max="1" />
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:14px">
+          <div>
+            <div class="row" style="justify-content:space-between">
+              <label for="cfg_non_en_cap">Non-EN cap</label>
+              <span class="help-dot" tabindex="0"><span class="tip">If the passage doesn’t look English, cap confidence to avoid language-mismatch errors.</span></span>
+            </div>
+            <input id="cfg_non_en_cap" type="number" step="0.01" min="0" max="1" />
+          </div>
+          <div>
+            <div class="row" style="justify-content:space-between">
+              <label for="cfg_en_thresh">EN threshold</label>
+              <span class="help-dot" tabindex="0"><span class="tip">Threshold (0–1) to consider text English. Below this, Non-EN safeguards can apply.</span></span>
+            </div>
+            <input id="cfg_en_thresh" type="number" step="0.01" min="0" max="1" />
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap:14px">
+          <div>
+            <div class="row" style="justify-content:space-between">
+              <label for="cfg_max_unstable">Max conf (unstable)</label>
+              <span class="help-dot" tabindex="0"><span class="tip">Ceiling when internal instability is detected (volatile token probabilities).</span></span>
+            </div>
+            <input id="cfg_max_unstable" type="number" step="0.01" min="0" max="1" />
+          </div>
+          <div>
+            <div class="row" style="justify-content:space-between">
+              <label for="cfg_abstain_low">Abstain low</label>
+              <span class="help-dot" tabindex="0"><span class="tip">Lower bound of the “Inconclusive” band. If probability is in this band, we abstain.</span></span>
+            </div>
+            <input id="cfg_abstain_low" type="number" step="0.01" min="0" max="1" />
+          </div>
+          <div>
+            <div class="row" style="justify-content:space-between">
+              <label for="cfg_abstain_high">Abstain high</label>
+              <span class="help-dot" tabindex="0"><span class="tip">Upper bound of the “Inconclusive” band. Keeps borderline cases from over-confidence.</span></span>
+            </div>
+            <input id="cfg_abstain_high" type="number" step="0.01" min="0" max="1" />
+          </div>
+        </div>
+
+        <div class="row" style="justify-content:flex-end;gap:12px">
+          <div class="help-wrap">
+            <button id="btnReset" class="btn ghost">Reset (reload)</button>
+            <span class="help-dot" tabindex="0"><span class="tip">Reload the page and revert UI state.</span></span>
+          </div>
+          <div class="help-wrap">
+            <button id="btnSave" class="btn">Save Settings</button>
+            <span class="help-dot" tabindex="0"><span class="tip">Persist these settings server-side for future scans.</span></span>
+          </div>
+        </div>
+        <div id="saveStatus" class="muted"></div>
+      </div>
+
+      <div class="footer">PD fingerprints: place JSONs in <span class="mono">./pd_fingerprints/</span> on the server.</div>
+    </section>
+  </div>
+</div>
+
+<!-- Live Verification Drawer -->
+<div id="liveDrawer" class="drawer" aria-hidden="true">
+  <div class="drawer-inner">
+    <div class="row" style="justify-content:space-between;align-items:center;padding:0 6px 8px">
+      <h3 style="margin:0">Live Verification (CopyCat)</h3>
+      <button id="btnCloseLive" class="btn ghost">Close</button>
+    </div>
+
+    <div id="liveHint" class="muted" style="padding:0 6px 10px">
+      Paste text above and run a scan first. Then start a live sample to compare your typing style.
+    </div>
+
+    <div class="split" style="padding:0 6px 14px">
+      <div>
+        <textarea id="liveInput" placeholder="Type here for 60–120 words…" rows="7"
+                  style="width:100%; resize:vertical; font-family:system-ui, sans-serif;" disabled></textarea>
+        <div class="row" style="margin-top:10px">
+          <div class="help-wrap">
+            <button id="btnStartLive" class="btn" disabled>Start Live Sample (90s)</button>
+            <span class="help-dot" tabindex="0"><span class="tip">Starts a 90-second typing window and shows live token count and progress.</span></span>
+          </div>
+          <div class="help-wrap">
+            <button id="btnFinalize" class="btn ghost">Finalize</button>
+            <span class="help-dot" tabindex="0"><span class="tip">Compute the quick style-match between your typed sample and the scanned text.</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="row" style="gap:18px; margin-bottom:8px;">
+          <div>Time: <span id="liveTimer">—</span></div>
+          <div>Tokens: <span id="liveTokens">0</span></div>
+          <div>Match: <span id="liveRough">0%</span></div>
+        </div>
+        <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
+        <div id="liveResult" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const api = (p,opts={}) => fetch(p,opts).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.json(); });
+function setFinalizeEnabled(on){ $("#btnFinalize").disabled = !on; }
+
+/* Toggle help on click (outside click / Esc closes) */
+document.addEventListener("click", (e)=>{
+  const dot = e.target.closest(".help-dot");
+  document.querySelectorAll(".help-dot[data-open='1']").forEach(el=>{ if(el!==dot) el.removeAttribute("data-open"); });
+  if (dot){ dot.setAttribute("data-open", dot.getAttribute("data-open")==="1" ? "0" : "1"); }
+});
+document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ document.querySelectorAll(".help-dot[data-open='1']").forEach(el=>el.removeAttribute("data-open")); }});
+
+/* UI scale */
+$("#uiScale").addEventListener("input", (e)=>{
+  const v = Math.max(120, Math.min(220, parseInt(e.target.value||"150",10)));
+  document.documentElement.style.setProperty("--scale", (v/100).toString());
+});
+
+/* Drawer */
+const drawer = $("#liveDrawer");
+const openLive = ()=>{ drawer.classList.add("open"); drawer.setAttribute("aria-hidden","false"); };
+const closeLive = ()=>{ drawer.classList.remove("open"); drawer.setAttribute("aria-hidden","true"); };
+$("#btnLive").addEventListener("click", openLive);
+$("#btnCloseLive").addEventListener("click", closeLive);
+
+/* UI writers */
+function setProbFill(p){
+  const pct = Math.round((p||0)*100);
+  $("#probPct").textContent = pct + "%";
+  const f = $("#probFill"); f.style.width = pct + "%";
+  f.classList.remove("good","warn","bad");
+  f.classList.add(p>=0.65?"bad":(p>=0.35?"warn":"good"));
+}
+function setVerdict(v){
+  const pill = $("#verdictPill");
+  pill.textContent = v || "—";
+  const c = (v||"").toLowerCase().includes("human") ? "#163626" :
+            (v||"").includes("Inconclusive") ? "#2f2a12" : "#3a1b1b";
+  pill.style.background = c; pill.style.borderColor = "var(--border)";
+}
+function setModeBadge(m){ $("#activeModeBadge").textContent = "Mode: " + (m||"—"); }
+function shortExplain(r){
+  if (r?.explanation) return r.explanation;
+  const top10 = r?.bins ? Math.round((r.bins[10]/Math.max(1,r.total))*100) : 0;
+  return `${r?.verdict||""} — PPL≈${(r?.ppl||0).toFixed(1)}, Top10≈${top10}%`.trim();
+}
+
+/* numeric helpers */
+const pickNum = (...c)=>{ for(const v of c){ const n=Number(v); if(Number.isFinite(n)) return n; } return null; };
+const setTxt = (sel,val,d=3)=>{ const el=$(sel); if(!el) return; if(val==null){ el.textContent="—"; return; } const n=Number(val); el.textContent=Number.isFinite(n)?n.toFixed(d):String(val); };
+
+/* Token table */
+function cleanTok(t){
+  if (t === "Ċ") return "↵";
+  if (t === "Ġ") return "␠";
+  return t.replace(/^Ġ/," ")
+          .replace(/âĢĿ/g,"“").replace(/âĢĺ/g,"”")
+          .replace(/âĢĶ/g,"‘").replace(/âĢĺ/g,"’");
+}
+function fillTokenTable(tokens){
+  const tb = $("#tokTable tbody"); tb.innerHTML = "";
+  (tokens||[]).forEach((t,i)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td class="mono">${i+1}</td>`+
+      `<td class="mono">${cleanTok(t.t)}</td>`+
+      `<td class="mono">${t.rank}</td>`+
+      `<td class="mono">${(t.p||0).toFixed(6)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* Live verification */
+let lastScanMetrics = null;
+function tokenizeWords(text){ return (text.toLowerCase().match(/[a-z’']+|\d+|[^\s\w]/g) || []); }
+const FN_WORDS = new Set(("a,an,the,of,to,in,for,with,on,at,by,from,as,that,this,which,who,whom,whose,and,or,but,if,then,so,because,while,where,about,into,over,after,before,between,through,during,without,within,against,under,above,across,around,per,via,is,am,are,was,were,be,been,being").split(","));
+function punctEntropy(text){
+  const punct = text.match(/[.,;:!?()-]/g) || []; if(!punct.length) return 0;
+  const counts={}; punct.forEach(p=>counts[p]=(counts[p]||0)+1);
+  const N=punct.length; let H=0; for(const k in counts){ const p=counts[k]/N; H-=p*Math.log2(p); } return H;
+}
+function simpleMetrics(text){
+  const tokens = tokenizeWords(text);
+  const words = tokens.filter(t=>/^[a-z’']+$/.test(t));
+  const n = words.length || 1;
+  const uniq = new Set(words).size;
+  const fnCount = words.reduce((a,w)=>a+(FN_WORDS.has(w)?1:0),0);
+  const func_ratio = fnCount/n;
+  const hapax_ratio = uniq/n;
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(s=>s.trim().length>0);
+  const lens = sentences.map(s => (s.match(/\b\w+\b/g)||[]).length);
+  const sent_mean = lens.length ? lens.reduce((a,b)=>a+b,0)/lens.length : 0;
+  const sent_var  = lens.length ? lens.reduce((a,b)=>a+(b-sent_mean)**2,0)/lens.length : 0;
+  const pent = punctEntropy(text);
+  return { func_ratio, hapax_ratio, sent_mean, sent_var, punct_entropy: pent };
+}
+function cosineSimilarity(a,b){
+  const keys=["func_ratio","hapax_ratio","sent_mean","sent_var","punct_entropy"];
+  let dot=0,na=0,nb=0; for(const k of keys){ const x=Number(a[k])||0, y=Number(b[k])||0; dot+=x*y; na+=x*x; nb+=y*y; }
+  return (na&&nb)?(dot/(Math.sqrt(na)*Math.sqrt(nb))):0;
+}
+function renderLiveCompare(userM, refM){
+  const sim = Math.max(0,Math.min(1,cosineSimilarity(userM,refM)));
+  const pct = Math.round(sim*100);
+  const fields=[["Function word ratio","func_ratio",3],["Hapax ratio","hapax_ratio",3],["Sent. mean","sent_mean",2],["Sent. var","sent_var",2],["Punct entropy","punct_entropy",3]];
+  let html = `<div class="row" style="gap:12px"><strong>Match (quick):</strong> <span class="pill">${pct}%</span></div>`;
+  html += `<div class="kv" style="margin-top:8px">`;
+  for(const [label,key,d] of fields){
+    const u=Number(userM[key])||0, r=Number(refM[key])||0, diff=u-r;
+    html += `<div>${label}</div><div class="mono">you ${u.toFixed(d)} • ref ${r.toFixed(d)} • Δ ${(diff>=0?"+":"")}${diff.toFixed(d)}</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+/* Scan */
+async function runScan(){
+  const text = $("#text").value.trim();
+  if (!text) { $("#err").style.display="block"; $("#err").textContent="Please enter some text."; return; }
+  $("#err").style.display="none";
+  $("#btnScan").disabled = true;
+  $("#scanStatus").textContent = "Scanning…";
+
+  try {
+    const body = { text, tag: $("#tag").value.trim() || null, mode: $("#mode").value || null };
+    const r = await api("/scan", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
+
+    // raw JSON (keep closed)
+    const rawBox = document.getElementById("rawDump");
+    if (rawBox) rawBox.textContent = JSON.stringify(r, null, 2);
+    document.getElementById("rawJsonBox")?.removeAttribute("open");
+
+    // top summary
+    $("#result").style.display = "block";
+    setProbFill(r.calibrated_prob || 0);
+    setVerdict(r.verdict || "—");
+
+    const NS = r.nonsense_signals || {};
+    const top10Pct  = Number.isFinite(NS.top10)  ? Math.round(NS.top10*100)  : (r.bins ? Math.round((r.bins[10]  / Math.max(1,r.total))*100) : null);
+    const top100Pct = Number.isFinite(NS.top100) ? Math.round(NS.top100*100) : (r.bins ? Math.round((r.bins[100] / Math.max(1,r.total))*100) : null);
+
+    $("#top10").textContent  = top10Pct  ?? "—";
+    $("#top100").textContent = top100Pct ?? "—";
+    $("#ppl").textContent    = (NS.ppl ?? r.ppl ?? 0).toFixed(2);
+    $("#burst").textContent  = (NS.burst ?? r.burstiness ?? 0).toFixed(3);
+    $("#category").textContent  = r.category ? `${r.category} (${Math.round((r.category_conf||0)*100)}%)` : "—";
+    $("#modelName").textContent = r.model_name || "—";
+    $("#modeEcho").textContent  = r.mode || "—";
+    $("#pdj").textContent       = (r.pd_overlap_j ?? 0).toFixed(3);
+    $("#tagEcho").textContent   = body.tag || "—";
+    $("#explainShort").textContent = shortExplain(r);
+
+    fillTokenTable(r.per_token || []);
+
+    const S = r.stylometry || r.style || r.metrics?.stylometry || r.stats?.stylometry || {};
+    const N = r.nonsense_signals || r.nonsense || r.metrics?.nonsense || r.stats?.nonsense || {};
+
+    setTxt("#sty_func",  pickNum(S.func_ratio, S.function_word_ratio, S.funcWordsRatio), 3);
+    setTxt("#sty_hapax", pickNum(S.hapax_ratio, S.hapax, S.hapaxRatio), 3);
+    setTxt("#sty_smean", pickNum(S.sent_mean, S.sentence_mean, S.sentMean), 2);
+    setTxt("#sty_svar",  pickNum(S.sent_var, S.sentence_var, S.sentVar), 2);
+    setTxt("#sty_mlps",  pickNum(S.mlps, S.delta_logp_mean, S.dlogp_mean, S.deltaLogpMean), 4);
+    setTxt("#sty_mlpsv", pickNum(S.mlps_var, S.delta_logp_var, S.dlogp_var, S.deltaLogpVar), 4);
+    setTxt("#sty_pent",  pickNum(S.punct_entropy, S.punctuation_entropy, S.punctEntropy), 3);
+
+    setTxt("#ns_rhyme", pickNum(N.rhyme_density, N.rhyme, N.rhymeDensity), 3);
+    setTxt("#ns_meter", pickNum(N.meter_cv, N.meter, N.meterCV), 3);
+    setTxt("#ns_inv",   pickNum(N.invented_ratio, N.invented, N.inventedRatio), 3);
+    setTxt("#ns_lex",   pickNum(N.lex_hits, N.lexHits), 0);
+    setTxt("#ns_sem",   pickNum(N.semantic_disc, N.semantic_discontinuity, N.semanticDisc), 3);
+
+    // Save reference for Live Verification
+    lastScanMetrics = {
+      func_ratio: Number(S.func_ratio ?? S.function_word_ratio ?? 0),
+      hapax_ratio: Number(S.hapax_ratio ?? S.hapax ?? 0),
+      sent_mean:   Number(S.sent_mean ?? S.sentence_mean ?? 0),
+      sent_var:    Number(S.sent_var  ?? S.sentence_var  ?? 0),
+      punct_entropy: Number(S.punct_entropy ?? S.punctuation_entropy ?? 0),
     };
 
-    function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+    // Enable live features after a valid scan
+    $("#btnStartLive").disabled = false;
+    $("#liveInput").disabled = false;
+    setFinalizeEnabled(true);
 
-    function setBadge(prob){
-      let label = "Low AI-likelihood";
-      let color = getCss('--green');
-      if (prob >= 0.85){ label = "Almost certainly AI"; color = getCss('--red'); }
-      else if (prob >= 0.70){ label = "High AI-likelihood"; color = getCss('--orange'); }
-      else if (prob >= 0.50){ label = "Medium AI-likelihood"; color = getCss('--yellow'); }
-      els.badge.textContent = label;
-      els.badge.style.backgroundColor = color; els.badge.style.color = '#fff';
-    }
+  } catch (e) {
+    $("#err").style.display = "block";
+    $("#err").textContent = "Scan failed: " + e.message;
+  } finally {
+    $("#btnScan").disabled = false;
+    $("#scanStatus").textContent = "";
+  }
+}
 
-    function renderHeat(tokens){
-      if (!tokens || !tokens.length){ els.heat.textContent = 'No tokens (empty or too short).'; return; }
-      const frag = document.createDocumentFragment();
-      for (const tok of tokens){
-        const span = document.createElement('span');
-        span.className = 'tok ' + (tok.rank<=10?'t10':tok.rank<=100?'t100':tok.rank<=1000?'t1000':'trest');
-        let t = tok.t.replace(/^Ġ/g,''); // nicer spacing for BPE
-        span.textContent = t;
-        frag.appendChild(span);
-        frag.appendChild(document.createTextNode(' '));
-      }
-      els.heat.innerHTML = ''; els.heat.appendChild(frag);
-    }
+/* Demos */
+async function loadDemos(){
+  $("#btnDemo").disabled = true;
+  try{
+    const list = await api("/demo");
+    if(!Array.isArray(list) || list.length === 0){ $("#text").value = "Demo unavailable."; return; }
+    const lines = [];
+    list.forEach((d,i)=>{ lines.push(`// ${d.label} — expect: ${d.expect}`); lines.push(d.text); if(i<list.length-1) lines.push(""); });
+    $("#text").value = lines.join("\n");
+  }catch(e){ $("#text").value = "Failed to load demo samples: "+e.message; }
+  finally{ $("#btnDemo").disabled = false; }
+}
 
-    function formatPct(x){ return Number.isFinite(x) ? (Math.round(x*1000)/10).toFixed(1)+'%' : '—'; }
-    function formatNum(x, d=2){ return Number.isFinite(x) ? x.toFixed(d) : '—'; }
+/* Live typing */
+let liveStartTs=null, liveTimerId=null;
+function finalizeCompute(){
+  const typed = $("#liveInput").value.trim();
+  if (!typed) { $("#liveResult").textContent = "No sample typed."; return; }
+  if (!lastScanMetrics) { $("#liveResult").textContent = "Run a scan first to have a reference."; return; }
+  const userM = simpleMetrics(typed);
+  $("#liveResult").innerHTML = renderLiveCompare(userM, lastScanMetrics);
+}
+function tickTimer(){
+  if(!liveStartTs) return;
+  const s=Math.max(0,Math.floor((Date.now()-liveStartTs)/1000));
+  $("#liveTimer").textContent=s+"s";
+  if(s>=90) stopLive();
+}
+function startLive(){
+  $("#liveResult").textContent="";
+  $("#btnStartLive").disabled=true;
+  setFinalizeEnabled(true);
+  $("#liveProgress").style.width="0%";
+  liveStartTs=Date.now();
+  liveTimerId=setInterval(()=>{
+    tickTimer();
+    const words=$("#liveInput").value.trim().split(/\s+/).filter(Boolean);
+    $("#liveTokens").textContent=words.length.toString();
+    const pct=Math.min(100,Math.round((words.length/120)*100));
+    $("#liveProgress").style.width=pct+"%";
+    $("#liveRough").textContent=pct+"%";
+  },500);
+}
+function stopLive(){
+  clearInterval(liveTimerId); liveTimerId=null; liveStartTs=null;
+  $("#btnStartLive").disabled=false;
+  setFinalizeEnabled(true);
+  finalizeCompute();
+}
+$("#btnStartLive").addEventListener("click", startLive);
+$("#btnFinalize").addEventListener("click", finalizeCompute);
 
-    async function doScan(){
-      const text = els.input.value || '';
-      const tag = els.labelSel.value || '';
-      if (!text.trim()) return;
+/* Config I/O */
+async function loadVersion(){
+  try{
+    const v = await api("/version");
+    $("#version").textContent = `v${v.version} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
+    $("#ensemBadge").textContent = v.ensemble ? "Ensemble: on" : "Ensemble: off";
+  }catch{ $("#version").textContent = "version error"; }
+}
+async function loadConfig(){
+  try{
+    const j = await api("/config"); const s = j.settings || {};
+    $("#cfg_mode").value = s.mode || "Balanced";
+    $("#use_ensemble").checked = !!s.use_ensemble;
+    $("#cfg_min_tokens").value = s.min_tokens_strong ?? 180;
+    $("#cfg_short_cap").checked = !!s.short_cap;
+    $("#cfg_max_conf_short").value = (s.max_conf_short ?? 0.35);
+    $("#cfg_non_en_cap").value = (s.non_en_cap ?? 0.15);
+    $("#cfg_en_thresh").value = (s.en_thresh ?? 0.70);
+    $("#cfg_max_unstable").value = (s.max_conf_unstable ?? 0.35);
+    $("#cfg_abstain_low").value = (s.abstain_low ?? 0.35);
+    $("#cfg_abstain_high").value = (s.abstain_high ?? 0.65);
+    setModeBadge(s.mode || "Balanced");
+    $("#mode").value = s.mode || "Balanced";
+  }catch(e){ $("#saveStatus").textContent = "Failed to load settings: "+e.message; }
+}
+async function saveConfig(){
+  const body = {
+    mode: $("#cfg_mode").value,
+    short_cap: $("#cfg_short_cap").checked,
+    min_tokens_strong: parseInt($("#cfg_min_tokens").value || "180",10),
+    use_ensemble: $("#use_ensemble").checked,
+    non_en_cap: parseFloat($("#cfg_non_en_cap").value || "0.15"),
+    en_thresh: parseFloat($("#cfg_en_thresh").value || "0.70"),
+    max_conf_unstable: parseFloat($("#cfg_max_unstable").value || "0.35"),
+    max_conf_short: parseFloat($("#cfg_max_conf_short").value || "0.35"),
+    abstain_low: parseFloat($("#cfg_abstain_low")?.value || "0.35"),
+    abstain_high: parseFloat($("#cfg_abstain_high")?.value || "0.65"),
+  };
+  try{
+    $("#btnSave").disabled = true; $("#saveStatus").textContent = "Saving…";
+    const j = await api("/config",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+    $("#saveStatus").textContent = "Saved.";
+    setModeBadge(j.settings.mode);
+    $("#mode").value = j.settings.mode;
+    await loadVersion();
+  }catch(e){ $("#saveStatus").textContent = "Save failed: "+e.message; }
+  finally{ $("#btnSave").disabled = false; }
+}
 
-      els.scan.disabled = true;
-      els.status.textContent = 'Scanning…';
-
-      try{
-        const resp = await fetch(`${API_BASE}/scan`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, tag })
-        });
-        if (!resp.ok){
-          const msg = await resp.text();
-          throw new Error(`Server ${resp.status}: ${msg}`);
-        }
-        const data = await resp.json();
-        renderResult(data);
-        els.status.textContent = 'Done.';
-      }catch(err){
-        console.error(err);
-        els.status.textContent = 'Error: ' + (err?.message ?? err);
-      }finally{
-        els.scan.disabled = false;
-      }
-    }
-
-    function renderResult(data){
-      const prob = (typeof data.calibrated_prob === 'number')
-        ? data.calibrated_prob
-        : (typeof data.overall_score === 'number' ? data.overall_score : 0);
-      const pct = Math.round(prob * 100);
-      setBadge(prob);
-
-      els.summary.textContent =
-        `Likelihood this was AI-generated: ${pct}% — ` +
-        (prob >= 0.85 ? 'almost certain.' :
-         prob >= 0.70 ? 'high likelihood.' :
-         prob >= 0.50 ? 'moderate likelihood.' : 'low likelihood.');
-
-      const cat = (data.category || 'other').replaceAll('_',' ');
-      const cconf = data.category_conf ? Math.round(data.category_conf*100) : null;
-      els.catline.textContent = `Detected style: ${cat}` + (cconf!=null ? ` (conf≈${cconf}%)` : '');
-      els.note.textContent = data.category_note || '';
-
-      els.mScore.textContent = formatNum(data.overall_score);
-      const bins = data.bins || {}; const total = data.total || 1;
-      const frac10 = bins[10] ? bins[10]/total : 0;
-      const frac100 = bins[100] ? bins[100]/total : 0;
-      els.mT10.textContent = formatPct(frac10);
-      els.mT100.textContent = formatPct(frac100);
-      els.mPpl.textContent = formatNum(data.ppl, 1);
-      els.mBurst.textContent = formatNum(data.burstiness, 3);
-      els.mModel.textContent = data.model_name || '—';
-      els.mDev.textContent = data.device || '—';
-      els.mTok.textContent = String(data.total ?? '—');
-
-      els.explanation.textContent = data.explanation || '';
-      renderHeat(data.per_token);
-    }
-
-    // UI bindings
-    document.getElementById('scanBtn').addEventListener('click', doScan);
-    document.getElementById('input').addEventListener('keydown', (e)=>{
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') doScan();
-    });
-  </script>
+/* Wire */
+$("#btnScan").addEventListener("click", runScan);
+$("#btnDemo").addEventListener("click", loadDemos);
+$("#btnClear").addEventListener("click", ()=>{
+  $("#text").value="";
+  $("#result").style.display="none";
+  $("#err").style.display="none";
+  $("#btnStartLive").disabled = true;
+  $("#liveInput").disabled = true;
+  setFinalizeEnabled(false);
+});
+$("#btnSave").addEventListener("click", saveConfig);
+$("#btnReset").addEventListener("click", ()=>location.reload());
+(async function init(){ await loadVersion(); await loadConfig(); setFinalizeEnabled(false); })();
+</script>
 </body>
 </html>
