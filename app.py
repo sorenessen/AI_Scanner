@@ -995,7 +995,95 @@ def fp_reload():
     MODEL_CENTROIDS = _load_model_centroids()
     return {"ok": True, "count": len(MODEL_CENTROIDS)}
 
+# -------------------- Explain Mode (v0.3.1) --------------------
+def _label_band(p: float) -> str:
+    if p < 0.35:   return "Looks human"
+    if p <= 0.65:  return "Inconclusive"
+    return "Likely AI"
 
+def _friendly_pct(x: float) -> str:
+    try:    return f"{int(round(100*x))}%"
+    except: return "—"
+
+def _explain_from(resp: dict) -> dict:
+    """
+    Produce a plain-language explanation object from the /scan response.
+    Designed to be UI-ready and non-technical by default.
+    """
+    ai_p = float(resp.get("calibrated_prob", 0.5))
+    verdict = resp.get("verdict") or _label_band(ai_p)
+    drift   = (resp.get("semantic_drift") or {})
+    fp      = (resp.get("llm_fingerprint") or {})
+    pd_j    = float(resp.get("pd_overlap_j", 0.0))
+    cat     = (resp.get("category") or "other").replace("_", " ")
+
+    bullets = []
+    notes   = []
+    fixes   = []
+
+    # Headline
+    if ai_p < 0.35:
+        headline = "This looks human and original."
+    elif ai_p <= 0.65:
+        headline = "Mixed signals — not clearly AI or human."
+    else:
+        headline = "This likely contains AI-generated writing."
+
+    # Why we think that (positive evidence)
+    if fp.get("available"):
+        nf = fp.get("nearest_family")
+        human_score = fp.get("human_score")
+        if nf == "human_baseline" or (human_score is not None and human_score >= 0.7):
+            bullets.append("Your overall style matches typical human variation.")
+        else:
+            bullets.append(f"Closest style match: {nf} (not definitive).")
+
+    if drift.get("available"):
+        sc = drift.get("score", 0.5)
+        if sc >= 0.45 and sc <= 0.65:
+            bullets.append("Topic flow and tone shifts look natural for human writing.")
+        elif sc < 0.35:
+            bullets.append("Paragraphs are unusually uniform (possible model pattern).")
+            fixes.append("Vary sentence length and vocabulary between paragraphs.")
+        else:
+            bullets.append("Paragraphs shift topics a lot (could be human brainstorming).")
+
+    # Public-domain overlap note
+    if pd_j >= 0.12:
+        notes.append("We detected overlap with public-domain phrasing; we limited the AI score to avoid a false positive.")
+    else:
+        notes.append("No meaningful match with public-domain phrasing.")
+
+    # Practical next steps depending on band
+    if ai_p > 0.65:
+        fixes.extend([
+            "Add brief personal specifics (dates, places, unique details).",
+            "Break up uniform sentences; mix short and long forms.",
+            "Include a brief anecdote or reflection in your own voice."
+        ])
+    elif ai_p <= 0.65 and ai_p >= 0.35:
+        fixes.append("If needed, add a few personal details or examples to strengthen human signal.")
+
+    # Compact teacher-style summary
+    teacher = {
+        "headline": headline,
+        "ai_likelihood": _friendly_pct(ai_p),
+        "band": _label_band(ai_p),
+        "nearest_style": (fp.get("nearest_family") if fp.get("available") else None),
+        "drift_score": (drift.get("score") if drift.get("available") else None),
+        "pd_overlap_j": round(pd_j, 3),
+        "category": cat,
+    }
+
+    return {
+        "headline": headline,
+        "ai_likelihood_pct": _friendly_pct(ai_p),
+        "band": _label_band(ai_p),
+        "why": bullets,
+        "notes": notes,
+        "what_to_fix": fixes,
+        "teacher_report": teacher
+    }
 
 # -------------------- Main route --------------------
 @app.post("/scan")
@@ -1195,6 +1283,19 @@ def scan(inp: ScanIn):
             "ppl": out2["ppl"], "burstiness": out2["burstiness"],
             "total": out2["total"], "score": out2["score"]
         }
+
+    # Attach friendly explanation (v0.3.1)
+    try:
+        resp["explain"] = _explain_from(resp)
+    except Exception:
+        resp["explain"] = {
+            "headline": "Summary unavailable",
+            "band": _label_band(resp.get("calibrated_prob", 0.5)),
+            "why": [],
+            "notes": ["Explain mode encountered an error."],
+            "what_to_fix": []
+        }
+
     return resp
 
     # -------------------- Live Typing Verification (Hybrid streaming) --------------------
