@@ -144,6 +144,43 @@
   filter: drop-shadow(0 2px 0 rgba(0,0,0,.18));
 }
 
+  /* v0.3.2 Explain UI */
+  .band-badge {
+    display:inline-flex; align-items:center; gap:.5rem;
+    font-weight:600; font-size:.95rem; padding:.35rem .6rem;
+    border-radius:.6rem; border:1px solid rgba(0,0,0,.2);
+    background:#f6f6f6;
+  }
+  .band-human   { background:#e8f7ec; border-color:#7ad58f; }
+  .band-mixed   { background:#fff7e0; border-color:#e2c35c; }
+  .band-ai      { background:#fde8e8; border-color:#e28b8b; }
+
+  .badge-dot { width:.55rem; height:.55rem; border-radius:50%; display:inline-block; }
+  .dot-human { background:#26a269; }
+  .dot-mixed { background:#cfae2d; }
+  .dot-ai    { background:#c23333; }
+
+  #explainWrap {
+    margin-top:.5rem; border:1px solid #2d2d2d; border-radius:10px;
+    overflow:hidden; background:#111; color:#ddd;
+  }
+  #explainHeader {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:.65rem .9rem; background:#181818; border-bottom:1px solid #2d2d2d;
+  }
+  #explainTitle { font-weight:600; }
+  #explainToggleBtn {
+    all:unset; cursor:pointer; padding:.25rem .55rem; border:1px solid #444;
+    border-radius:6px; font-size:.9rem; color:#ddd;
+  }
+  #explainBody { padding:.8rem .9rem; display:block; }
+  #explainBody.hidden { display:none; }
+
+  .explain-section { margin:.4rem 0 .6rem; }
+  .explain-section b { color:#fff; }
+  .explain-list { margin:.35rem 0 0 .9rem; }
+  .explain-note { opacity:.85; }
+
 </style>
 </head>
 <body>
@@ -217,6 +254,30 @@
       </div>
 
       <!-- RESULTS -->
+
+      <div id="bandBadge" class="band-badge" aria-live="polite" style="display:none;">
+        <span class="badge-dot"></span>
+        <span id="bandText">Band</span>
+        <span id="bandPct" style="opacity:.75;"></span>
+      </div>
+
+      <div id="explainWrap" style="display:none;" aria-live="polite">
+        <div id="explainHeader">
+          <div id="explainTitle">What this means</div>
+          <button id="explainToggleBtn" aria-expanded="true" aria-controls="explainBody">Hide</button>
+        </div>
+        <div id="explainBody">
+          <div id="explainHeadline" class="explain-section"></div>
+          <div id="explainWhy" class="explain-section"></div>
+          <div id="explainFix" class="explain-section"></div>
+          <div id="explainNotes" class="explain-section explain-note"></div>
+          <!-- Compact teacher row -->
+          <div id="teacherRow" class="explain-section" style="opacity:.9;">
+            <small id="teacherMini"></small>
+          </div>
+        </div>
+      </div>
+
       <div id="result" style="margin-top:16px; display:none">
         <div class="row" style="justify-content:space-between">
           <h3 style="margin:0">Result</h3>
@@ -467,8 +528,9 @@ function setProbFill(p){
 function setVerdict(v){
   const pill = $("#verdictPill");
   pill.textContent = v || "—";
-  const c = (v||"").toLowerCase().includes("human") ? "#163626" :
-            (v||"").includes("Inconclusive") ? "#2f2a12" : "#3a1b1b";
+  const L = (v||"").toLowerCase();
+  const c = L.includes("human") ? "#163626" :
+            L.includes("inconclusive") ? "#2f2a12" : "#3a1b1b";
   pill.style.background = c; pill.style.borderColor = "var(--border)";
 }
 function setModeBadge(m){ $("#activeModeBadge").textContent = "Mode: " + (m||"—"); }
@@ -503,7 +565,75 @@ function fillTokenTable(tokens){
   });
 }
 
-/* Live verification */
+/* ---------- v0.3.2: Explain helpers (global) ---------- */
+function setBandBadge(band, pctText) {
+  const badge = document.getElementById('bandBadge');
+  const dot   = badge.querySelector('.badge-dot');
+  const text  = document.getElementById('bandText');
+  const pct   = document.getElementById('bandPct');
+
+  badge.classList.remove('band-human','band-mixed','band-ai');
+
+  let cls = 'band-mixed', dotCls = 'dot-mixed', label = band || 'Inconclusive';
+  const b = (band||'').toLowerCase();
+  if (b.includes('human'))  { cls = 'band-human'; dotCls = 'dot-human'; }
+  else if (b.includes('ai')){ cls = 'band-ai';    dotCls = 'dot-ai'; }
+
+  badge.classList.add(cls);
+  dot.className = 'badge-dot ' + dotCls;
+  text.textContent = label;
+  pct.textContent  = pctText ? `• ${pctText}` : '';
+  badge.style.display = 'inline-flex';
+}
+function sanitizeArray(a) {
+  return Array.isArray(a) ? a.filter(Boolean) : [];
+}
+function renderExplain(explain, fullJson) {
+  const wrap   = document.getElementById('explainWrap');
+  const head   = document.getElementById('explainHeadline');
+  const why    = document.getElementById('explainWhy');
+  const fix    = document.getElementById('explainFix');
+  const notes  = document.getElementById('explainNotes');
+  const mini   = document.getElementById('teacherMini');
+
+  if (!explain) { wrap.style.display='none'; return; }
+  wrap.style.display = 'block';
+
+  // Badge
+  setBandBadge(explain.band, explain.ai_likelihood_pct);
+
+  // Header + sections
+  document.getElementById('explainTitle').textContent = 'What this means';
+  head.innerHTML  = `<b>${explain.headline || ''}</b>`;
+
+  const whyList = sanitizeArray(explain.why).map(s => `<li>${s}</li>`).join('');
+  why.innerHTML  = whyList ? `<b>Why we think this:</b><ul class="explain-list">${whyList}</ul>` : '';
+
+  const fixList = sanitizeArray(explain.what_to_fix).map(s => `<li>${s}</li>`).join('');
+  fix.innerHTML  = fixList ? `<b>How to strengthen it:</b><ul class="explain-list">${fixList}</ul>` : '';
+
+  const notesList = sanitizeArray(explain.notes).join(' ');
+  notes.innerHTML = notesList ? `<b>Notes:</b> ${notesList}` : '';
+
+  // Compact teacher row
+  const t = explain.teacher_report || {};
+  const parts = [];
+  if (t.nearest_style) parts.push(`Closest style: ${t.nearest_style}`);
+  if (t.drift_score != null) parts.push(`Drift score: ${t.drift_score.toFixed(3)}`);
+  if (t.pd_overlap_j != null) parts.push(`PD overlap J: ${t.pd_overlap_j}`);
+  mini.textContent = parts.join(' • ');
+
+  // Collapse toggle
+  const btn = document.getElementById('explainToggleBtn');
+  const body= document.getElementById('explainBody');
+  btn.onclick = () => {
+    const hidden = body.classList.toggle('hidden');
+    btn.textContent = hidden ? 'Show' : 'Hide';
+    btn.setAttribute('aria-expanded', String(!hidden));
+  };
+}
+
+/* ---------- Live verification ---------- */
 let lastScanMetrics = null;
 function tokenizeWords(text){ return (text.toLowerCase().match(/[a-z’']+|\d+|[^\s\w]/g) || []); }
 const FN_WORDS = new Set(("a,an,the,of,to,in,for,with,on,at,by,from,as,that,this,which,who,whom,whose,and,or,but,if,then,so,because,while,where,about,into,over,after,before,between,through,during,without,within,against,under,above,across,around,per,via,is,am,are,was,were,be,been,being").split(","));
@@ -546,7 +676,7 @@ function renderLiveCompare(userM, refM){
   return html;
 }
 
-/* Scan */
+/* ---------- Scan ---------- */
 async function runScan(){
   const text = $("#text").value.trim();
   if (!text) { $("#err").style.display="block"; $("#err").textContent="Please enter some text."; return; }
@@ -557,6 +687,9 @@ async function runScan(){
   try {
     const body = { text, tag: $("#tag").value.trim() || null, mode: $("#mode").value || null };
     const r = await api("/scan", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
+
+    // Explain panel render
+    renderExplain(r.explain, r);
 
     // raw JSON (keep closed)
     const rawBox = document.getElementById("rawDump");
