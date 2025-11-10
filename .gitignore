@@ -7,3 +7,4 @@ EOF
 scan_logs.csv
 scan_summaries.txt
 *.pdf
+server.log
