@@ -72,7 +72,7 @@ def stylometric_fingerprint(text: str, token_logps: List[float]) -> Dict[str, fl
             "punct_entropy":float(punct_entropy)}
 
 # -------------------- Config (env defaults) --------------------
-VERSION = "0.2.1"  # adds /config runtime settings
+VERSION = "0.3.0"  # adds /config runtime settings
 
 MODEL_NAME = os.getenv("REF_MODEL", "EleutherAI/gpt-neo-1.3B")
 SECOND_MODEL_ENV = os.getenv("SECOND_MODEL", "distilgpt2")  # optional
@@ -520,6 +520,120 @@ def pd_overlap_score(text: str, n: int = PD_NGRAM_N) -> float:
             if j > best: best = j
     return best
 
+# -------------------- LLM Fingerprint (v0.3.0 stub) --------------------
+# Centroids are lightweight “style vectors” per model family.
+# File format (one JSON per file in dir):
+# {"family": "gpt4", "n": 120, "vector": [0.12, 0.34, ...]}  # fixed length
+
+MODEL_CENTROID_DIR = os.getenv("MODEL_CENTROID_DIR", "./model_centroids")
+FPRINT_MIN_TOKENS = int(os.getenv("FPRINT_MIN_TOKENS", "180"))
+
+def _centroid_dir_ensure():
+    pathlib.Path(MODEL_CENTROID_DIR).mkdir(parents=True, exist_ok=True)
+
+def _load_model_centroids() -> List[Dict]:
+    _centroid_dir_ensure()
+    cents = []
+    for path in glob.glob(os.path.join(MODEL_CENTROID_DIR, "*.json")):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                obj = json.load(f)
+            if isinstance(obj, dict) and "vector" in obj and "family" in obj:
+                vec = obj["vector"]
+                if isinstance(vec, list) and all(isinstance(x, (int, float)) for x in vec):
+                    cents.append({
+                        "family": str(obj["family"]),
+                        "vector": [float(x) for x in vec],
+                        "n": int(obj.get("n", 0)),
+                        "filename": os.path.basename(path)
+                    })
+        except Exception as e:
+            print("[fingerprint] bad centroid:", path, e)
+    print(f"[fingerprint] loaded {len(cents)} centroids from {MODEL_CENTROID_DIR}")
+    return cents
+
+MODEL_CENTROIDS = _load_model_centroids()
+
+def _cosine_sim_lite(a: List[float], b: List[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    num = sum(x*y for x, y in zip(a, b))
+    da = math.sqrt(sum(x*x for x in a)) or 1e-9
+    db = math.sqrt(sum(y*y for y in b)) or 1e-9
+    s = num / (da * db)
+    return max(0.0, min(1.0, s))
+
+def _softmax(xs: List[float]) -> List[float]:
+    if not xs:
+        return []
+    m = max(xs)
+    exps = [math.exp(x - m) for x in xs]
+    Z = sum(exps) or 1.0
+    return [e / Z for e in exps]
+
+def _style_vector(text: str, scan_primary: Dict, stylo: Dict, sigs: Dict) -> List[float]:
+    """
+    Fixed-length 12D vector. Keep order/length stable across releases.
+    """
+    total = max(1, scan_primary.get("total", 0))
+    bins = scan_primary.get("bins", {10:0, 100:0, "rest":0})
+    frac10 = bins.get(10, 0)/total
+    frac100 = bins.get(100, 0)/total
+    return [
+        float(stylo.get("func_ratio", 0.0)),
+        float(stylo.get("hapax_ratio", 0.0)),
+        float(stylo.get("sent_mean", 0.0)),
+        float(stylo.get("sent_var", 0.0)),
+        float(stylo.get("punct_entropy", 0.0)),
+        float(sigs.get("clause_density", 0.0)),
+        float(sigs.get("semi_dash_rate", 0.0)),
+        float(sigs.get("dialog_density", 0.0)),
+        float(scan_primary.get("ppl", 0.0)),
+        float(scan_primary.get("burstiness", 0.0)),
+        float(frac10),
+        float(frac100),
+    ]
+
+def compute_llm_fingerprint(text: str, scan_primary: Dict, stylo: Dict, sigs: Dict) -> Dict:
+    """
+    Returns similarity distribution to known model families.
+    If no centroids are present (or sample too short), returns {available: False}.
+    """
+    if scan_primary.get("total", 0) < FPRINT_MIN_TOKENS:
+        return {"available": False, "reason": f"too_short(<{FPRINT_MIN_TOKENS} tokens)"}
+    if not MODEL_CENTROIDS:
+        return {"available": False, "reason": "no_centroids"}
+
+    v = _style_vector(text, scan_primary, stylo, sigs)
+    sims = [ _cosine_sim_lite(v, c["vector"]) for c in MODEL_CENTROIDS ]
+    probs = _softmax(sims)
+
+    fams = [c["family"] for c in MODEL_CENTROIDS]
+    sim_map = {fams[i]: round(float(sims[i]), 4) for i in range(len(fams))}
+    prob_map = {fams[i]: round(float(probs[i]), 4) for i in range(len(fams))}
+
+    # Confidence = length adequacy + (top margin) + vector norm sanity
+    top_idx = max(range(len(sims)), key=lambda i: sims[i])
+    top = sims[top_idx]; second = sorted(sims)[-2] if len(sims) >= 2 else 0.0
+    margin = max(0.0, top - second)
+    length_ok = min(1.0, scan_primary.get("total", 0) / float(FPRINT_MIN_TOKENS))
+    confidence = round(0.5*length_ok + 0.5*min(1.0, margin/0.15), 3)
+
+    # Convert to a normalized 0..1 score where higher ~ more human-like distribution:
+    # If you include a 'human' centroid, that will dominate. If not, we reward high entropy.
+    dist_entropy = -sum(p*math.log(p+1e-12) for p in probs) / math.log(len(probs)) if len(probs) > 1 else 0.0
+    human_score = round(float(dist_entropy), 3)
+
+    return {
+        "available": True,
+        "nearest_family": fams[top_idx],
+        "similarity": sim_map,
+        "distribution": prob_map,
+        "confidence": confidence,
+        "human_score": human_score  # 0..1 (higher looks less like a single AI family)
+    }
+
+
 # -------------------- Logging + PDF --------------------
 LOG_PATH = os.path.join(".", "scan_logs.csv")
 
@@ -616,6 +730,76 @@ def log_scan_row(row: dict):
         ])
     pdf_path = create_pdf_summary(row)
     print(f"[+] PDF report created: {pdf_path}")
+
+# -------------------- Semantic Drift (v0.3.0) --------------------
+def _paragraphs(text: str) -> List[str]:
+    return [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
+
+def _bow_embed(paras: List[str]) -> List[Dict[str, int]]:
+    # simple bag-of-words per paragraph (lowercase words only)
+    vecs = []
+    for p in paras:
+        toks = re.findall(r"[a-z']+", p.lower())
+        d = {}
+        for t in toks:
+            d[t] = d.get(t, 0) + 1
+        vecs.append(d)
+    return vecs
+
+def _cosine_dict(a: Dict[str, int], b: Dict[str, int]) -> float:
+    if not a or not b:
+        return 0.0
+    keys = set(a) | set(b)
+    num = sum(a.get(k,0)*b.get(k,0) for k in keys)
+    da = math.sqrt(sum(v*v for v in a.values())) or 1e-9
+    db = math.sqrt(sum(v*v for v in b.values())) or 1e-9
+    s = num/(da*db)
+    return max(0.0, min(1.0, s))
+
+def compute_semantic_drift(text: str) -> Dict:
+    paras = _paragraphs(text)
+    if len(paras) <= 1:
+        # shim for short inputs
+        return {
+            "available": False,
+            "reason": "single_paragraph",
+            "avg_adjacent_sim": 1.0,
+            "std_adjacent_sim": 0.0,
+            "low_drops": [],
+            "risk": 0.5,
+        }
+
+    vecs = _bow_embed(paras)
+    sims = [_cosine_dict(a,b) for a,b in zip(vecs, vecs[1:])]
+    avg = sum(sims)/len(sims)
+    var = sum((s-avg)*(s-avg) for s in sims)/len(sims)
+    std = math.sqrt(var)
+
+    # flag large downward jumps
+    drops = []
+    for i in range(1, len(sims)):
+        delta = sims[i] - sims[i-1]
+        if delta < -0.35:  # abrupt shift
+            drops.append({"at_paragraph": i+1, "delta": round(float(delta),3)})
+
+    # risk heuristic: too-flat (AI-ish) OR many big drops (incoherent)
+    flat_penalty = 1.0 - min(1.0, std/0.18)         # std <~0.18 is suspiciously uniform
+    jump_penalty = min(1.0, len(drops)*0.25)        # many big drops also suspicious
+    # Lower risk is better (human); convert to human-style score later if needed
+    risk = _clamp(0.5*flat_penalty + 0.5*jump_penalty, 0.0, 1.0)
+
+    # normalize to a 0..1 "human-like" score for consistency with other signals
+    human_score = 1.0 - risk
+
+    return {
+        "available": True,
+        "avg_adjacent_sim": round(float(avg),3),
+        "std_adjacent_sim": round(float(std),3),
+        "low_drops": drops,
+        "risk": round(float(risk),3),
+        "score": round(float(human_score),3)
+    }
+
 
 # -------------------- Helpers used in /scan --------------------
 def _english_confidence(txt: str) -> float:
@@ -796,6 +980,22 @@ def pd_delete(filename: str = Query(..., description="Filename under PD_FINGERPR
     PD_FPS = _load_pd_fingerprints()
     return {"ok": True, "deleted": name, "loaded_count": len(PD_FPS)}
 
+# -------------------- Fingerprint Centroid Management --------------------
+@app.get("/fingerprint/centroids")
+def fp_list():
+    return {
+        "dir": MODEL_CENTROID_DIR,
+        "count": len(MODEL_CENTROIDS),
+        "families": [c["family"] for c in MODEL_CENTROIDS]
+    }
+
+@app.post("/fingerprint/reload")
+def fp_reload():
+    global MODEL_CENTROIDS
+    MODEL_CENTROIDS = _load_model_centroids()
+    return {"ok": True, "count": len(MODEL_CENTROIDS)}
+
+
 
 # -------------------- Main route --------------------
 @app.post("/scan")
@@ -840,6 +1040,12 @@ def scan(inp: ScanIn):
     stylo = stylometric_fingerprint(text, token_logps)
     sigs  = prose_classic_signals(text)
     cscore = classic_style_score(text, stylo, sigs)
+
+    # NEW (v0.3.0): LLM fingerprint computation (safe if no centroids / too short)
+    fp = compute_llm_fingerprint(text, out1, stylo, sigs)
+
+    # NEW (v0.3.0): Semantic drift
+    drift = compute_semantic_drift(text)
 
     # primary calibration
     z = sens_boost * ((2.0*out1["score"]) + (0.9*fPpl) + (0.8*fBurst) + (0.35*frac10) - 1.6)
@@ -980,7 +1186,9 @@ def scan(inp: ScanIn):
         "category_conf": cat_conf, "category_note": note,
         "stylometry": stylo, "nonsense_signals": nonsense["signals"],
         "mode": mode, "verdict": verdict, "thermometer": thermo,
-        "pd_overlap_j": round(pd_score, 4)
+        "pd_overlap_j": round(pd_score, 4),
+        "llm_fingerprint": fp,
+        "semantic_drift": drift
     }
     if out2:
         resp["secondary"] = {
@@ -1241,6 +1449,7 @@ def version():
         "ensemble": (SETTINGS.use_ensemble and bool(SECONDARY_READY)),
         "secondary_model": (SECOND_MODEL if (SETTINGS.use_ensemble and SECONDARY_READY) else None),
         "mode": SETTINGS.mode,
+        "fingerprint_centroids": len(MODEL_CENTROIDS),
     }
 
 @app.get("/healthz")
