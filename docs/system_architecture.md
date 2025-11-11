@@ -7,27 +7,27 @@ flowchart TB
 
   %% ---- LAYERS ----
   subgraph U["User Environment"]
-    user[User]
-    browser[Web Browser: index.html + JS]
+    user["User"]
+    browser["Web Browser: index.html + JS"]
   end
 
   subgraph L["Local Runtime (Laptop / Dev Machine)"]
-    apiLocal[FastAPI Backend: app.py]
-    pyModules[Python Modules: stylometry.py, pd_fingerprint.py]
-    pdDir[(./pd_fingerprints/)]
-    configFile[(config.json)]
-    logs[(server.log)]
+    apiLocal["FastAPI Backend: app.py"]
+    pyModules["Python Modules: stylometry.py, pd_fingerprint.py"]
+    pdDir["(./pd_fingerprints/)"]
+    configFile["(config.json)"]
+    logs["(server.log)"]
   end
 
   subgraph S["Server / Cloud Environment"]
-    ghRepo[GitHub Repository (main branch)]
-    modelSrv[Local Model Weights / AI Engine]
-    storage[(Local/Remote Volume: ./model_centroids/)]
+    ghRepo["GitHub Repository (main branch)"]
+    modelSrv["Local Model Weights / AI Engine"]
+    storage["(Local/Remote Volume: ./model_centroids/)"]
   end
 
   subgraph E["External / Optional Services"]
-    extAPI[(Third-party APIs: HuggingFace, OpenAI, etc.)]
-    clientSync[(Git Pull / Push via CLI)]
+    extAPI["Third-party APIs: HuggingFace, OpenAI, etc."]
+    clientSync["Git Pull / Push via CLI"]
   end
 
   %% ---- CONNECTIONS ----
@@ -55,5 +55,6 @@ flowchart TB
   class apiLocal,pyModules,pdDir,configFile,logs local
   class ghRepo,modelSrv,storage server
   class extAPI,clientSync ext
-  
+
+
 ```
