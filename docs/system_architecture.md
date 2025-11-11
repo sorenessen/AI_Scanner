@@ -3,70 +3,40 @@
 High-level relational view showing how user actions propagate through the local client, backend service, and external APIs or runtime environments.
 
 ```mermaid
-flowchart LR
+flowchart TB
 
-%% ---------- ACTORS ----------
-subgraph ACTORS["Actors"]
-  U[End user]
-  OP[Operator / Admin]
+%% externals (outside the boundary)
+USER([User])
+LLM([LLM APIs])
+GIT([GitHub])
+
+%% system boundary
+subgraph SYS["AI_Scanner — System Boundary"]
+  direction TB
+
+  %% client
+  C_UI[Browser UI (index.html + JS)]
+
+  %% app/runtime
+  C_API[FastAPI Service (app.py)]
+  C_MOD[Python Modules (stylometry.py, pd_fingerprint.py)]
+  C_CFG[(config.json)]
+  C_LOG[(server.log)]
+
+  %% model/storage
+  C_MODEL[(Model Weights)]
+  C_CENT[(model_centroids/)]
 end
 
-%% ---------- CLIENT ----------
-subgraph CLIENT["Client (user machine)"]
-  UI[Browser UI\nindex.html + JS]
-end
-
-%% ---------- ACCESS / EDGE (optional) ----------
-subgraph EDGE["Access / Edge"]
-  LB[Reverse proxy / load balancer]
-end
-
-%% ---------- APPLICATION SERVICE ----------
-subgraph APP["Application service"]
-  API[FastAPI service\napp.py]
-  MODS[Modules\nstylometry.py\npd_fingerprint.py]
-  CFG[(config.json)]
-  LOG[(server.log)]
-end
-
-%% ---------- MODEL / RUNTIME ----------
-subgraph MODEL["Model / AI engine"]
-  WEIGHTS[(Model weights)]
-  PD[(./pd_fingerprints/)]
-end
-
-%% ---------- STORAGE ----------
-subgraph STORE["Storage"]
-  CENT[(./model_centroids/)]
-end
-
-%% ---------- EXTERNAL ----------
-subgraph EXT["External services"]
-  LLM[(HuggingFace / OpenAI)]
-  GIT[(GitHub repository\nmain branch)]
-end
-
-%% ---------- FLOWS ----------
-U  -- "HTTP GET/POST" --> UI
-UI -- "/scan, /config, /version" --> LB
-LB --> API
-
-API --> MODS
-MODS --> WEIGHTS
-MODS --> PD
-WEIGHTS --> CENT
-CENT --> API
-
-API --> LOG
-API --> CFG
-
-API --> UI
-UI  -- "renders Explain + PD badge" --> U
-
-OP  -- "git push/pull" --> GIT
-GIT --> WEIGHTS
-
-API --> LLM
-
+%% minimal relationships
+USER --> C_UI
+C_UI --> C_API
+C_API --> C_MOD
+C_MOD --> C_MODEL
+C_MODEL --> C_CENT
+C_API --> C_CFG
+C_API --> C_LOG
+C_API --> LLM
+C_MODEL <---> GIT
 
 ```
