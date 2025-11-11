@@ -1,6 +1,8 @@
 # CopyCat / AI_Scanner — System Architecture Overview (v0.3.3)
 
-High-level relational view showing how user actions propagate through the local client, backend service, and external APIs or runtime environments.
+1. High-level relational view showing how user actions propagate through the local client, backend service, and external APIs or runtime environments.
+
+2. Logical boundary view for AI_Scanner showing user interaction, runtime layers, and data stores.
 
 ```mermaid
 flowchart TB
