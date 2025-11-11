@@ -485,8 +485,10 @@
         <div class="row" style="gap:18px; margin-bottom:8px;">
           <div>Time: <span id="liveTimer">—</span></div>
           <div>Tokens: <span id="liveTokens">0</span></div>
-          <div>Match: <span id="liveRough">0%</span></div>
-        </div>
+          <div>Len: <span id="liveLen">0%</span></div>
+        <div>Match: <span id="liveRough">—</span></div>
+      </div>
+
         <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
         <div id="liveResult" style="margin-top:10px;"></div>
       </div>
@@ -786,43 +788,69 @@ async function loadDemos(){
 }
 
 /* Live typing */
-let liveStartTs=null, liveTimerId=null;
+let liveStartTs = null, liveTimerId = null, liveComputingTimer = null;
+
 function finalizeCompute(){
   const typed = $("#liveInput").value.trim();
   if (!typed) { $("#liveResult").textContent = "No sample typed."; return; }
   if (!lastScanMetrics) { $("#liveResult").textContent = "Run a scan first to have a reference."; return; }
+  const wordCount = tokenizeWords(typed).filter(t=>/^[a-z’']+$/i.test(t)).length;
+  if (wordCount < 60) { $("#liveResult").textContent = "Type at least ~60 words for a stable compare."; return; }
   const userM = simpleMetrics(typed);
   $("#liveResult").innerHTML = renderLiveCompare(userM, lastScanMetrics);
 }
+
 function tickTimer(){
   if(!liveStartTs) return;
-  const s=Math.max(0,Math.floor((Date.now()-liveStartTs)/1000));
-  $("#liveTimer").textContent=s+"s";
-  if(s>=90) stopLive();
+  const s = Math.max(0, Math.floor((Date.now()-liveStartTs)/1000));
+  $("#liveTimer").textContent = s + "s";
+  if (s >= 90) { $("#liveRough").textContent = "Computing…"; stopLive(true); }
 }
+
+function updateLiveHUD(){
+  const typed = $("#liveInput").value;
+  const tokens = tokenizeWords(typed);
+  const words  = tokens.filter(t=>/^[a-z’']+$/i.test(t));
+  const count  = words.length;
+
+  $("#liveTokens").textContent = String(count);
+
+  const pct = Math.min(100, Math.round((count/120)*100));
+  $("#liveProgress").style.width = pct + "%";
+  const lenEl = $("#liveLen"); if (lenEl) lenEl.textContent = pct + "%";
+
+  if (lastScanMetrics && count >= 20){
+    const sim = Math.round(100 * Math.max(0, Math.min(1, cosineSimilarity(simpleMetrics(typed), lastScanMetrics))));
+    $("#liveRough").textContent = `~${sim}%`;
+  } else {
+    $("#liveRough").textContent = "—";
+  }
+}
+
 function startLive(){
-  $("#liveResult").textContent="";
-  $("#btnStartLive").disabled=true;
+  $("#liveResult").textContent = "";
+  $("#btnStartLive").disabled = true;
   setFinalizeEnabled(true);
-  $("#liveProgress").style.width="0%";
-  liveStartTs=Date.now();
-  liveTimerId=setInterval(()=>{
-    tickTimer();
-    const words=$("#liveInput").value.trim().split(/\s+/).filter(Boolean);
-    $("#liveTokens").textContent=words.length.toString();
-    const pct=Math.min(100,Math.round((words.length/120)*100));
-    $("#liveProgress").style.width=pct+"%";
-    $("#liveRough").textContent=pct+"%";
-  },500);
+  $("#liveProgress").style.width = "0%";
+  const lenEl = $("#liveLen"); if (lenEl) lenEl.textContent = "0%";
+  $("#liveRough").textContent = "—";
+  liveStartTs = Date.now();
+  liveTimerId = setInterval(() => { tickTimer(); updateLiveHUD(); }, 500);
 }
-function stopLive(){
-  clearInterval(liveTimerId); liveTimerId=null; liveStartTs=null;
-  $("#btnStartLive").disabled=false;
+
+function stopLive(autoFinalize=false){
+  clearInterval(liveTimerId); liveTimerId = null; liveStartTs = null;
+  $("#btnStartLive").disabled = false;
   setFinalizeEnabled(true);
-  finalizeCompute();
+  if (autoFinalize){
+    clearTimeout(liveComputingTimer);
+    liveComputingTimer = setTimeout(() => finalizeCompute(), 600);
+  }
 }
+
 $("#btnStartLive").addEventListener("click", startLive);
 $("#btnFinalize").addEventListener("click", finalizeCompute);
+
 
 /* Config I/O */
 async function loadVersion(){
