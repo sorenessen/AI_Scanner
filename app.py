@@ -72,7 +72,7 @@ def stylometric_fingerprint(text: str, token_logps: List[float]) -> Dict[str, fl
             "punct_entropy":float(punct_entropy)}
 
 # -------------------- Config (env defaults) --------------------
-VERSION = "0.3.3-dev"  # adds /config runtime settings
+VERSION = "0.3.3"  # adds /config runtime settings
 
 MODEL_NAME = os.getenv("REF_MODEL", "EleutherAI/gpt-neo-1.3B")
 SECOND_MODEL_ENV = os.getenv("SECOND_MODEL", "distilgpt2")  # optional
