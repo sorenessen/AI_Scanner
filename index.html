@@ -181,6 +181,9 @@
   .explain-list { margin:.35rem 0 0 .9rem; }
   .explain-note { opacity:.85; }
 
+  #pdBadge { margin-left: 8px; }
+
+
 </style>
 </head>
 <body>
@@ -189,6 +192,7 @@
     <div class="row">
       <strong>CopyCat — AI Text Scanner</strong>
       <span id="version" class="muted"></span>
+      <span id="pdBadge" class="pill" aria-live="polite" title="Public-domain fingerprint centroids">PD: —</span>
     </div>
     <div class="scale-wrap">
       <label class="muted" for="uiScale">UI scale</label>
@@ -491,6 +495,7 @@
 </div>
 
 <script>
+window.__pdCentroids = 0;
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
 const api = (p,opts={}) => fetch(p,opts).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.json(); });
@@ -622,6 +627,15 @@ function renderExplain(explain, fullJson) {
   if (t.drift_score != null) parts.push(`Drift score: ${t.drift_score.toFixed(3)}`);
   if (t.pd_overlap_j != null) parts.push(`PD overlap J: ${t.pd_overlap_j}`);
   mini.textContent = parts.join(' • ');
+
+  // If server has no PD centroids, make that explicit for users
+  if (!Number(window.__pdCentroids || 0)) {
+  const msg = "Public-domain fingerprinting is off on this server (no centroids loaded). " +
+              "PD overlap will show ‘—’. Add JSON centroids to ./pd_fingerprints/ and restart.";
+  const prefix = notes.innerHTML ? "<br/>" : "";
+  notes.innerHTML += prefix + `<b>PD note:</b> ${msg}`;
+}
+
 
   // Collapse toggle
   const btn = document.getElementById('explainToggleBtn');
@@ -814,10 +828,29 @@ $("#btnFinalize").addEventListener("click", finalizeCompute);
 async function loadVersion(){
   try{
     const v = await api("/version");
-    $("#version").textContent = `v${v.version} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
+    $("#version").textContent =
+      `v${v.version} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
     $("#ensemBadge").textContent = v.ensemble ? "Ensemble: on" : "Ensemble: off";
-  }catch{ $("#version").textContent = "version error"; }
+
+    // PD badge
+    const pdn = Number(v.fingerprint_centroids ?? 0);
+    const pd  = $("#pdBadge");
+    if (pd) {
+      const has = pdn > 0;
+      pd.textContent = has ? `PD: ${pdn}` : "PD: none";
+      pd.style.background = has ? "#163626" : "#2f2a12";  // green vs amber
+      pd.style.borderColor = "var(--border)";
+      pd.setAttribute("aria-label",
+        has ? `${pdn} PD fingerprint centroids loaded`
+            : "No PD fingerprint centroids loaded");
+      // stash for Explain panel
+      window.__pdCentroids = pdn;
+    }
+  }catch{
+    $("#version").textContent = "version error";
+  }
 }
+
 async function loadConfig(){
   try{
     const j = await api("/config"); const s = j.settings || {};
