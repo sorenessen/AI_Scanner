@@ -1,43 +1,43 @@
-# CopyCat / AI_Scanner — Boundary Diagram (v0.3.3)
+# CopyCat / AI_Scanner — System Architecture Overview (v0.3.3)
 
-_A single, readable boundary view showing what’s inside the product and the minimal data path._
+High-level relational view showing how user actions propagate through the local client, backend service, and external APIs or runtime environments.
 
 ```mermaid
-%% Plain Mermaid for GitHub; no custom colors or classes
 flowchart TB
 
-%% Actor outside the boundary
-USER[(User)]
+%% actor outside the boundary
+USER(["User"])
 
-%% ---------- System Boundary ----------
-subgraph SYS[AI_Scanner — System Boundary]
+%% ---------- system boundary ----------
+subgraph SYS["AI_Scanner - System Boundary"]
   direction TB
 
-  %% Local runtime / client machine
-  subgraph L[Local Runtime (Laptop / Dev Machine)]
+  %% local runtime / client machine
+  subgraph L["Local Runtime (Laptop / Dev Machine)"]
     direction TB
-    UI[Browser UI — index.html + JS]
-    API[FastAPI Service — app.py]
-    MOD[Python Modules — stylometry.py / pd_fingerprint.py]
-    CFG[(config.json)]
-    LOG[(server.log)]
+    UI["Browser UI (HTML/JS)"]
+    API["FastAPI Service (app.py)"]
+    MOD["Python Modules (stylometry.py, pd_fingerprint.py)"]
+    CFG[("config.json")]
+    LOG[("server.log")]
   end
 
-  %% Server / cloud holdings (artifacts & repo)
-  subgraph S[Server / Cloud]
+  %% server / cloud holdings (artifacts & repo)
+  subgraph S["Server / Cloud"]
     direction TB
-    MODEL[(Model Weights)]
-    CENTROIDS[(model_centroids/)]
-    REPO[(GitHub repo)]
+    MODEL[("Model Weights")]
+    CENTROIDS[("model_centroids/")]
+    REPO[("GitHub repo")]
   end
 
-  %% External/optional services
-  subgraph X[External / Optional Services]
+  %% external / optional services
+  subgraph X["External / Optional Services"]
     direction TB
-    LLM[(LLM APIs)]
+    LLM[("LLM APIs")]
   end
 end
-%% ---------- Minimal flow ----------
+
+%% ---------- minimal flow ----------
 USER --> UI
 UI   --> API
 API  --> MOD
@@ -47,3 +47,4 @@ API  --> CFG
 API  --> LOG
 API  --> LLM
 MODEL <--> REPO
+```
