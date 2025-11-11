@@ -44,8 +44,7 @@ flowchart TB
   modelSrv --> extAPI
   browser -->|"renders Explain Panel + PD Badge"| user
 
-
-  %% add to bottom of diagram
+  %% ---- STYLING ----
   classDef user fill:#f4f9ff,stroke:#1e70b8,color:#000,rx:8,ry:8;
   classDef local fill:#fff4e6,stroke:#ffb84d,rx:8,ry:8;
   classDef server fill:#eef8f1,stroke:#37965d,rx:8,ry:8;
@@ -55,4 +54,3 @@ flowchart TB
   class apiLocal,pyModules,pdDir,configFile,logs local;
   class ghRepo,modelSrv,storage server;
   class extAPI,clientSync ext;
-
