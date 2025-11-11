@@ -1,0 +1,17 @@
+
+---
+
+## `docs/traceability.csv`
+
+```csv
+ID,Requirement,Implementation,UI/Endpoint,Test/Verification,Notes,Version
+R-001,Show calibrated AI likelihood with bands and caps,Calibration step + abstain window,Result panel + /scan,"Scan a medium passage (200–400 tokens) → Expect % and bar color (good/warn/bad); edge cases below",Abstain 0.35–0.65,<= v0.3.3
+R-002,Expose per-token ranks and probabilities,Model output passthrough,Per-token table + /scan,Run scan → table fills (#, token, rank, p),Scroll container caps height,<= v0.3.3
+R-003,Stylometry summary (fn words, hapax, sentence stats, punct entropy),Stylometry module,Stylometry card + /scan,"Compare values vs. quick calculator on same text",Displayed with 2–4 decimals,<= v0.3.3
+R-004,Nonsense guard metrics (rhyme, meter CV, invented ratio, lex hits, semantic disc),Nonsense module,Nonsense card + /scan,Inject rhyme-heavy text → rhyme↑; gibberish → invented↑,Sanity guard only,<= v0.3.3
+R-005,Explainability: headline, why, how-to-fix, notes, teacher mini,Explain builder,Explain panel (toggle) + /scan,Run scan → sections render,Teacher mini includes nearest_style/drift/pdJ when available,<= v0.3.3
+R-006,Runtime settings persisted server-side,Config service,/config GET/POST + Settings UI,"Change values, Save → reload → values persist",Covers abstain/caps/mode,etc.,<= v0.3.3
+R-007,Mode override per-scan,Request field `mode`,Mode select + /scan,"Pick 'Strict', scan; result shows Mode echo",Does not change default mode,<= v0.3.3
+R-008,Live verification quick match,Client-side stylometry + cosine,Live drawer + finalize,"Scan text → type sample → match % + deltas listed",90s timer + token progress bar,<= v0.3.3
+R-009,PD fingerprint visibility,Badge + explain note + footer,"Header badge, Explain notes, footer hint","With no centroids → PD: none + PD note; with N>0 → PD: N (green)",Requires `/version.fingerprint_centroids`,v0.3.3
+R-010,Version/model/device visibility,Version service,/version → header small text,Header shows version, model, device, dtype,Ensemble on/off tag,<= v0.3.3
