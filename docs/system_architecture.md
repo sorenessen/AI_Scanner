@@ -6,26 +6,26 @@ High-level relational view showing how user actions propagate through the local 
 flowchart TB
 
 %% externals (outside the boundary)
-USER([User])
-LLM([LLM APIs])
-GIT([GitHub])
+USER(["User"])
+LLM(["LLM APIs"])
+GIT(["GitHub"])
 
 %% system boundary
-subgraph SYS["AI_Scanner — System Boundary"]
+subgraph SYS["AI_Scanner - System Boundary"]
   direction TB
 
   %% client
-  C_UI[Browser UI (index.html + JS)]
+  C_UI["Browser UI (HTML/JS)"]
 
   %% app/runtime
-  C_API[FastAPI Service (app.py)]
-  C_MOD[Python Modules (stylometry.py, pd_fingerprint.py)]
-  C_CFG[(config.json)]
-  C_LOG[(server.log)]
+  C_API["FastAPI Service (app.py)"]
+  C_MOD["Python Modules (stylometry.py, pd_fingerprint.py)"]
+  C_CFG[("config.json")]
+  C_LOG[("server.log")]
 
   %% model/storage
-  C_MODEL[(Model Weights)]
-  C_CENT[(model_centroids/)]
+  C_MODEL[("Model Weights")]
+  C_CENT[("model_centroids/")]
 end
 
 %% minimal relationships
@@ -37,6 +37,7 @@ C_MODEL --> C_CENT
 C_API --> C_CFG
 C_API --> C_LOG
 C_API --> LLM
-C_MODEL <---> GIT
+C_MODEL --> GIT
+GIT --> C_MODEL
 
 ```
