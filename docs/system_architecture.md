@@ -3,58 +3,70 @@
 High-level relational view showing how user actions propagate through the local client, backend service, and external APIs or runtime environments.
 
 ```mermaid
-flowchart TB
+flowchart LR
 
-  %% ---- LAYERS ----
-  subgraph U["User Environment"]
-    user["User"]
-    browser["Web Browser: index.html + JS"]
-  end
+%% ---------- ACTORS ----------
+subgraph ACTORS["Actors"]
+  U[End user]
+  OP[Operator / Admin]
+end
 
-  subgraph L["Local Runtime (Laptop / Dev Machine)"]
-    apiLocal["FastAPI Backend: app.py"]
-    pyModules["Python Modules: stylometry.py, pd_fingerprint.py"]
-    pdDir["(./pd_fingerprints/)"]
-    configFile["(config.json)"]
-    logs["(server.log)"]
-  end
+%% ---------- CLIENT ----------
+subgraph CLIENT["Client (user machine)"]
+  UI[Browser UI\nindex.html + JS]
+end
 
-  subgraph S["Server / Cloud Environment"]
-    ghRepo["GitHub Repository (main branch)"]
-    modelSrv["Local Model Weights / AI Engine"]
-    storage["(Local/Remote Volume: ./model_centroids/)"]
-  end
+%% ---------- ACCESS / EDGE (optional) ----------
+subgraph EDGE["Access / Edge"]
+  LB[Reverse proxy / load balancer]
+end
 
-  subgraph E["External / Optional Services"]
-    extAPI["Third-party APIs: HuggingFace, OpenAI, etc."]
-    clientSync["Git Pull / Push via CLI"]
-  end
+%% ---------- APPLICATION SERVICE ----------
+subgraph APP["Application service"]
+  API[FastAPI service\napp.py]
+  MODS[Modules\nstylometry.py\npd_fingerprint.py]
+  CFG[(config.json)]
+  LOG[(server.log)]
+end
 
-  %% ---- CONNECTIONS ----
-  user --> browser
-  browser -->|"HTTP POST /scan"| apiLocal
-  browser -->|"GET /config, /version"| apiLocal
-  apiLocal --> pyModules
-  pyModules --> modelSrv
-  pyModules --> pdDir
-  apiLocal --> configFile
-  apiLocal --> logs
-  apiLocal --> ghRepo
-  ghRepo <-->|git push/pull| clientSync
-  modelSrv --> storage
-  modelSrv --> extAPI
-  browser -->|"renders Explain Panel + PD Badge"| user
+%% ---------- MODEL / RUNTIME ----------
+subgraph MODEL["Model / AI engine"]
+  WEIGHTS[(Model weights)]
+  PD[(./pd_fingerprints/)]
+end
 
-  %% ---- STYLING ----
-  classDef user   fill:#f4f9ff,stroke:#1e70b8,color:#000,rx:8,ry:8
-  classDef local  fill:#fff4e6,stroke:#ffb84d,rx:8,ry:8
-  classDef server fill:#eef8f1,stroke:#37965d,rx:8,ry:8
-  classDef ext    fill:#f5f5f5,stroke:#999,rx:8,ry:8
+%% ---------- STORAGE ----------
+subgraph STORE["Storage"]
+  CENT[(./model_centroids/)]
+end
 
-  class user,browser user
-  class apiLocal,pyModules,pdDir,configFile,logs local
-  class ghRepo,modelSrv,storage server
-  class extAPI,clientSync ext
+%% ---------- EXTERNAL ----------
+subgraph EXT["External services"]
+  LLM[(HuggingFace / OpenAI)]
+  GIT[(GitHub repository\nmain branch)]
+end
+
+%% ---------- FLOWS ----------
+U  -- "HTTP GET/POST" --> UI
+UI -- "/scan, /config, /version" --> LB
+LB --> API
+
+API --> MODS
+MODS --> WEIGHTS
+MODS --> PD
+WEIGHTS --> CENT
+CENT --> API
+
+API --> LOG
+API --> CFG
+
+API --> UI
+UI  -- "renders Explain + PD badge" --> U
+
+OP  -- "git push/pull" --> GIT
+GIT --> WEIGHTS
+
+API --> LLM
 
 
 ```
