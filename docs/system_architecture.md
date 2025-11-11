@@ -6,26 +6,26 @@ High-level relational view showing how user actions propagate through the local 
 flowchart TB
   %% ---- LAYERS ----
   subgraph U["User Environment"]
-    user[🧑 User]
-    browser[🌐 Web Browser (index.html + JS)]
+    user[User]
+    browser[Web Browser: index.html + JS]
   end
 
   subgraph L["Local Runtime (Laptop / Dev Machine)"]
-    apiLocal[⚙️ FastAPI Backend (app.py)]
-    pyModules[📦 Python Modules (stylometry.py, pd_fingerprint.py, etc.)]
+    apiLocal[FastAPI Backend: app.py]
+    pyModules[Python Modules: stylometry.py, pd_fingerprint.py]
     pdDir[(./pd_fingerprints/)]
     configFile[(config.json)]
     logs[(server.log)]
   end
 
   subgraph S["Server / Cloud Environment"]
-    ghRepo[💾 GitHub Repository (main branch)]
-    modelSrv[🧠 Local Model Weights / AI Engine]
+    ghRepo[GitHub Repository (main branch)]
+    modelSrv[Local Model Weights / AI Engine]
     storage[(Local/Remote Volume: ./model_centroids/)]
   end
 
   subgraph E["External / Optional Services"]
-    extAPI[(3rd-party APIs: HuggingFace, OpenAI, etc.)]
+    extAPI[(Third-party APIs: HuggingFace, OpenAI, etc.)]
     clientSync[(Git Pull / Push via CLI)]
   end
 
@@ -43,6 +43,7 @@ flowchart TB
   modelSrv --> storage
   modelSrv --> extAPI
   browser -->|"renders Explain Panel + PD Badge"| user
+
 
   %% add to bottom of diagram
   classDef user fill:#f4f9ff,stroke:#1e70b8,color:#000,rx:8,ry:8;
