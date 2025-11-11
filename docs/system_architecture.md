@@ -1,43 +1,49 @@
-# CopyCat / AI_Scanner — System Architecture Overview (v0.3.3)
+# CopyCat / AI_Scanner — Boundary Diagram (v0.3.3)
 
-High-level relational view showing how user actions propagate through the local client, backend service, and external APIs or runtime environments.
+_A single, readable boundary view showing what’s inside the product and the minimal data path._
 
 ```mermaid
+%% Plain Mermaid for GitHub; no custom colors or classes
 flowchart TB
 
-%% externals (outside the boundary)
-USER(["User"])
-LLM(["LLM APIs"])
-GIT(["GitHub"])
+%% Actor outside the boundary
+USER[(User)]
 
-%% system boundary
-subgraph SYS["AI_Scanner - System Boundary"]
+%% ---------- System Boundary ----------
+subgraph SYS[AI_Scanner — System Boundary]
   direction TB
 
-  %% client
-  C_UI["Browser UI (HTML/JS)"]
+  %% Local runtime / client machine
+  subgraph L[Local Runtime (Laptop / Dev Machine)]
+    direction TB
+    UI[Browser UI — index.html + JS]
+    API[FastAPI Service — app.py]
+    MOD[Python Modules — stylometry.py / pd_fingerprint.py]
+    CFG[(config.json)]
+    LOG[(server.log)]
+  end
 
-  %% app/runtime
-  C_API["FastAPI Service (app.py)"]
-  C_MOD["Python Modules (stylometry.py, pd_fingerprint.py)"]
-  C_CFG[("config.json")]
-  C_LOG[("server.log")]
+  %% Server / cloud holdings (artifacts & repo)
+  subgraph S[Server / Cloud]
+    direction TB
+    MODEL[(Model Weights)]
+    CENTROIDS[(model_centroids/)]
+    REPO[(GitHub repo)]
+  end
 
-  %% model/storage
-  C_MODEL[("Model Weights")]
-  C_CENT[("model_centroids/")]
+  %% External/optional services
+  subgraph X[External / Optional Services]
+    direction TB
+    LLM[(LLM APIs)]
+  end
 end
-
-%% minimal relationships
-USER --> C_UI
-C_UI --> C_API
-C_API --> C_MOD
-C_MOD --> C_MODEL
-C_MODEL --> C_CENT
-C_API --> C_CFG
-C_API --> C_LOG
-C_API --> LLM
-C_MODEL --> GIT
-GIT --> C_MODEL
-
-```
+%% ---------- Minimal flow ----------
+USER --> UI
+UI   --> API
+API  --> MOD
+MOD  --> MODEL
+MODEL --> CENTROIDS
+API  --> CFG
+API  --> LOG
+API  --> LLM
+MODEL <--> REPO
