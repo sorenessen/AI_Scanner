@@ -103,6 +103,11 @@ python -m venv .venv
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
+### Public-domain (PD) fingerprint centroids
+If you want PD overlap (Jaccard) to display, drop centroid JSON files into `./pd_fingerprints/` and restart the server.
+On boot, the backend reports the count in `/version` as `fingerprint_centroids`. If zero, the UI shows “PD: none”
+and the Explain panel includes a note that PD overlap will be “—”.
+
 
 The first run will also download the open-source model weights  
 (`EleutherAI/gpt-neo-1.3B`, ~800MB).
