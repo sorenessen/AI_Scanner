@@ -55,4 +55,5 @@ flowchart TB
   class apiLocal,pyModules,pdDir,configFile,logs local
   class ghRepo,modelSrv,storage server
   class extAPI,clientSync ext
+  
 ```
