@@ -1,3 +1,17 @@
+## v0.3.4 — Live Verification polish
+
+**UI**
+- Live sample HUD shows timer, token %, and rough match % while typing.
+- “Start Live Sample (90s)” resets progress bar/text; finalization path is smoother.
+- “Finalize” stays disabled until a live sample has started; auto-finalize fires after compute.
+
+**Docs**
+- Added a single-page **System Boundary** diagram (`docs/system_architecture.md`).
+- Kept the **Algorithm Overview** diagram (`docs/algorithm.md`) and linked both from README.
+
+**Tech**
+- `/version` string bumped to `v0.3.4`.
+
 # Changelog
 
 ## v0.3.0 — Fingerprint + Semantic Drift (2025-11-10)

@@ -298,3 +298,9 @@ You’re in. Paste text, click **Scan**, and review your results and reports.
 
 Made with ❤️ by Soren Essen  
 Powered by **FastAPI**, **Transformers**, and **Calypso Labs**.
+
+## Diagrams
+
+- **System Boundary (v0.3.4):** `docs/system_architecture.md` — one-page boundary view (user outside; UI, service, modules, stores inside).
+- **Algorithm Overview:** `docs/algorithm.md` — high-level pipeline + live verification.
+
