@@ -1,4 +1,4 @@
-🧭 CopyCat Release Workflow
+# 🧭 CopyCat Release Workflow
 
 This document standardizes how to version, tag, and publish new releases of CopyCat (AI_Scanner).
 It covers feature branching, tagging, release note generation, and publishing to GitHub.
