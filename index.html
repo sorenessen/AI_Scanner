@@ -484,6 +484,42 @@ function setExportEnabled(on){
   if(d) d.disabled = !on;
 }
 
+/* Drift Diagnostics */
+async function driftAnalyze(text){
+  const r = await fetch("/drift/analyze", {
+    method:"POST", headers:{ "content-type":"application/json" },
+    body: JSON.stringify({ text })
+  });
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function driftCompare(a, b){
+  const r = await fetch("/drift/compare", {
+    method:"POST", headers:{ "content-type":"application/json" },
+    body: JSON.stringify({ a, b })
+  });
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// Example render (stick this where you show scan extras)
+async function showDriftForCurrent(){
+  const text = document.querySelector("#text")?.value || "";
+  if(!text.trim()){ alert("Paste text first."); return; }
+  const j = await driftAnalyze(text);
+  const el = document.getElementById("liveResult") || document.body;
+  el.innerHTML =
+    `<div class="kv" style="margin-top:8px">
+       <div>Paragraphs</div><div class="mono">${j.paragraphs}</div>
+       <div>Avg adj. sim</div><div class="mono">${j.avg_adjacent_sim}</div>
+       <div>Std adj. sim</div><div class="mono">${j.std_adjacent_sim}</div>
+       <div>Risk</div><div class="mono">${j.risk}</div>
+       <div>Score (human-like)</div><div class="mono">${j.score}</div>
+     </div>`;
+}
+
+
 /* Toggle help on click (outside click / Esc closes) */
 document.addEventListener("click", (e)=>{
   const dot = e.target.closest(".help-dot");
