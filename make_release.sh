@@ -1,77 +1,158 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 3 ]; then
-  echo "Usage: $0 VERSION \"Title\" PREV_TAG" >&2
-  echo "Example: $0 0.3.6 \"Drift diagnostics API + endpoints\" v0.3.5" >&2
+if [[ $# -lt 2 ]]; then
+  echo "Usage: $0 NEW_VERSION \"Title\" [PREV_VERSION]" >&2
   exit 1
 fi
 
-VERSION="$1"          # e.g. 0.3.6
-TITLE="$2"            # e.g. "Drift diagnostics API + endpoints"
-PREV_TAG="$3"         # e.g. v0.3.5
-TAG="v$VERSION"       # v0.3.6
-DATE=$(date +%Y-%m-%d)
-OUT="RELEASE_NOTES_v$VERSION.md"
+NEW_VER="$1"              # e.g. 0.3.7
+TITLE="$2"                # e.g. "Drift diagnostics UI + live compare polish"
+PREV_VER="${3:-}"         # e.g. 0.3.6 (optional)
+DATE_STR="$(date +%Y-%m-%d)"
 
-# Collect commits between previous tag and HEAD
-COMMITS=$(git log --pretty='- %h %s (%an)' "$PREV_TAG"..HEAD)
+if [[ -n "$PREV_VER" ]]; then
+  RANGE_TAG="v${PREV_VER}..HEAD"
+  PREV_LABEL="v${PREV_VER}"
+else
+  RANGE_TAG="HEAD~15..HEAD"
+  PREV_LABEL="HEAD~15"
+fi
 
-cat > "$OUT" <<EOF
-# CopyCat $TAG — $TITLE
+COMMITS_RAW="$(git log --no-merges --pretty='%h||%s' "$RANGE_TAG" || true)"
 
-## Overview
+if [[ -z "$COMMITS_RAW" ]]; then
+  echo "No commits found in range ${RANGE_TAG}. Check your tags / arguments." >&2
+  exit 1
+fi
 
-Short summary (2–3 sentences) of what this release focuses on: key UX or backend goals, user impact, and stability outcomes.
+UI_COMMITS=()
+API_COMMITS=()
+DOC_COMMITS=()
+OTHER_COMMITS=()
+ALL_COMMITS=()
 
-## Highlights
+lc() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 
-### UI / UX
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  sha="${line%%||*}"
+  msg="${line#*||}"
+  msg_trim="${msg#"${msg%%[![:space:]]*}"}"
+  msg_lc="$(lc "$msg_trim")"
 
-- ...
+  ALL_COMMITS+=("$sha||$msg_trim")
 
-### Backend / API
+  bucket="other"
 
-- ...
+  # ignore boring chore/version in highlights; still show in "What's Changed"
+  if [[ "$msg_lc" =~ ^(chore|bump|release|version) ]]; then
+    bucket="other"
+  fi
 
-### Docs / Ops
+  if   [[ "$msg_lc" =~ (ui|ux|tooltip|button|drawer|layout|css|frontend|index\.html|live verification|drift diagnostics ui) ]]; then
+    bucket="ui"
+  elif [[ "$msg_lc" =~ (api|endpoint|/scan|/drift|backend|server|handler|app\.py|fastapi|config|runtime) ]]; then
+    bucket="api"
+  elif [[ "$msg_lc" =~ (doc|readme|changelog|notes|ops|pipeline|ci|github actions) ]]; then
+    bucket="docs"
+  fi
 
-- CHANGELOG / README updated.
-- Runtime config docs updated as needed.
+  case "$bucket" in
+    ui)   UI_COMMITS+=("🎨 ${msg_trim} (\`${sha}\`)") ;;
+    api)  API_COMMITS+=("🧠 ${msg_trim} (\`${sha}\`)") ;;
+    docs) DOC_COMMITS+=("📚 ${msg_trim} (\`${sha}\`)") ;;
+    *)    OTHER_COMMITS+=("🧩 ${msg_trim} (\`${sha}\`)") ;;
+  esac
+done <<< "$COMMITS_RAW"
 
-## Verification Checklist
+COMMIT_COUNT="${#ALL_COMMITS[@]}"
+OUT_FILE="release-notes-v${NEW_VER}.md"
 
-- [x] Scan → Result → Explain toggle works
-- [x] Live Verification + Finalize stable (≥60 words)
-- [x] Copy Summary + Download .txt gated until Finalize
-- [x] /version shows correct fields (version/model/device/dtype/mode/ensemble/fingerprint_centroids)
-- [x] No console/backend errors
+{
+  echo "## Overview"
+  echo
+  echo "**Focus:** ${TITLE}  "
+  echo "**Range:** \`${PREV_LABEL}\` → \`HEAD\`  "
+  echo "**Commits:** ${COMMIT_COUNT}"
+  echo
 
-## Technical Details
+  echo "## Highlights"
+  echo
 
-### Endpoints Updated / Added
+  echo "### UI / UX"
+  if (( ${#UI_COMMITS[@]} == 0 )); then
+    echo "- (no user-facing UI changes detected in this release)"
+  else
+    for c in "${UI_COMMITS[@]}"; do
+      echo "- $c"
+    done
+  fi
+  echo
 
-- ...
+  echo "### Backend / API"
+  if (( ${#API_COMMITS[@]} == 0 )); then
+    echo "- (no external API changes; internal logic only)"
+  else
+    for c in "${API_COMMITS[@]}"; do
+      echo "- $c"
+    done
+  fi
+  echo
 
-### Deprecated / Removed
+  echo "### Docs / Ops"
+  if (( ${#DOC_COMMITS[@]} == 0 )); then
+    echo "- (no docs / ops changes recorded for this range)"
+  else
+    for c in "${DOC_COMMITS[@]}"; do
+      echo "- $c"
+    done
+  fi
+  echo
 
-- _None._  <!-- update if needed -->
+  if (( ${#OTHER_COMMITS[@]} > 0 )); then
+    echo "### Other"
+    for c in "${OTHER_COMMITS[@]}"; do
+      echo "- $c"
+    done
+    echo
+  fi
 
-## Meta
+  echo "## Verification Checklist"
+  echo
+  echo "- [x] Scan → Result → Explain toggle works (where present)"
+  echo "- [x] Live Verification + Finalize stable (≥60 words)"
+  echo "- [x] Copy Summary + Download .txt gated until Finalize"
+  echo "- [x] /version shows correct fields (version/model/device/dtype/mode/ensemble/fingerprint_centroids)"
+  echo "- [x] No console / backend errors in common flows"
+  echo
 
-- Date: $DATE
-- Tag: $TAG
-- Branch: main
-- Commit Range: $PREV_TAG..HEAD
+  echo "<details>"
+  echo "<summary><strong>Technical Details</strong></summary>"
+  echo
+  echo "- Date: ${DATE_STR}"
+  echo "- Tag: \`v${NEW_VER}\`"
+  echo "- Branch: \`main\`"
+  echo "- Commit range: \`${RANGE_TAG}\`"
+  echo
+  echo "</details>"
+  echo
 
-## What's Changed
+  echo "<details>"
+  echo "<summary><strong>What's Changed (commits)</strong></summary>"
+  echo
+  for c in "${ALL_COMMITS[@]}"; do
+    sha="${c%%||*}"
+    msg="${c#*||}"
+    echo "- \`${sha}\` — ${msg}"
+  done
+  echo
+  echo "</details>"
+  echo
 
-$COMMITS
+  echo "## Contributors"
+  echo
+  echo "- @sorenessen"
+} > "$OUT_FILE"
 
-## Contributors
-
-- @sorenessen
-
-EOF
-
-echo "Wrote $OUT"
+echo "Wrote ${OUT_FILE}"
