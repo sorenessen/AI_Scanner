@@ -72,7 +72,7 @@ def stylometric_fingerprint(text: str, token_logps: List[float]) -> Dict[str, fl
             "punct_entropy":float(punct_entropy)}
 
 # -------------------- Config (env defaults) --------------------
-VERSION = "0.3.5"  # adds /config runtime settings
+VERSION = "0.3.6"  # adds /config runtime settings
 
 MODEL_NAME = os.getenv("REF_MODEL", "EleutherAI/gpt-neo-1.3B")
 SECOND_MODEL_ENV = os.getenv("SECOND_MODEL", "distilgpt2")  # optional
@@ -215,6 +215,14 @@ class ScanIn(BaseModel):
     text: str
     tag: Optional[str] = None
     mode: Optional[str] = None  # optionally override for a single call
+
+# Drift diagnostics I/O
+class DriftIn(BaseModel):
+    text: str
+
+class DriftCompareIn(BaseModel):
+    a: str
+    b: str
 
 # -------------------- Core scoring helpers (model-agnostic) --------------------
 def scan_chunk_with(model_obj, tok, input_ids: torch.Tensor) -> Dict:
@@ -757,48 +765,54 @@ def _cosine_dict(a: Dict[str, int], b: Dict[str, int]) -> float:
     return max(0.0, min(1.0, s))
 
 def compute_semantic_drift(text: str) -> Dict:
+    """Paragraph-to-paragraph drift. Returns series for UI diagnostics."""
     paras = _paragraphs(text)
     if len(paras) <= 1:
-        # shim for short inputs
         return {
             "available": False,
             "reason": "single_paragraph",
+            "paragraphs": len(paras),
             "avg_adjacent_sim": 1.0,
             "std_adjacent_sim": 0.0,
+            "adjacent_sim_series": [],
             "low_drops": [],
             "risk": 0.5,
+            "score": 0.5,
         }
 
     vecs = _bow_embed(paras)
-    sims = [_cosine_dict(a,b) for a,b in zip(vecs, vecs[1:])]
-    avg = sum(sims)/len(sims)
-    var = sum((s-avg)*(s-avg) for s in sims)/len(sims)
+    sims = [_cosine_dict(a, b) for a, b in zip(vecs, vecs[1:])]
+    avg = sum(sims) / len(sims)
+    var = sum((s - avg) * (s - avg) for s in sims) / len(sims)
     std = math.sqrt(var)
 
-    # flag large downward jumps
     drops = []
     for i in range(1, len(sims)):
-        delta = sims[i] - sims[i-1]
-        if delta < -0.35:  # abrupt shift
-            drops.append({"at_paragraph": i+1, "delta": round(float(delta),3)})
+        delta = sims[i] - sims[i - 1]
+        if delta < -0.35:
+            drops.append({"at_paragraph": i + 1, "delta": round(float(delta), 3)})
 
-    # risk heuristic: too-flat (AI-ish) OR many big drops (incoherent)
-    flat_penalty = 1.0 - min(1.0, std/0.18)         # std <~0.18 is suspiciously uniform
-    jump_penalty = min(1.0, len(drops)*0.25)        # many big drops also suspicious
-    # Lower risk is better (human); convert to human-style score later if needed
-    risk = _clamp(0.5*flat_penalty + 0.5*jump_penalty, 0.0, 1.0)
-
-    # normalize to a 0..1 "human-like" score for consistency with other signals
+    flat_penalty = 1.0 - min(1.0, std / 0.18)   # flatter = more AI-ish
+    jump_penalty = min(1.0, len(drops) * 0.25)  # many big drops = incoherent
+    risk = _clamp(0.5 * flat_penalty + 0.5 * jump_penalty, 0.0, 1.0)
     human_score = 1.0 - risk
 
     return {
         "available": True,
-        "avg_adjacent_sim": round(float(avg),3),
-        "std_adjacent_sim": round(float(std),3),
+        "paragraphs": len(paras),
+        "avg_adjacent_sim": round(float(avg), 3),
+        "std_adjacent_sim": round(float(std), 3),
+        "adjacent_sim_series": [round(float(x), 3) for x in sims],  # len = paragraphs-1
         "low_drops": drops,
-        "risk": round(float(risk),3),
-        "score": round(float(human_score),3)
+        "risk": round(float(risk), 3),
+        "score": round(float(human_score), 3),
     }
+
+def _global_bow_sim(a_text: str, b_text: str) -> float:
+    """One-shot cosine sim between full texts using bag-of-words."""
+    va = _bow_embed([a_text])[0] if a_text.strip() else {}
+    vb = _bow_embed([b_text])[0] if b_text.strip() else {}
+    return round(_cosine_dict(va, vb), 4)
 
 
 # -------------------- Helpers used in /scan --------------------
@@ -1478,6 +1492,26 @@ def auth_sample_finalize(inp: SampleFinalizeIn):
         "explanation": note,
         "details": cmpd
     }
+
+# -------------------- Drift Diagnostics API (v0.3.6) --------------------
+@app.post("/drift/analyze")
+def drift_analyze(inp: DriftIn):
+    t = (inp.text or "").strip()
+    if not t:
+        raise HTTPException(status_code=400, detail="text is empty")
+    return compute_semantic_drift(t)
+
+@app.post("/drift/compare")
+def drift_compare(inp: DriftCompareIn):
+    a = (inp.a or "").strip()
+    b = (inp.b or "").strip()
+    if not a or not b:
+        raise HTTPException(status_code=400, detail="both a and b are required")
+    da = compute_semantic_drift(a)
+    db = compute_semantic_drift(b)
+    sim = _global_bow_sim(a, b)
+    return {"a": da, "b": db, "global_bow_similarity": sim}
+
 
 # -------------------- Demo route --------------------
 DEMO_TEXTS = [
