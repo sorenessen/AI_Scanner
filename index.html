@@ -299,6 +299,13 @@
               <div>Semantic discontinuity</div><div id="ns_sem" class="right mono">—</div>
             </div>
           </div>
+
+          <!-- Drift Diagnostics goes HERE, between these and Raw JSON -->
+          <div id="driftBox" class="card" style="margin-top:12px; padding:12px; display:none">
+            <div class="muted">Drift diagnostics</div>
+            <div id="driftContent" class="kv" style="margin-top:8px"></div>
+          </div>
+
           <details id="rawJsonBox" style="margin-top:8px">
             <summary>Raw /scan JSON</summary>
             <pre id="rawDump" style="white-space:pre-wrap; font-size:12px"></pre>
@@ -687,6 +694,49 @@ function renderExplain(explain, fullJson){
   }
 }
 
+function renderDrift(j) {
+  const box = document.getElementById("driftBox");
+  const content = document.getElementById("driftContent");
+  if (!box || !content) return;
+
+  // No data or explicit "not available" → hide card
+  if (!j) {
+    box.style.display = "none";
+    content.innerHTML = "";
+    return;
+  }
+
+  const safeNum = (v, d = 3) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(d) : "—";
+  };
+
+  // If backend says drift isn't available (e.g., single paragraph)
+  if (j.available === false) {
+    box.style.display = "block";
+    content.innerHTML = `
+      <div>Paragraphs</div><div class="mono">${j.paragraphs ?? "—"}</div>
+      <div>Status</div><div class="mono">
+        ${j.reason === "single_paragraph"
+          ? "Need at least two paragraphs to measure semantic drift."
+          : (j.reason || "Drift diagnostics not available.")}
+      </div>
+    `;
+    return;
+  }
+
+  // Normal case: full drift stats
+  box.style.display = "block";
+  content.innerHTML = `
+    <div>Paragraphs</div><div class="mono">${j.paragraphs ?? "—"}</div>
+    <div>Avg adjacent similarity</div><div class="mono">${safeNum(j.avg_adjacent_sim, 3)}</div>
+    <div>Std adjacent similarity</div><div class="mono">${safeNum(j.std_adjacent_sim, 3)}</div>
+    <div>Risk</div><div class="mono">${safeNum(j.risk, 3)}</div>
+    <div>Score (human-like)</div><div class="mono">${safeNum(j.score, 3)}</div>
+  `;
+}
+
+
 // also make the /scan raw-dump close safe (if your code has this line elsewhere):
 const rawBoxEl = document.getElementById("rawJsonBox");
 if (rawBoxEl && typeof rawBoxEl.removeAttribute === "function"){
@@ -756,6 +806,15 @@ async function runScan(){
     lastScanResult = r;
 
     renderExplain(r.explain, r);
+
+    // v0.3.7 — Drift diagnostics UI
+    try {
+      const drift = await driftAnalyze(text);
+      renderDrift(drift);
+    } catch (e) {
+      console.warn("Drift diagnostics failed:", e);
+      renderDrift(null);
+    }
 
     const rawBox = document.getElementById("rawDump");
     if (rawBox) rawBox.textContent = JSON.stringify(r, null, 2);
@@ -1048,7 +1107,14 @@ $("#btnClear").addEventListener("click", ()=>{
   setExportEnabled(false);
   lastExportText = "";
   setMsg("exportStatus","");
+
+  // v0.3.7 — reset drift UI
+  const driftBox = document.getElementById("driftBox");
+  const driftContent = document.getElementById("driftContent");
+  if (driftBox) driftBox.style.display = "none";
+  if (driftContent) driftContent.innerHTML = "";
 });
+
 $("#btnSave").addEventListener("click", saveConfig);
 $("#btnReset").addEventListener("click", ()=>location.reload());
 $("#btnStartLive").addEventListener("click", startLive);
