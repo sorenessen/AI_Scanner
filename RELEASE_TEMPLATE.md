@@ -1,94 +1,80 @@
-# 🧩 CopyCat Release Template
-
-## 🚀 Version + Codename
-`CopyCat vX.X.X — <Short Codename>`  
-*(Example: “v0.3.6 — Drift Diagnostics + UX Alignment”)*
-
----
+# CopyCat {{VERSION}} — {{TITLE}}
 
 ## 🧭 Overview
-> Brief summary (2–3 sentences) of what this release focuses on — major UX or backend goals, user impact, and stability outcomes.
+{{OVERVIEW}}
+
+Provide a high-level summary (2–4 sentences) of what this release focuses on.  
+Examples: new backend capabilities, UI improvements, calibration fixes, stability improvements, etc.
 
 ---
 
 ## ✨ Highlights
 
 ### 🖥️ UI / UX
-- **[Feature Name]:** Describe what changed and why it matters.  
-- **[Feature Name]:** Another highlight with a short explanation.  
-- (Add 2–6 bullets total)
+- {{UI_FEATURE_1}}
+- {{UI_FEATURE_2}}
+- {{UI_FEATURE_3}}
 
 ### ⚙️ Backend / API
-- **[Endpoint or Module]:** Describe what was added or refined.  
-- **[Logic]:** Note new safeguards, caps, or calculation changes.  
-- **[Performance]:** Mention optimizations or model-handling updates.
+- {{API_CHANGE_1}}
+- {{API_CHANGE_2}}
+- {{API_CHANGE_3}}
 
 ### 🧾 Docs / Ops
-- **CHANGELOG / README:** Updated version and endpoints list.  
-- **Diagrams:** Added or refreshed for clarity.  
-- **Runtime Config:** Mention new env vars, feature toggles, or CLI switches.
+- Updated CHANGELOG / README where applicable
+- New or modified runtime config / env vars documented
+- Added release scripts or developer workflow updates
 
 ---
 
 ## 🧪 Verification Checklist
-✅ Scan → Result → Explain toggle works  
-✅ Live Verification and Finalize stable  
-✅ Copy Summary + Download .txt gated correctly  
-✅ /version shows correct version & mode  
-✅ No console or backend errors  
+
+- ✅ Scan → Result → Explain toggle works
+- ✅ Live Verification drawer behaves correctly (Finalize ≥60 words)
+- ✅ Export buttons (Copy Summary / Download .txt) are properly gated
+- ✅ `/version` returns correct metadata (version/model/device/dtype/mode/ensemble/fingerprint_centroids)
+- ✅ No JS console errors
+- ✅ No backend tracebacks
 
 ---
 
 ## 🧩 Technical Details
-**Endpoints Updated / Added**
-- `/version`: Now includes `<fields>`
-- `/auth/sample/*`: (Describe any flow changes)
 
-**Deprecated / Removed**
-- (List if applicable)
+### Endpoints Added / Updated
+- {{ENDPOINT_1}}
+- {{ENDPOINT_2}}
+- {{ENDPOINT_3}}
+
+### Compatibility Notes
+- Backward compatible with all v0.3.x clients unless explicitly noted.
+- No breaking API changes unless specified below.
+
+### Deprecated / Removed
+- {{DEPRECATED_OR_REMOVED}}
 
 ---
 
 ## 🧾 Meta
-**Tag:** `vX.X.X`  
-**Branch:** `feat/X.X.X-<short-name>`  
-**Merged Into:** `main`  
-**Commit Range:** `[hash]...HEAD`  
+
+- **Date:** {{DATE}}
+- **Tag:** {{TAG}}
+- **Branch:** {{BRANCH}}
+- **Commit Range:** {{COMMIT_RANGE}}
 
 ---
 
 ## 🔍 What’s Changed
-- `docs(vX.X.X): <short summary>` — by @sorenessen in #<PR>
-- (Autofilled by GitHub)
+{{GIT_COMMITS}}
 
-**Full Changelog:** [`v(X-1).X...vX.X.X`](#)
+Full Changelog: `{{PREV_TAG}}...{{TAG}}`
 
 ---
 
 ## 👥 Contributors
-- @sorenessen  
-- (Add any others here)
+{{CONTRIBUTORS}}
 
 ---
 
 ## 📦 Assets
-- Source code (zip)  
+- Source code (zip)
 - Source code (tar.gz)
-
----
-
-### 📜 Notes
-> Optional: include backward-compatibility or upgrade notes here (e.g., “Requires new env var,” “/config schema updated,” etc.)
-
---- 
-
-### Manual Updates for Release Notes - useful commands only if not updating automatically
-
-- cp RELEASE_TEMPLATE.md RELEASE_NOTES_vX.X.X.md
-
-## Edit the Placeholders and Push - EXAMPLE
-- git add RELEASE_NOTES_v0.3.6.md
-- git commit -m "docs(v0.3.6): release notes"
-- git push
-
-
