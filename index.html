@@ -271,6 +271,8 @@
           <div>Burstiness</div><div id="burst" class="right mono">—</div>
           <div>Category</div><div id="category" class="right mono">—</div>
           <div>Model</div><div id="modelName" class="right mono">—</div>
+          <div>LLM fingerprint</div><div id="fpLabel" class="right mono">—</div>
+          <div>Fingerprint band</div><div id="fpBand" class="right mono">—</div>
           <div>Mode</div><div id="modeEcho" class="right mono">—</div>
           <div>PD overlap J</div><div id="pdj" class="right mono">—</div>
           <div>Tag</div><div id="tagEcho" class="right mono">—</div>
@@ -300,10 +302,26 @@
             </div>
           </div>
 
+          <div id="fpBox" class="card" style="padding:12px; display:none">
+            <div class="muted">LLM fingerprint (experimental)</div>
+            <div class="kv">
+              <div>Top style</div><div id="fpTop" class="right mono">—</div>
+              <div>Band</div><div id="fpBandCard" class="right mono">—</div>
+              <div>Drift / PD</div><div id="fpSpread" class="right mono">—</div>
+              <div>Notes</div><div id="fpNotes" class="right muted">—</div>
+            </div>
+          </div>
+
           <!-- Drift Diagnostics goes HERE, between these and Raw JSON -->
           <div id="driftBox" class="card" style="margin-top:12px; padding:12px; display:none">
             <div class="muted">Drift diagnostics</div>
             <div id="driftContent" class="kv" style="margin-top:8px"></div>
+          </div>
+
+          <!-- LLM Fingerprint -->
+          <div id="llmBox" class="card" style="margin-top:12px; padding:12px; display:none">
+            <div class="muted">LLM fingerprint (experimental)</div>
+            <div id="llmContent" class="kv" style="margin-top:8px"></div>
           </div>
 
           <details id="rawJsonBox" style="margin-top:8px">
@@ -736,6 +754,154 @@ function renderDrift(j) {
   `;
 }
 
+function renderFingerprint(r) {
+  const box     = document.getElementById("fpBox");
+  const labelEl = document.getElementById("fpLabel");
+  const bandEl  = document.getElementById("fpBand");
+  const bandCardEl = document.getElementById("fpBandCard");
+  const topEl   = document.getElementById("fpTop");
+  const spreadEl= document.getElementById("fpSpread");
+  const notesEl = document.getElementById("fpNotes");
+
+  if (!box) return;
+
+  // Prefer a dedicated fingerprint object if backend adds one later.
+  const fp = (r && (r.fingerprint || r.llm_fingerprint)) || {};
+  const teacher = (r && r.explain && r.explain.teacher_report) || {};
+
+  // Label: explicit fingerprint label → teacher nearest_style → empty
+  const label =
+    fp.label ||
+    teacher.nearest_style ||
+    "";
+
+  // If we truly have nothing, hide the card & clear fields
+  if (!label) {
+    box.style.display = "none";
+    if (labelEl) labelEl.textContent = "—";
+    if (bandEl)  bandEl.textContent  = "—";
+    if (bandCardEl) bandCardEl.textContent = "—";
+    if (topEl)   topEl.textContent   = "—";
+    if (spreadEl)spreadEl.textContent= "—";
+    if (notesEl) notesEl.textContent = "Fingerprint head not enabled on this server.";
+    return;
+  }
+
+  // Simple band from calibrated AI probability
+  const p = Number(r && r.calibrated_prob || 0);
+  let band;
+  if (p <= 0.35) band = "Human-leaning";
+  else if (p >= 0.65) band = "Model-leaning";
+  else band = "Mixed / inconclusive";
+
+  const drift = typeof teacher.drift_score === "number" ? teacher.drift_score : null;
+  const pdj   = typeof teacher.pd_overlap_j === "number" ? teacher.pd_overlap_j : null;
+
+  const driftTxt = drift != null ? `drift ${drift.toFixed(3)}` : "drift —";
+  const pdTxt    = pdj   != null ? `PD J ${pdj.toFixed(3)}`   : "PD J —";
+
+  if (labelEl) labelEl.textContent = label;
+  if (bandEl)  bandEl.textContent  = band;
+
+  if (topEl) topEl.textContent = label;
+  if (bandCardEl) bandCardEl.textContent = band;
+  if (spreadEl) spreadEl.textContent = `${driftTxt} • ${pdTxt}`;
+  if (notesEl) {
+    notesEl.textContent =
+      "Local centroid match only. Use as a soft hint about style family, not a definitive attribution.";
+  }
+
+  box.style.display = "block";
+}
+
+function renderLlmFingerprint(result) {
+  const box = document.getElementById("llmBox");
+  const content = document.getElementById("llmContent");
+  if (!box || !content) return;
+
+  // Try several likely shapes, but fail safe.
+  const fp =
+    result?.llm_fingerprint ||
+    result?.llm_fp ||
+    result?.fingerprints ||
+    null;
+
+  if (!fp) {
+    box.style.display = "none";
+    content.innerHTML = "";
+    return;
+  }
+
+  const safeNum = (v, d = 3) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(d) : "—";
+  };
+
+  const overall =
+    fp.overall ??
+    fp.score ??
+    fp.global_score ??
+    null;
+
+  const matches =
+    fp.top_matches ||
+    fp.matches ||
+    fp.top ||
+    [];
+
+  // If we still don't have anything meaningful, hide.
+  if (!overall && (!Array.isArray(matches) || matches.length === 0)) {
+    box.style.display = "none";
+    content.innerHTML = "";
+    return;
+  }
+
+  let html = "";
+
+  if (overall != null) {
+    html += `
+      <div>Overall match</div>
+      <div class="mono">${safeNum(overall, 3)}</div>
+    `;
+  }
+
+  if (Array.isArray(matches) && matches.length) {
+    // Take top 3 to keep it readable.
+    matches.slice(0, 3).forEach((m, idx) => {
+      const name =
+        m.name ||
+        m.label ||
+        m.model ||
+        `Candidate ${idx + 1}`;
+      const score =
+        m.score ??
+        m.similarity ??
+        m.prob ??
+        null;
+      html += `
+        <div>${idx === 0 ? "Top matches" : ""}</div>
+        <div class="mono">
+          ${name}${
+            score != null
+              ? ` — ${safeNum(score, 3)}`
+              : ""
+          }
+        </div>
+      `;
+    });
+  }
+
+  // Fallback if somehow it's still empty.
+  if (!html.trim()) {
+    box.style.display = "none";
+    content.innerHTML = "";
+    return;
+  }
+
+  content.innerHTML = html;
+  box.style.display = "block";
+}
+
 
 // also make the /scan raw-dump close safe (if your code has this line elsewhere):
 const rawBoxEl = document.getElementById("rawJsonBox");
@@ -806,6 +972,7 @@ async function runScan(){
     lastScanResult = r;
 
     renderExplain(r.explain, r);
+    renderFingerprint(r);
 
     // v0.3.7 — Drift diagnostics UI
     try {
@@ -816,7 +983,16 @@ async function runScan(){
       renderDrift(null);
     }
 
+    // v0.3.8 — LLM fingerprint UI (uses scan JSON only; no extra round trip)
+    try {
+      renderLlmFingerprint(r);
+    } catch (e) {
+      console.warn("LLM fingerprint render failed:", e);
+      renderLlmFingerprint(null);
+    }
+
     const rawBox = document.getElementById("rawDump");
+
     if (rawBox) rawBox.textContent = JSON.stringify(r, null, 2);
     document.getElementById("rawJsonBox")?.removeAttribute("open");
 
@@ -1036,7 +1212,7 @@ function downloadExportTxt(){
 async function loadVersion(){
   try{
     const v = await api("/version");
-    $("#version").textContent = `v${v.version || "0.3.5"} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
+    $("#version").textContent = `v${v.version || "0.3.8"} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
     $("#ensemBadge").textContent = v.ensemble ? "Ensemble: on" : "Ensemble: off";
     const pdn = Number(v.fingerprint_centroids ?? 0);
     const pd  = $("#pdBadge");
