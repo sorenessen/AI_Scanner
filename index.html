@@ -1212,7 +1212,7 @@ function downloadExportTxt(){
 async function loadVersion(){
   try{
     const v = await api("/version");
-    $("#version").textContent = `v${v.version || "0.3.5"} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
+    $("#version").textContent = `v${v.version || "0.3.7"} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
     $("#ensemBadge").textContent = v.ensemble ? "Ensemble: on" : "Ensemble: off";
     const pdn = Number(v.fingerprint_centroids ?? 0);
     const pd  = $("#pdBadge");
