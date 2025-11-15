@@ -108,9 +108,13 @@ body{
   .progress{height:10px;border-radius:6px;background:#2a3240;overflow:hidden}
   .progress>span{display:block;height:100%;width:0;background:#3b82f6;transition:width .25s}
 
-  #btnLive{position:relative}
-  #btnLive::after{content:'opens drawer at bottom'; position:absolute; left:100%; top:50%;
-    transform:translate(10px,-50%); font-size:.9em; color:var(--muted); white-space:nowrap;}
+/* Optional: hide the hint on very small screens */
+@media (max-width: 700px) {
+  #btnLive::after {
+    content: '';
+  }
+}
+
 
   .scale-wrap{display:flex;align-items:center;gap:10px}
   input[type="range"]{accent-color:#7eb4ff}
