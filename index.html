@@ -32,6 +32,22 @@ html,body{
   line-height:1.55;
 }
 
+#liveResizeHandle{
+  height:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:ns-resize;
+}
+#liveResizeHandle::before{
+  content:"";
+  width:46px;
+  height:4px;
+  border-radius:999px;
+  background:rgba(255,255,255,.25);
+}
+
+
 /* main shell now fills entire browser window */
 body{
   min-height:100vh;
@@ -92,16 +108,36 @@ body{
   .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
   .footer{margin-top:14px;color:var(--muted);font-size:.95em}
 
-  .drawer{position:fixed;left:0;right:0;bottom:0;background:var(--panel-2);
-    border-top:1px solid var(--border);transform:translateY(100%);transition:transform .25s ease;z-index:50}
-  .drawer.open{transform:translateY(0)}
-  .drawer-inner{
-  width:100%;
-  max-width:none;
-  margin:0;
-  padding:14px 16px;
-  box-sizing:border-box;
+.drawer{
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:0;
+  background:var(--panel-2);
+  border-top:1px solid var(--border);
+  transform:translateY(100%);
+  transition:transform .25s ease;
+  z-index:50;
+
+  /* NEW: fixed height & flex so inner content fits */
+  height:var(--live-h);
+  display:flex;
+  align-items:stretch;
 }
+
+.drawer.open{ transform:translateY(0); }
+
+.drawer-inner{
+  max-width:var(--wrap-max);
+  width:98vw;
+  margin:0 auto;
+  padding:8px 0 14px;
+
+  /* NEW: let content scroll inside drawer instead of growing it */
+  max-height:100%;
+  overflow:auto;
+}
+
 
   .split{display:grid;grid-template-columns: 1fr 400px; gap:18px}
   @media (max-width:1024px){ .split{grid-template-columns: 1fr} }
@@ -186,6 +222,7 @@ body{
   --tip-bg: rgba(248, 251, 255, 0.96);
   --tip-border: rgba(126, 180, 255, 0.45);
   --tip-text: #0f1630;
+  --live-h: 40vh;      /* default Live Verification height */
 }
 .help-dot > .tip{
   background: var(--tip-bg);
@@ -552,6 +589,9 @@ body{
 <!-- Live Verification Drawer -->
 <div id="liveDrawer" class="drawer" aria-hidden="true" role="dialog" aria-label="Live Verification drawer">
   <div class="drawer-inner">
+    <!-- NEW: resize handle -->
+  <div id="liveResizeHandle" aria-hidden="true"></div>
+  <!-- …rest of drawer… -->
     <div class="row" style="justify-content:space-between;align-items:center;padding:0 6px 8px">
       <h3 style="margin:0">Live Verification (CopyCat)</h3>
       <button id="btnCloseLive" class="btn ghost">Close</button>
@@ -721,6 +761,60 @@ const openLive = ()=>{ drawer.classList.add("open"); drawer.setAttribute("aria-h
 const closeLive = ()=>{ drawer.classList.remove("open"); drawer.setAttribute("aria-hidden","true"); };
 $("#btnLive").addEventListener("click", openLive);
 $("#btnCloseLive").addEventListener("click", closeLive);
+
+/* ---- Live drawer resize ---- */
+(function initLiveResize(){
+  const handle = $("#liveResizeHandle");
+  if (!handle) return;
+
+  let dragging = false;
+
+  // clamp + apply height (in px)
+  function setLiveHeight(px){
+    const min = 160;
+    const max = Math.max(260, window.innerHeight * 0.85);
+    const clamped = Math.min(max, Math.max(min, px));
+    document.documentElement.style.setProperty("--live-h", clamped + "px");
+  }
+
+  function onMove(e){
+    if (!dragging) return;
+    const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+    const h = window.innerHeight - clientY;   // distance from cursor to bottom
+    setLiveHeight(h);
+  }
+
+  function stopDrag(){
+    if (!dragging) return;
+    dragging = false;
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", stopDrag);
+    document.removeEventListener("touchmove", onMove);
+    document.removeEventListener("touchend", stopDrag);
+    document.removeEventListener("touchcancel", stopDrag);
+  }
+
+  function startDrag(e){
+    dragging = true;
+    e.preventDefault();
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", stopDrag);
+    document.addEventListener("touchmove", onMove, { passive:false });
+    document.addEventListener("touchend", stopDrag);
+    document.addEventListener("touchcancel", stopDrag);
+  }
+
+  handle.addEventListener("mousedown", startDrag);
+  handle.addEventListener("touchstart", startDrag, { passive:false });
+
+  // keep height sensible when the window resizes
+  window.addEventListener("resize", ()=>{
+    const h = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue("--live-h")) || (window.innerHeight * 0.4);
+    setLiveHeight(h);
+  });
+})();
+
 
 /* UI writers */
 function setProbFill(p){
