@@ -318,11 +318,29 @@
             <div id="driftContent" class="kv" style="margin-top:8px"></div>
           </div>
 
-          <!-- LLM Fingerprint -->
-          <div id="llmBox" class="card" style="margin-top:12px; padding:12px; display:none">
-            <div class="muted">LLM fingerprint (experimental)</div>
-            <div id="llmContent" class="kv" style="margin-top:8px"></div>
-          </div>
+         <!-- LLM Fingerprint -->
+<div id="llmBox" class="card" style="margin-top:12px; padding:12px; display:none">
+  <div class="row" style="justify-content:space-between; align-items:center; gap:10px;">
+    <div>
+      <div class="muted">LLM fingerprint (experimental)</div>
+      <div class="mono" style="margin-top:4px;">
+        Nearest: <span id="llmFamily">—</span>
+        • Conf: <span id="llmConf">—</span>
+        • Human score: <span id="llmHuman">—</span>
+      </div>
+    </div>
+    <span class="pill" id="llmBand">—</span>
+  </div>
+
+  <div style="margin-top:10px;">
+    <canvas id="llmCanvas" height="120" style="width:100%; max-width:480px; display:block;"></canvas>
+  </div>
+
+  <div id="llmLegend" class="mono muted" style="margin-top:6px; font-size:.9em;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
 
           <details id="rawJsonBox" style="margin-top:8px">
             <summary>Raw /scan JSON</summary>
@@ -815,93 +833,96 @@ function renderFingerprint(r) {
 }
 
 function renderLlmFingerprint(result) {
-  const box = document.getElementById("llmBox");
-  const content = document.getElementById("llmContent");
-  if (!box || !content) return;
+  const box      = document.getElementById("llmBox");
+  const famEl    = document.getElementById("llmFamily");
+  const confEl   = document.getElementById("llmConf");
+  const humanEl  = document.getElementById("llmHuman");
+  const bandEl   = document.getElementById("llmBand");
+  const legendEl = document.getElementById("llmLegend");
+  const canvas   = document.getElementById("llmCanvas");
 
-  // Try several likely shapes, but fail safe.
-  const fp =
-    result?.llm_fingerprint ||
-    result?.llm_fp ||
-    result?.fingerprints ||
-    null;
+  if (!box || !canvas) return;
+
+  // Try to find the fingerprint payload in a few common shapes
+  const fp = result?.llm_fingerprint || result?.llm_fp || result?.llmFingerprint || null;
 
   if (!fp) {
     box.style.display = "none";
-    content.innerHTML = "";
+    if (legendEl) legendEl.textContent = "";
+    if (famEl) famEl.textContent = "—";
+    if (confEl) confEl.textContent = "—";
+    if (humanEl) humanEl.textContent = "—";
+    if (bandEl) bandEl.textContent = "—";
     return;
   }
 
-  const safeNum = (v, d = 3) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n.toFixed(d) : "—";
-  };
+  const family = fp.nearest_family || fp.nearest || fp.family || "—";
+  const conf   = fp.confidence ?? fp.score ?? null;
+  const human  = fp.human_score ?? fp.human ?? null;
+  const dist   = fp.distribution || {};
 
-  const overall =
-    fp.overall ??
-    fp.score ??
-    fp.global_score ??
-    null;
+  const labels = Object.keys(dist);
+  const values = labels.map(k => Number(dist[k]) || 0);
 
-  const matches =
-    fp.top_matches ||
-    fp.matches ||
-    fp.top ||
-    [];
+  // Header line
+  if (famEl)   famEl.textContent  = family;
+  if (confEl)  confEl.textContent = conf != null ? (conf * 100).toFixed(1) + "%" : "—";
+  if (humanEl) humanEl.textContent = human != null ? (human * 100).toFixed(1) + "%" : "—";
 
-  // If we still don't have anything meaningful, hide.
-  if (!overall && (!Array.isArray(matches) || matches.length === 0)) {
-    box.style.display = "none";
-    content.innerHTML = "";
+  // Band pill: whichever bucket is largest
+  if (bandEl) {
+    if (labels.length) {
+      let topIdx = 0;
+      for (let i = 1; i < labels.length; i++) {
+        if (values[i] > values[topIdx]) topIdx = i;
+      }
+      bandEl.textContent = labels[topIdx];
+    } else {
+      bandEl.textContent = "—";
+    }
+  }
+
+  // Draw simple bar chart
+  const ctx = canvas.getContext("2d");
+  const w   = canvas.width  = canvas.clientWidth || 480;
+  const h   = canvas.height = 120;
+
+  ctx.clearRect(0, 0, w, h);
+
+  if (!labels.length) {
+    if (legendEl) legendEl.textContent = "Fingerprint available, but no distribution payload from server.";
+    box.style.display = "block";
     return;
   }
 
-  let html = "";
+  const max = Math.max(...values, 0.001);
+  const barW = w / (labels.length * 1.8);
+  const baseY = h - 22;
 
-  if (overall != null) {
-    html += `
-      <div>Overall match</div>
-      <div class="mono">${safeNum(overall, 3)}</div>
-    `;
+  labels.forEach((lab, i) => {
+    const v = values[i];
+    const x = (i + 0.5) * (w / labels.length) - barW / 2;
+    const bh = (v / max) * (h - 40);
+
+    // bar
+    ctx.fillStyle = "#3b82f6";
+    ctx.fillRect(x, baseY - bh, barW, bh);
+
+    // label
+    ctx.fillStyle = "#c4cbe3";
+    ctx.font = "10px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(lab.replace(/-.*/, ""), x + barW / 2, h - 6);
+  });
+
+  if (legendEl) {
+    legendEl.textContent =
+      "Relative style fingerprint scores across families: " +
+      labels.join(", ");
   }
 
-  if (Array.isArray(matches) && matches.length) {
-    // Take top 3 to keep it readable.
-    matches.slice(0, 3).forEach((m, idx) => {
-      const name =
-        m.name ||
-        m.label ||
-        m.model ||
-        `Candidate ${idx + 1}`;
-      const score =
-        m.score ??
-        m.similarity ??
-        m.prob ??
-        null;
-      html += `
-        <div>${idx === 0 ? "Top matches" : ""}</div>
-        <div class="mono">
-          ${name}${
-            score != null
-              ? ` — ${safeNum(score, 3)}`
-              : ""
-          }
-        </div>
-      `;
-    });
-  }
-
-  // Fallback if somehow it's still empty.
-  if (!html.trim()) {
-    box.style.display = "none";
-    content.innerHTML = "";
-    return;
-  }
-
-  content.innerHTML = html;
   box.style.display = "block";
 }
-
 
 // also make the /scan raw-dump close safe (if your code has this line elsewhere):
 const rawBoxEl = document.getElementById("rawJsonBox");
