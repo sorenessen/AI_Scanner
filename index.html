@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI Text Scanner — CopyCat</title>
 <style>
+
+  #demoPresetWrap{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    font-size:0.9em;
+  }
+
   :root{
     --bg:#0f1220; --panel:#181c2f; --muted:#c4cbe3; --text:#f1f4ff; --accent:#7eb4ff;
     --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a; --border:#2a3250; --panel-2:#13182b;
@@ -159,6 +168,7 @@
   .explain-list{ margin:.35rem 0 0 .9rem; }
   .explain-note{ opacity:.85; }
   #pdBadge{ margin-left: 8px; }
+
 </style>
 </head>
 <body>
@@ -200,13 +210,25 @@
         </div>
       </div>
 
-      <!-- Demo Mode Toggle -->
-      <div class="row" style="align-items:center; margin-bottom:10px;">
-        <label class="mono" style="font-size:0.9em;">
-          <input type="checkbox" id="demoToggle" style="margin-right:6px;">
+      <!-- Demo Mode Toggle + Presets -->
+      <div class="row" style="align-items:flex-start; margin-bottom:10px; gap:12px;">
+        <label class="mono" style="font-size:0.9em; display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="demoToggle">
           Demo mode (use preset curated samples)
         </label>
+
+        <div id="demoPresetWrap" class="muted">
+          <span style="font-size:0.85em;">Preset:</span>
+          <select id="demoPreset">
+            <option value="random">(random curated sample)</option>
+            <option value="news">News / op-ed</option>
+            <option value="story">Story / narrative</option>
+            <option value="essay">Student-style essay</option>
+            <option value="code">Short code snippet</option>
+          </select>
+        </div>
       </div>
+
 
 
       <label for="text">Text to scan</label>
@@ -1119,38 +1141,57 @@ function renderLiveCompare(userM, refM){
 /* ---------- Scan ---------- */
 async function runScan(){
   const demoOn = $("#demoToggle").checked;
+
+  // Whatever is in the textarea right now
   let text = $("#text").value.trim();
   const hadUserText = text.length > 0;
 
-  // Only auto-load a demo sample if:
-  // - Demo mode is on
-  // - AND the user hasn't typed/pasted anything yet
+  // If demo is on AND user hasn’t typed anything,
+  // pull from the selected preset instead of random.
   if (demoOn && !hadUserText) {
-    const keys = Object.keys(DEMO_SAMPLES);
-    const pick = keys[Math.floor(Math.random() * keys.length)];
-    text = DEMO_SAMPLES[pick];
-    $("#text").value = text; // show which sample we're using
+    const presetSel  = $("#demoPreset");
+    const presetKey  = presetSel ? presetSel.value : "random";
+
+    if (presetKey === "random") {
+      // Old behavior: random curated sample
+      const keys = Object.keys(DEMO_SAMPLES);
+      const pick = keys[Math.floor(Math.random() * keys.length)];
+      text = DEMO_SAMPLES[pick];
+    } else if (DEMO_SAMPLES[presetKey]) {
+      // Use the requested preset
+      text = DEMO_SAMPLES[presetKey];
+    } else {
+      // Safety fallback: still pick something valid
+      const keys = Object.keys(DEMO_SAMPLES);
+      const pick = keys[Math.floor(Math.random() * keys.length)];
+      text = DEMO_SAMPLES[pick];
+    }
+
+    // Reflect the chosen text in the textarea so it’s obvious
+    $("#text").value = text;
   }
 
+  // If *still* no text, bail with error message
   if (!text) {
     $("#err").style.display = "block";
-    $("#err").textContent = "Please enter some text.";
+    $("#err").textContent   = "Please enter some text.";
     return;
   }
 
   lastScanText = text;
   $("#err").style.display = "none";
-  $("#btnScan").disabled = true;
+  $("#btnScan").disabled  = true;
 
+  // Status text: distinguish demo vs normal
   $("#scanStatus").textContent =
-    demoOn && !hadUserText ? "Scanning demo sample…" : "Scanning…";
+    (demoOn && !hadUserText) ? "Scanning demo sample…" : "Scanning…";
 
   try {
     const body = {
       text,
-      tag: $("#tag").value.trim() || null,
+      tag:  $("#tag").value.trim() || null,
       mode: $("#mode").value || null,
-      demo_mode: demoOn || false  // optional flag to backend
+      demo_mode: demoOn || false   // nice to have for backend / logs
     };
 
     const r = await api("/scan", {
@@ -1159,13 +1200,13 @@ async function runScan(){
       body: JSON.stringify(body)
     });
 
-    didScan = true;
+    didScan       = true;
     lastScanResult = r;
 
     renderExplain(r.explain, r);
     renderFingerprint(r);
 
-    // v0.3.7 — Drift diagnostics UI
+    // Drift diagnostics
     try {
       const drift = await driftAnalyze(text);
       renderDrift(drift);
@@ -1174,7 +1215,7 @@ async function runScan(){
       renderDrift(null);
     }
 
-    // v0.3.8 — LLM fingerprint UI
+    // LLM fingerprint card
     try {
       renderLlmFingerprint(r);
     } catch (e) {
@@ -1192,18 +1233,19 @@ async function runScan(){
 
     const NS = r.nonsense_signals || {};
     const top10Pct  = Number.isFinite(NS.top10)
-      ? Math.round(NS.top10 * 100)
-      : (r.bins ? Math.round((r.bins[10] / Math.max(1, r.total)) * 100) : null);
+      ? Math.round(NS.top10*100)
+      : (r.bins ? Math.round((r.bins[10]  / Math.max(1,r.total))*100) : null);
     const top100Pct = Number.isFinite(NS.top100)
-      ? Math.round(NS.top100 * 100)
-      : (r.bins ? Math.round((r.bins[100] / Math.max(1, r.total)) * 100) : null);
+      ? Math.round(NS.top100*100)
+      : (r.bins ? Math.round((r.bins[100] / Math.max(1,r.total))*100) : null);
 
-    $("#top10").textContent  = top10Pct  ?? "—";
-    $("#top100").textContent = top100Pct ?? "—";
-    $("#ppl").textContent    = (NS.ppl ?? r.ppl ?? 0).toFixed(2);
-    $("#burst").textContent  = (NS.burst ?? r.burstiness ?? 0).toFixed(3);
-    $("#category").textContent  =
-      r.category ? `${r.category} (${Math.round((r.category_conf || 0) * 100)}%)` : "—";
+    $("#top10").textContent   = top10Pct  ?? "—";
+    $("#top100").textContent  = top100Pct ?? "—";
+    $("#ppl").textContent     = (NS.ppl ?? r.ppl ?? 0).toFixed(2);
+    $("#burst").textContent   = (NS.burst ?? r.burstiness ?? 0).toFixed(3);
+    $("#category").textContent = r.category
+      ? `${r.category} (${Math.round((r.category_conf||0)*100)}%)`
+      : "—";
     $("#modelName").textContent = r.model_name || "—";
     $("#modeEcho").textContent  = r.mode || "—";
     $("#pdj").textContent       = (r.pd_overlap_j ?? 0).toFixed(3);
@@ -1230,26 +1272,27 @@ async function runScan(){
     setTxt("#ns_sem",   pickNum(N2.semantic_disc, N2.semantic_discontinuity, N2.semanticDisc), 3);
 
     lastScanMetrics = {
-      func_ratio: Number(S.func_ratio ?? S.function_word_ratio ?? 0),
-      hapax_ratio: Number(S.hapax_ratio ?? S.hapax ?? 0),
-      sent_mean:   Number(S.sent_mean ?? S.sentence_mean ?? 0),
-      sent_var:    Number(S.sent_var  ?? S.sentence_var  ?? 0),
+      func_ratio:    Number(S.func_ratio ?? S.function_word_ratio ?? 0),
+      hapax_ratio:   Number(S.hapax_ratio ?? S.hapax ?? 0),
+      sent_mean:     Number(S.sent_mean ?? S.sentence_mean ?? 0),
+      sent_var:      Number(S.sent_var  ?? S.sentence_var  ?? 0),
       punct_entropy: Number(S.punct_entropy ?? S.punctuation_entropy ?? 0),
     };
 
     $("#btnStartLive").disabled = false;
-    $("#liveInput").disabled = false;
+    $("#liveInput").disabled    = false;
     setFinalizeEnabled(true);
     setExportEnabled(false);
     setMsg("exportStatus","");
   } catch (e) {
     $("#err").style.display = "block";
-    $("#err").textContent = "Scan failed: " + e.message;
+    $("#err").textContent   = "Scan failed: " + e.message;
   } finally {
     $("#btnScan").disabled = false;
     $("#scanStatus").textContent = "";
   }
 }
+
 
 
 /* Demos */
