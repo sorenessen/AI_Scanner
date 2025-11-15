@@ -508,7 +508,14 @@
         </div>
         <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
         <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
+
+        <!-- NEW: drift compare card (scan vs live sample) -->
+        <div id="liveDriftBox" class="card" style="margin-top:10px; padding:10px; display:none">
+          <div class="muted">Drift compare (scan vs live sample)</div>
+          <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
+        </div>
       </div>
+
     </div>
   </div>
 </div>
@@ -730,24 +737,73 @@ function renderExplain(explain, fullJson){
   }
 }
 
-function renderDrift(j) {
+function renderFingerprint(result) {
+  const box      = document.getElementById("fpBox");
+  const labelEl  = document.getElementById("fpLabel");
+  const bandEl   = document.getElementById("fpBand");
+  const topEl    = document.getElementById("fpTop");
+  const bandCard = document.getElementById("fpBandCard");
+  const spreadEl = document.getElementById("fpSpread");
+  const notesEl  = document.getElementById("fpNotes");
+
+  if (!box) return;
+
+  // Try a few common shapes for the payload
+  const fp = result?.llm_fingerprint
+          || result?.fingerprint
+          || result?.fp
+          || null;
+
+  // Nothing to show → hide the card and clear fields
+  if (!fp) {
+    box.style.display = "none";
+    if (labelEl)  labelEl.textContent  = "—";
+    if (bandEl)   bandEl.textContent   = "—";
+    if (topEl)    topEl.textContent    = "—";
+    if (bandCard) bandCard.textContent = "—";
+    if (spreadEl) spreadEl.textContent = "—";
+    if (notesEl)  notesEl.textContent  = "—";
+    return;
+  }
+
+  const top   = fp.nearest ?? fp.top ?? fp.family ?? "—";
+  const band  = fp.band ?? fp.bucket ?? "—";
+  const spread = fp.spread ?? fp.drift ?? fp.pd_spread ?? "—";
+  const notes  = fp.notes || fp.note || "";
+
+  if (labelEl)  labelEl.textContent  = top;
+  if (bandEl)   bandEl.textContent   = band;
+  if (topEl)    topEl.textContent    = top;
+  if (bandCard) bandCard.textContent = band;
+  if (spreadEl) spreadEl.textContent = String(spread);
+  if (notesEl)  notesEl.textContent  = notes || "—";
+
+  box.style.display = "block";
+}
+
+
+function renderDrift(raw) {
   const box = document.getElementById("driftBox");
   const content = document.getElementById("driftContent");
   if (!box || !content) return;
 
-  // No data or explicit "not available" → hide card
-  if (!j) {
+  const safeNum = (v, d = 3) => {
+  if (typeof v !== "number" || !Number.isFinite(v)) return "—";
+  return v.toFixed(d);
+  };
+
+
+  // No payload → hide card
+  if (!raw) {
     box.style.display = "none";
     content.innerHTML = "";
     return;
   }
 
-  const safeNum = (v, d = 3) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n.toFixed(d) : "—";
-  };
+  // New: backend nests the drift info under `semantic_drift`
+  const j = raw.semantic_drift || raw;
 
-  // If backend says drift isn't available (e.g., single paragraph)
+  // Handle the “not available” case if backend ever sends it
   if (j.available === false) {
     box.style.display = "block";
     content.innerHTML = `
@@ -761,76 +817,139 @@ function renderDrift(j) {
     return;
   }
 
-  // Normal case: full drift stats
+  // Normal case: we have real stats
   box.style.display = "block";
   content.innerHTML = `
-    <div>Paragraphs</div><div class="mono">${j.paragraphs ?? "—"}</div>
-    <div>Avg adjacent similarity</div><div class="mono">${safeNum(j.avg_adjacent_sim, 3)}</div>
-    <div>Std adjacent similarity</div><div class="mono">${safeNum(j.std_adjacent_sim, 3)}</div>
-    <div>Risk</div><div class="mono">${safeNum(j.risk, 3)}</div>
-    <div>Score (human-like)</div><div class="mono">${safeNum(j.score, 3)}</div>
+    <div>Paragraphs</div><div class="mono">${j.paragraphs ?? raw.paragraphs ?? "—"}</div>
+    <div>Avg adjacent similarity</div><div class="mono">${safeNum(j.avg_adjacent_sim)}</div>
+    <div>Std adjacent similarity</div><div class="mono">${safeNum(j.std_adjacent_sim)}</div>
+    <div>Risk</div><div class="mono">${safeNum(j.risk)}</div>
+    <div>Score (human-like)</div><div class="mono">${safeNum(j.score)}</div>
   `;
 }
 
-function renderFingerprint(r) {
-  const box     = document.getElementById("fpBox");
-  const labelEl = document.getElementById("fpLabel");
-  const bandEl  = document.getElementById("fpBand");
-  const bandCardEl = document.getElementById("fpBandCard");
-  const topEl   = document.getElementById("fpTop");
-  const spreadEl= document.getElementById("fpSpread");
-  const notesEl = document.getElementById("fpNotes");
 
-  if (!box) return;
+function renderLiveDrift(raw) {
+  const box = document.getElementById("liveDriftBox");
+  const content = document.getElementById("liveDriftContent");
+  if (!box || !content) return;
 
-  // Prefer a dedicated fingerprint object if backend adds one later.
-  const fp = (r && (r.fingerprint || r.llm_fingerprint)) || {};
-  const teacher = (r && r.explain && r.explain.teacher_report) || {};
+  const safeNum = (v, d = 3) => {
+    if (typeof v !== "number" || !Number.isFinite(v)) return "—";
+    return v.toFixed(d);
+  };
+  const isRealNumber = v =>
+    typeof v === "number" && Number.isFinite(v);
 
-  // Label: explicit fingerprint label → teacher nearest_style → empty
-  const label =
-    fp.label ||
-    teacher.nearest_style ||
-    "";
-
-  // If we truly have nothing, hide the card & clear fields
-  if (!label) {
+  // No payload → hide card
+  if (!raw) {
     box.style.display = "none";
-    if (labelEl) labelEl.textContent = "—";
-    if (bandEl)  bandEl.textContent  = "—";
-    if (bandCardEl) bandCardEl.textContent = "—";
-    if (topEl)   topEl.textContent   = "—";
-    if (spreadEl)spreadEl.textContent= "—";
-    if (notesEl) notesEl.textContent = "Fingerprint head not enabled on this server.";
+    content.innerHTML = "";
     return;
   }
 
-  // Simple band from calibrated AI probability
-  const p = Number(r && r.calibrated_prob || 0);
-  let band;
-  if (p <= 0.35) band = "Human-leaning";
-  else if (p >= 0.65) band = "Model-leaning";
-  else band = "Mixed / inconclusive";
+  // Unwrap common shapes
+  const driftA = raw.a || raw.A || raw.scan || null;
+  const driftB = raw.b || raw.B || raw.live || null;
+  const cmp    = raw.compare || raw.c || null;
 
-  const drift = typeof teacher.drift_score === "number" ? teacher.drift_score : null;
-  const pdj   = typeof teacher.pd_overlap_j === "number" ? teacher.pd_overlap_j : null;
+  let similarity;
+  let score;
+  let risk;
+  let overlap;
+  let note = "";
 
-  const driftTxt = drift != null ? `drift ${drift.toFixed(3)}` : "drift —";
-  const pdTxt    = pdj   != null ? `PD J ${pdj.toFixed(3)}`   : "PD J —";
-
-  if (labelEl) labelEl.textContent = label;
-  if (bandEl)  bandEl.textContent  = band;
-
-  if (topEl) topEl.textContent = label;
-  if (bandCardEl) bandCardEl.textContent = band;
-  if (spreadEl) spreadEl.textContent = `${driftTxt} • ${pdTxt}`;
-  if (notesEl) {
-    notesEl.textContent =
-      "Local centroid match only. Use as a soft hint about style family, not a definitive attribution.";
+  // 1) Preferred: explicit compare block
+  if (cmp && typeof cmp === "object") {
+    if (isRealNumber(cmp.similarity ?? cmp.sim))
+      similarity = cmp.similarity ?? cmp.sim;
+    if (isRealNumber(cmp.score))
+      score = cmp.score;
+    if (isRealNumber(cmp.risk))
+      risk = cmp.risk;
+    if (isRealNumber(cmp.overlap ?? cmp.jaccard))
+      overlap = cmp.overlap ?? cmp.jaccard;
   }
 
+  // 2) Fallback: flat fields at the top level
+  if (!isRealNumber(similarity) && isRealNumber(raw.similarity ?? raw.sim)) {
+    similarity = raw.similarity ?? raw.sim;
+  }
+  if (!isRealNumber(score) && isRealNumber(raw.score)) {
+    score = raw.score;
+  }
+  if (!isRealNumber(risk) && isRealNumber(raw.risk)) {
+    risk = raw.risk;
+  }
+  if (!isRealNumber(overlap) && isRealNumber(raw.overlap ?? raw.jaccard)) {
+    overlap = raw.overlap ?? raw.jaccard;
+  }
+
+  // 3) Last-resort: derive something from a/b drift stats
+  if ((!isRealNumber(similarity) || !isRealNumber(score) ||
+       !isRealNumber(risk)      || !isRealNumber(overlap)) &&
+      driftA && driftB) {
+
+    const sA = driftA.score;
+    const sB = driftB.score;
+    const rA = driftA.risk;
+    const rB = driftB.risk;
+    const saA = driftA.avg_adjacent_sim;
+    const saB = driftB.avg_adjacent_sim;
+
+    // crude similarity derived from score distance
+    if (!isRealNumber(similarity) && isRealNumber(sA) && isRealNumber(sB)) {
+      const diff = Math.min(1, Math.abs(sA - sB));
+      similarity = 1 - diff; // 1 = identical, 0 = maximally far
+      note = "Derived from drift scores (no explicit similarity field).";
+    }
+
+    // average “human-like” score
+    if (!isRealNumber(score) && isRealNumber(sA) && isRealNumber(sB)) {
+      score = (sA + sB) / 2;
+    }
+
+    // more conservative risk (take the worst of the two)
+    if (!isRealNumber(risk) && isRealNumber(rA) && isRealNumber(rB)) {
+      risk = Math.max(rA, rB);
+    }
+
+    // overlap: average adjacent similarity
+    if (!isRealNumber(overlap) && isRealNumber(saA) && isRealNumber(saB)) {
+      overlap = (saA + saB) / 2;
+    }
+  }
+
+  const hasNumeric =
+    isRealNumber(similarity) ||
+    isRealNumber(score)      ||
+    isRealNumber(risk)       ||
+    isRealNumber(overlap);
+
+  // Still nothing meaningful? Show raw JSON as a last-resort debug.
+  if (!hasNumeric) {
+    content.innerHTML =
+      `<div>Drift compare payload not recognized by UI. Raw JSON:</div>` +
+      `<pre style="margin-top:6px; max-height:200px; overflow:auto; font-size:11px;">` +
+      `${JSON.stringify(raw, null, 2)}</pre>`;
+    box.style.display = "block";
+    return;
+  }
+
+  let html = `
+    <div>Similarity</div><div class="mono">${safeNum(similarity)}</div>
+    <div>Score (human-like)</div><div class="mono">${safeNum(score)}</div>
+    <div>Risk</div><div class="mono">${safeNum(risk)}</div>
+    <div>Overlap</div><div class="mono">${safeNum(overlap)}</div>
+  `;
+  if (note) {
+    html += `<div>Notes</div><div class="mono">${note}</div>`;
+  }
+
+  content.innerHTML = html;
   box.style.display = "block";
 }
+
 
 function renderLlmFingerprint(result) {
   const box      = document.getElementById("llmBox");
@@ -924,6 +1043,7 @@ function renderLlmFingerprint(result) {
   box.style.display = "block";
 }
 
+
 // also make the /scan raw-dump close safe (if your code has this line elsewhere):
 const rawBoxEl = document.getElementById("rawJsonBox");
 if (rawBoxEl && typeof rawBoxEl.removeAttribute === "function"){
@@ -935,6 +1055,7 @@ let lastScanMetrics = null;
 let lastScanResult  = null;
 let lastExportText  = "";
 let didScan = false;
+let lastScanText = "";
 
 function tokenizeWords(text){ return (text.toLowerCase().match(/[a-z’']+|\d+|[^\s\w]/g) || []); }
 const FN_WORDS = new Set(("a,an,the,of,to,in,for,with,on,at,by,from,as,that,this,which,who,whom,whose,and,or,but,if,then,so,because,while,where,about,into,over,after,before,between,through,during,without,within,against,under,above,across,around,per,via,is,am,are,was,were,be,been,being").split(","));
@@ -981,6 +1102,7 @@ function renderLiveCompare(userM, refM){
 async function runScan(){
   const text = $("#text").value.trim();
   if (!text) { $("#err").style.display="block"; $("#err").textContent="Please enter some text."; return; }
+  lastScanText = text;
   $("#err").style.display="none";
   $("#btnScan").disabled = true;
   $("#scanStatus").textContent = "Scanning…";
@@ -1093,15 +1215,30 @@ async function loadDemos(){
 /* Live typing */
 let liveStartTs = null, liveTimerId = null, liveComputingTimer = null;
 
-function finalizeCompute(){
+async function finalizeCompute(){
   const typed = $("#liveInput").value.trim();
 
-  if (!didScan){ setMsg("liveResult","Run a scan first to have a reference."); setExportEnabled(false); return; }
+  if (!didScan){
+    setMsg("liveResult","Run a scan first to have a reference.");
+    setExportEnabled(false);
+    renderLiveDrift(null);
+    return;
+  }
 
-  if (!typed) { setMsg("liveResult","No sample typed."); setExportEnabled(false); return; }
+  if (!typed) {
+    setMsg("liveResult","No sample typed.");
+    setExportEnabled(false);
+    renderLiveDrift(null);
+    return;
+  }
 
   const wordCount = tokenizeWords(typed).filter(t=>/^[a-z’']+$/i.test(t)).length;
-  if (wordCount < 60) { setMsg("liveResult","Type at least ~60 words for a stable compare."); setExportEnabled(false); return; }
+  if (wordCount < 60) {
+    setMsg("liveResult","Type at least ~60 words for a stable compare.");
+    setExportEnabled(false);
+    renderLiveDrift(null);
+    return;
+  }
 
   const userM = simpleMetrics(typed);
   const { html, pct } = renderLiveCompare(userM, lastScanMetrics);
@@ -1110,6 +1247,19 @@ function finalizeCompute(){
   lastExportText = buildExportText(lastScanResult, userM, lastScanMetrics, pct);
   setExportEnabled(true);
   setMsg("exportStatus","Summary ready.");
+
+  // NEW: call /drift/compare for scan vs live sample
+  try {
+    if (lastScanText) {
+      const drift = await driftCompare(lastScanText, typed);
+      renderLiveDrift(drift);
+    } else {
+      renderLiveDrift(null);
+    }
+  } catch (e) {
+    console.warn("Live drift compare failed:", e);
+    renderLiveDrift({ note: "Drift compare unavailable: " + e.message });
+  }
 }
 
 function tickTimer(){
@@ -1310,6 +1460,11 @@ $("#btnClear").addEventListener("click", ()=>{
   const driftContent = document.getElementById("driftContent");
   if (driftBox) driftBox.style.display = "none";
   if (driftContent) driftContent.innerHTML = "";
+  const liveDriftBox = document.getElementById("liveDriftBox");
+  const liveDriftContent = document.getElementById("liveDriftContent");
+  if (liveDriftBox) liveDriftBox.style.display = "none";
+  if (liveDriftContent) liveDriftContent.innerHTML = "";
+
 });
 
 $("#btnSave").addEventListener("click", saveConfig);
