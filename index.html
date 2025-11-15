@@ -15,18 +15,56 @@
   }
 
   :root{
-    --bg:#0f1220; --panel:#181c2f; --muted:#c4cbe3; --text:#f1f4ff; --accent:#7eb4ff;
-    --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a; --border:#2a3250; --panel-2:#13182b;
-    --scale:1.50; --wrap-max:1800px;
-    --tip-bg: rgba(11,16,34,.92);
-    --tip-border: rgba(126,180,255,.25);
-  }
+  --bg:#0f1220; --panel:#181c2f; --muted:#c4cbe3; --text:#f1f4ff; --accent:#7eb4ff;
+  --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a; --border:#2a3250; --panel-2:#13182b;
+  --scale:1.50;
+  --tip-bg: rgba(11,16,34,.92);
+  --tip-border: rgba(126,180,255,.25);
+}
+
+html,body{
+  margin:0;
+  height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+  font-size:calc(16px * var(--scale));
+  line-height:1.55;
+}
+
+/* main shell now fills entire browser window */
+body{
+  min-height:100vh;
+  display:flex;
+}
+
+.wrap{
+  flex:1;
+  width:100%;
+  max-width:none;
+  margin:0;
+  padding:16px 16px 24px;
+  box-sizing:border-box;
+}
+
   html,body{ margin:0;height:100%;background:var(--bg);color:var(--text);
     font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
     font-size:calc(16px * var(--scale)); line-height:1.55; }
   .wrap{max-width:var(--wrap-max); width:98vw; margin:22px auto;}
   .grid{display:grid;gap:18px}
-  .cols{grid-template-columns: 1.25fr 1fr}
+.cols{
+  grid-template-columns: minmax(0,1.25fr) minmax(0,1fr);
+  align-items:stretch;
+}
+.card{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:18px;
+  overflow:visible;
+  height:100%;          /* cards fill the column height */
+}
+
   @media (max-width:1100px){ .cols{grid-template-columns:1fr} }
   .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px; overflow:visible}
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap; overflow:visible}
@@ -57,7 +95,14 @@
   .drawer{position:fixed;left:0;right:0;bottom:0;background:var(--panel-2);
     border-top:1px solid var(--border);transform:translateY(100%);transition:transform .25s ease;z-index:50}
   .drawer.open{transform:translateY(0)}
-  .drawer-inner{max-width:var(--wrap-max); width:98vw; margin:0 auto; padding:14px 0}
+  .drawer-inner{
+  width:100%;
+  max-width:none;
+  margin:0;
+  padding:14px 16px;
+  box-sizing:border-box;
+}
+
   .split{display:grid;grid-template-columns: 1fr 400px; gap:18px}
   @media (max-width:1024px){ .split{grid-template-columns: 1fr} }
   .progress{height:10px;border-radius:6px;background:#2a3240;overflow:hidden}
@@ -189,14 +234,24 @@
     <!-- Left -->
     <section class="card" aria-label="AI Text Scanner">
       <div class="row" style="justify-content:space-between">
-        <h2 style="margin:0">AI Text Scanner</h2>
+        <h1 style="margin:0">CopyCat: AI Content Auditor</h1>
         <span class="muted" id="ensemBadge"></span>
       </div>
 
       <div class="row">
+        <!-- Demo button + preset dropdown -->
         <div class="help-wrap">
-          <button id="btnDemo" class="btn secondary">Load Demo Samples</button>
-          <span class="help-dot" tabindex="0"><span class="tip">Load a few example passages that demonstrate the detector’s outputs.</span></span>
+          <div class="row" style="gap:8px; align-items:center; flex-wrap:nowrap;">
+            <button id="btnDemo" class="btn secondary">Load Demo</button>
+            <select id="demoPreset" class="mono" style="min-width:190px; max-width:230px;">
+              <!-- options will be filled by JS -->
+            </select>
+          </div>
+          <span class="help-dot" tabindex="0">
+            <span class="tip">
+              Load a curated example passage. Choose a type (news, story, essay, code) or pick “random”.
+            </span>
+          </span>
         </div>
 
         <div class="help-wrap">
@@ -560,6 +615,35 @@ const DEMO_SAMPLES = {
   "essay": `The socioeconomic impact of automation continues to reshape...`,
   "code": `def analyze_text(t):\n    return {"len": len(t)}`,
 };
+
+// --- Demo presets ---
+const DEMO_PRESET_LABELS = {
+  random: "(random curated sample)",
+  news:   "News / op-ed",
+  story:  "Story / narrative",
+  essay:  "Student-style essay",
+  code:   "Short code snippet",
+};
+
+let currentDemoPreset = "random";
+
+function initDemoPresetSelect() {
+  const sel = document.getElementById("demoPreset");
+  if (!sel) return;
+
+  // Build options from the label map
+  sel.innerHTML = Object.entries(DEMO_PRESET_LABELS)
+    .map(([value, label]) => `<option value="${value}">${label}</option>`)
+    .join("");
+
+  sel.value = currentDemoPreset;
+
+  sel.addEventListener("change", (e) => {
+    const v = String(e.target.value || "").trim();
+    currentDemoPreset = DEMO_PRESET_LABELS[v] ? v : "random";
+  });
+}
+
 
 /* -------- v0.3.5 -------- */
 window.__pdCentroids = 0;
@@ -1293,20 +1377,37 @@ async function runScan(){
   }
 }
 
-
-
 /* Demos */
 async function loadDemos(){
   $("#btnDemo").disabled = true;
-  try{
-    const list = await api("/demo");
-    if(!Array.isArray(list) || list.length === 0){ $("#text").value = "Demo unavailable."; return; }
-    const lines = [];
-    list.forEach((d,i)=>{ lines.push(`// ${d.label} — expect: ${d.expect}`); lines.push(d.text); if(i<list.length-1) lines.push(""); });
-    $("#text").value = lines.join("\n");
-  }catch(e){ $("#text").value = "Failed to load demo samples: "+e.message; }
-  finally{ $("#btnDemo").disabled = false; }
+  try {
+    const preset = currentDemoPreset;
+    let text = "";
+
+    if (preset === "random") {
+      const keys = Object.keys(DEMO_SAMPLES);
+      if (!keys.length) {
+        $("#text").value = "No demo samples configured.";
+        return;
+      }
+      const pick = keys[Math.floor(Math.random() * keys.length)];
+      text = DEMO_SAMPLES[pick];
+    } else {
+      text = DEMO_SAMPLES[preset] || "";
+      if (!text) {
+        $("#text").value = `Demo preset "${preset}" not available.`;
+        return;
+      }
+    }
+
+    $("#text").value = text;
+  } catch (e) {
+    $("#text").value = "Failed to load demo sample: " + e.message;
+  } finally {
+    $("#btnDemo").disabled = false;
+  }
 }
+
 
 /* Live typing */
 let liveStartTs = null, liveTimerId = null, liveComputingTimer = null;
@@ -1573,6 +1674,7 @@ $("#btnDownload").addEventListener("click", downloadExportTxt);
 (async function init(){
   await loadVersion();
   await loadConfig();
+  initDemoPresetSelect();
   setFinalizeEnabled(false);
   setExportEnabled(false);
 })();
