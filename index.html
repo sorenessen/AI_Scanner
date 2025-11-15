@@ -200,6 +200,15 @@
         </div>
       </div>
 
+      <!-- Demo Mode Toggle -->
+      <div class="row" style="align-items:center; margin-bottom:10px;">
+        <label class="mono" style="font-size:0.9em;">
+          <input type="checkbox" id="demoToggle" style="margin-right:6px;">
+          Demo mode (use preset curated samples)
+        </label>
+      </div>
+
+
       <label for="text">Text to scan</label>
       <textarea id="text" placeholder="Paste or type text to analyze…"></textarea>
 
@@ -521,6 +530,15 @@
 </div>
 
 <script>
+
+// --- Demo Mode Sample Texts ---
+const DEMO_SAMPLES = {
+  "news": `Breaking: A new AI-driven policing system has sparked debate...`,
+  "story": `Once the lantern flickered out, Mara realized she wasn't alone...`,
+  "essay": `The socioeconomic impact of automation continues to reshape...`,
+  "code": `def analyze_text(t):\n    return {"len": len(t)}`,
+};
+
 /* -------- v0.3.5 -------- */
 window.__pdCentroids = 0;
 /* ---------- helpers ---------- */
@@ -1100,16 +1118,46 @@ function renderLiveCompare(userM, refM){
 
 /* ---------- Scan ---------- */
 async function runScan(){
-  const text = $("#text").value.trim();
-  if (!text) { $("#err").style.display="block"; $("#err").textContent="Please enter some text."; return; }
+  const demoOn = $("#demoToggle").checked;
+  let text = $("#text").value.trim();
+  const hadUserText = text.length > 0;
+
+  // Only auto-load a demo sample if:
+  // - Demo mode is on
+  // - AND the user hasn't typed/pasted anything yet
+  if (demoOn && !hadUserText) {
+    const keys = Object.keys(DEMO_SAMPLES);
+    const pick = keys[Math.floor(Math.random() * keys.length)];
+    text = DEMO_SAMPLES[pick];
+    $("#text").value = text; // show which sample we're using
+  }
+
+  if (!text) {
+    $("#err").style.display = "block";
+    $("#err").textContent = "Please enter some text.";
+    return;
+  }
+
   lastScanText = text;
-  $("#err").style.display="none";
+  $("#err").style.display = "none";
   $("#btnScan").disabled = true;
-  $("#scanStatus").textContent = "Scanning…";
+
+  $("#scanStatus").textContent =
+    demoOn && !hadUserText ? "Scanning demo sample…" : "Scanning…";
 
   try {
-    const body = { text, tag: $("#tag").value.trim() || null, mode: $("#mode").value || null };
-    const r = await api("/scan", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
+    const body = {
+      text,
+      tag: $("#tag").value.trim() || null,
+      mode: $("#mode").value || null,
+      demo_mode: demoOn || false  // optional flag to backend
+    };
+
+    const r = await api("/scan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
 
     didScan = true;
     lastScanResult = r;
@@ -1126,7 +1174,7 @@ async function runScan(){
       renderDrift(null);
     }
 
-    // v0.3.8 — LLM fingerprint UI (uses scan JSON only; no extra round trip)
+    // v0.3.8 — LLM fingerprint UI
     try {
       renderLlmFingerprint(r);
     } catch (e) {
@@ -1135,7 +1183,6 @@ async function runScan(){
     }
 
     const rawBox = document.getElementById("rawDump");
-
     if (rawBox) rawBox.textContent = JSON.stringify(r, null, 2);
     document.getElementById("rawJsonBox")?.removeAttribute("open");
 
@@ -1144,14 +1191,19 @@ async function runScan(){
     setVerdict(r.verdict || "—");
 
     const NS = r.nonsense_signals || {};
-    const top10Pct  = Number.isFinite(NS.top10)  ? Math.round(NS.top10*100)  : (r.bins ? Math.round((r.bins[10]  / Math.max(1,r.total))*100) : null);
-    const top100Pct = Number.isFinite(NS.top100) ? Math.round(NS.top100*100) : (r.bins ? Math.round((r.bins[100] / Math.max(1,r.total))*100) : null);
+    const top10Pct  = Number.isFinite(NS.top10)
+      ? Math.round(NS.top10 * 100)
+      : (r.bins ? Math.round((r.bins[10] / Math.max(1, r.total)) * 100) : null);
+    const top100Pct = Number.isFinite(NS.top100)
+      ? Math.round(NS.top100 * 100)
+      : (r.bins ? Math.round((r.bins[100] / Math.max(1, r.total)) * 100) : null);
 
     $("#top10").textContent  = top10Pct  ?? "—";
     $("#top100").textContent = top100Pct ?? "—";
     $("#ppl").textContent    = (NS.ppl ?? r.ppl ?? 0).toFixed(2);
     $("#burst").textContent  = (NS.burst ?? r.burstiness ?? 0).toFixed(3);
-    $("#category").textContent  = r.category ? `${r.category} (${Math.round((r.category_conf||0)*100)}%)` : "—";
+    $("#category").textContent  =
+      r.category ? `${r.category} (${Math.round((r.category_conf || 0) * 100)}%)` : "—";
     $("#modelName").textContent = r.model_name || "—";
     $("#modeEcho").textContent  = r.mode || "—";
     $("#pdj").textContent       = (r.pd_overlap_j ?? 0).toFixed(3);
@@ -1161,7 +1213,7 @@ async function runScan(){
     fillTokenTable(r.per_token || []);
 
     const S = r.stylometry || r.style || r.metrics?.stylometry || r.stats?.stylometry || {};
-    const N = r.nonsense_signals || r.nonsense || r.metrics?.nonsense || r.stats?.nonsense || {};
+    const N2 = r.nonsense_signals || r.nonsense || r.metrics?.nonsense || r.stats?.nonsense || {};
 
     setTxt("#sty_func",  pickNum(S.func_ratio, S.function_word_ratio, S.funcWordsRatio), 3);
     setTxt("#sty_hapax", pickNum(S.hapax_ratio, S.hapax, S.hapaxRatio), 3);
@@ -1171,11 +1223,11 @@ async function runScan(){
     setTxt("#sty_mlpsv", pickNum(S.mlps_var, S.delta_logp_var, S.dlogp_var, S.deltaLogpVar), 4);
     setTxt("#sty_pent",  pickNum(S.punct_entropy, S.punctuation_entropy, S.punctEntropy), 3);
 
-    setTxt("#ns_rhyme", pickNum(N.rhyme_density, N.rhyme, N.rhymeDensity), 3);
-    setTxt("#ns_meter", pickNum(N.meter_cv, N.meter, N.meterCV), 3);
-    setTxt("#ns_inv",   pickNum(N.invented_ratio, N.invented, N.inventedRatio), 3);
-    setTxt("#ns_lex",   pickNum(N.lex_hits, N.lexHits), 0);
-    setTxt("#ns_sem",   pickNum(N.semantic_disc, N.semantic_discontinuity, N.semanticDisc), 3);
+    setTxt("#ns_rhyme", pickNum(N2.rhyme_density, N2.rhyme, N2.rhymeDensity), 3);
+    setTxt("#ns_meter", pickNum(N2.meter_cv, N2.meter, N2.meterCV), 3);
+    setTxt("#ns_inv",   pickNum(N2.invented_ratio, N2.invented, N2.inventedRatio), 3);
+    setTxt("#ns_lex",   pickNum(N2.lex_hits, N2.lexHits), 0);
+    setTxt("#ns_sem",   pickNum(N2.semantic_disc, N2.semantic_discontinuity, N2.semanticDisc), 3);
 
     lastScanMetrics = {
       func_ratio: Number(S.func_ratio ?? S.function_word_ratio ?? 0),
@@ -1198,6 +1250,7 @@ async function runScan(){
     $("#scanStatus").textContent = "";
   }
 }
+
 
 /* Demos */
 async function loadDemos(){
