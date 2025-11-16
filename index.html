@@ -82,7 +82,25 @@ body{
 }
 
   @media (max-width:1100px){ .cols{grid-template-columns:1fr} }
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px; overflow:visible}
+
+    /* Live drawer layout polish */
+  #liveDrawer .split {
+    align-items: flex-start;
+  }
+
+  /* Give a bit of breathing room between left + right columns */
+  #liveDrawer .split > div:first-child {
+    padding-right: 8px;
+  }
+  #liveDrawer .split > div:last-child {
+    padding-left: 8px;
+  }
+
+  /* Slightly tighter spacing under the metrics row */
+  #liveResult {
+    margin-top: 8px;
+  }
+
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap; overflow:visible}
   .right{text-align:right}
   label{color:var(--muted)}
