@@ -139,8 +139,52 @@ body{
 }
 
 
-  .split{display:grid;grid-template-columns: 1fr 400px; gap:18px}
-  @media (max-width:1024px){ .split{grid-template-columns: 1fr} }
+    /* Live drawer layout */
+  .split{
+    display:grid;
+    grid-template-columns: minmax(0,1.4fr) minmax(0,1fr);
+    gap:18px;
+    align-items:flex-start;
+  }
+  @media (max-width:1024px){
+    .split{grid-template-columns: 1fr}
+  }
+
+  .live-left textarea{
+    min-height:140px;
+    max-height:220px;
+  }
+
+  .live-metrics-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    margin-bottom:6px;
+  }
+
+  .live-tabs{
+    display:inline-flex;
+    align-items:center;
+    border-radius:999px;
+    border:1px solid var(--border);
+    overflow:hidden;
+    font-size:.85em;
+    white-space:nowrap;
+  }
+  .live-tab{
+    background:transparent;
+    border:none;
+    color:var(--muted);
+    padding:4px 10px;
+    cursor:pointer;
+  }
+  .live-tab.active{
+    background:#1a2346;
+    color:#eaf0ff;
+  }
+
+
   .progress{height:10px;border-radius:6px;background:#2a3240;overflow:hidden}
   .progress>span{display:block;height:100%;width:0;background:#3b82f6;transition:width .25s}
 
@@ -601,9 +645,9 @@ body{
       Paste text above and run a scan first. Then start a live sample to compare your typing style.
     </div>
 
-    <div class="split" style="padding:0 6px 14px">
+        <div class="split" style="padding:0 6px 14px">
       <!-- LEFT column -->
-      <div>
+      <div class="live-left">
         <textarea id="liveInput" placeholder="Type here for 60–120 words…" rows="7"
                   style="width:100%; resize:vertical; font-family:system-ui, sans-serif;" disabled
                   aria-label="Live typing area"></textarea>
@@ -629,26 +673,39 @@ body{
       </div>
 
       <!-- RIGHT column -->
-      <div>
-        <div class="row" style="gap:18px; margin-bottom:8px;">
-          <div>Time: <span id="liveTimer">—</span></div>
-          <div>Tokens: <span id="liveTokens">0</span> <small class="muted">(words)</small></div>
-          <div>Len: <span id="liveLen">0%</span> <small class="muted">(of 120 target)</small></div>
-          <div>Match: <span id="liveRough">—</span> <small class="muted">(quick)</small></div>
-        </div>
-        <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
-        <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
+      <div class="live-right">
+        <div class="card" style="padding:10px;">
+          <div class="live-metrics-header">
+            <div class="row" style="gap:18px; margin-bottom:4px;">
+              <div>Time: <span id="liveTimer">—</span></div>
+              <div>Tokens: <span id="liveTokens">0</span> <small class="muted">(words)</small></div>
+              <div>Len: <span id="liveLen">0%</span> <small class="muted">(of 120 target)</small></div>
+              <div>Match: <span id="liveRough">—</span> <small class="muted">(quick)</small></div>
+            </div>
 
-        <!-- NEW: drift compare card (scan vs live sample) -->
-        <div id="liveDriftBox" class="card" style="margin-top:10px; padding:10px; display:none">
-          <div class="muted">Drift compare (scan vs live sample)</div>
-          <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
+            <div class="live-tabs" role="tablist" aria-label="Live view">
+              <button type="button" class="live-tab active" data-tab="summary" role="tab" aria-selected="true">
+                Summary
+              </button>
+              <button type="button" class="live-tab" data-tab="drift" role="tab" aria-selected="false">
+                Drift compare
+              </button>
+            </div>
+          </div>
+
+          <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
+
+          <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
+
+          <!-- Drift compare lives inside the same card now -->
+          <div id="liveDriftBox" style="margin-top:10px; display:none">
+            <div class="muted">Drift compare (scan vs live sample)</div>
+            <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
+          </div>
         </div>
       </div>
-
     </div>
-  </div>
-</div>
+
 
 <script>
 
@@ -1060,13 +1117,11 @@ function renderLiveDrift(raw) {
     if (typeof v !== "number" || !Number.isFinite(v)) return "—";
     return v.toFixed(d);
   };
-  const isRealNumber = v =>
-    typeof v === "number" && Number.isFinite(v);
 
-  // No payload → hide card
+  // No payload → show a friendly message but let tabs handle visibility
   if (!raw) {
-    box.style.display = "none";
-    content.innerHTML = "";
+    content.innerHTML =
+      `<div class="mono">Drift compare not available for this sample.</div>`;
     return;
   }
 
@@ -1081,6 +1136,9 @@ function renderLiveDrift(raw) {
   let overlap;
   let note = "";
 
+  const isRealNumber = v =>
+    typeof v === "number" && Number.isFinite(v);
+
   // 1) Preferred: explicit compare block
   if (cmp && typeof cmp === "object") {
     if (isRealNumber(cmp.similarity ?? cmp.sim))
@@ -1093,7 +1151,7 @@ function renderLiveDrift(raw) {
       overlap = cmp.overlap ?? cmp.jaccard;
   }
 
-  // 2) Fallback: flat fields at the top level
+  // 2) Fallback: flat fields
   if (!isRealNumber(similarity) && isRealNumber(raw.similarity ?? raw.sim)) {
     similarity = raw.similarity ?? raw.sim;
   }
@@ -1107,7 +1165,7 @@ function renderLiveDrift(raw) {
     overlap = raw.overlap ?? raw.jaccard;
   }
 
-  // 3) Last-resort: derive something from a/b drift stats
+  // 3) Last-resort: derive something from a/b
   if ((!isRealNumber(similarity) || !isRealNumber(score) ||
        !isRealNumber(risk)      || !isRealNumber(overlap)) &&
       driftA && driftB) {
@@ -1119,24 +1177,20 @@ function renderLiveDrift(raw) {
     const saA = driftA.avg_adjacent_sim;
     const saB = driftB.avg_adjacent_sim;
 
-    // crude similarity derived from score distance
     if (!isRealNumber(similarity) && isRealNumber(sA) && isRealNumber(sB)) {
       const diff = Math.min(1, Math.abs(sA - sB));
-      similarity = 1 - diff; // 1 = identical, 0 = maximally far
+      similarity = 1 - diff;
       note = "Derived from drift scores (no explicit similarity field).";
     }
 
-    // average “human-like” score
     if (!isRealNumber(score) && isRealNumber(sA) && isRealNumber(sB)) {
       score = (sA + sB) / 2;
     }
 
-    // more conservative risk (take the worst of the two)
     if (!isRealNumber(risk) && isRealNumber(rA) && isRealNumber(rB)) {
       risk = Math.max(rA, rB);
     }
 
-    // overlap: average adjacent similarity
     if (!isRealNumber(overlap) && isRealNumber(saA) && isRealNumber(saB)) {
       overlap = (saA + saB) / 2;
     }
@@ -1148,13 +1202,11 @@ function renderLiveDrift(raw) {
     isRealNumber(risk)       ||
     isRealNumber(overlap);
 
-  // Still nothing meaningful? Show raw JSON as a last-resort debug.
   if (!hasNumeric) {
     content.innerHTML =
       `<div>Drift compare payload not recognized by UI. Raw JSON:</div>` +
       `<pre style="margin-top:6px; max-height:200px; overflow:auto; font-size:11px;">` +
       `${JSON.stringify(raw, null, 2)}</pre>`;
-    box.style.display = "block";
     return;
   }
 
@@ -1169,8 +1221,37 @@ function renderLiveDrift(raw) {
   }
 
   content.innerHTML = html;
-  box.style.display = "block";
 }
+
+function initLiveTabs(){
+  const tabs = document.querySelectorAll(".live-tab");
+  if (!tabs.length) return;
+
+  const liveResult = document.getElementById("liveResult");
+  const driftBox   = document.getElementById("liveDriftBox");
+
+  function activate(name){
+    tabs.forEach(t => {
+      const isActive = (t.dataset.tab === name);
+      t.classList.toggle("active", isActive);
+      t.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+
+    if (liveResult) liveResult.style.display = (name === "summary") ? "block" : "none";
+    if (driftBox)   driftBox.style.display   = (name === "drift")    ? "block" : "none";
+  }
+
+  tabs.forEach(t => {
+    t.addEventListener("click", () => {
+      const tabName = t.dataset.tab || "summary";
+      activate(tabName);
+    });
+  });
+
+  // default view
+  activate("summary");
+}
+
 
 
 function renderLlmFingerprint(result) {
@@ -1755,10 +1836,12 @@ $("#btnClear").addEventListener("click", ()=>{
   const driftContent = document.getElementById("driftContent");
   if (driftBox) driftBox.style.display = "none";
   if (driftContent) driftContent.innerHTML = "";
-  const liveDriftBox = document.getElementById("liveDriftBox");
-  const liveDriftContent = document.getElementById("liveDriftContent");
-  if (liveDriftBox) liveDriftBox.style.display = "none";
+    const liveDriftContent = document.getElementById("liveDriftContent");
   if (liveDriftContent) liveDriftContent.innerHTML = "";
+
+  // reset tabs back to Summary
+  initLiveTabs();
+
 
 });
 
@@ -1773,9 +1856,11 @@ $("#btnDownload").addEventListener("click", downloadExportTxt);
   await loadVersion();
   await loadConfig();
   initDemoPresetSelect();
+  initLiveTabs();
   setFinalizeEnabled(false);
   setExportEnabled(false);
 })();
+
 </script>
 </body>
 </html>
