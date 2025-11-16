@@ -299,6 +299,25 @@ body{
   .explain-note{ opacity:.85; }
   #pdBadge{ margin-left: 8px; }
 
+  /* Live drawer right-side spacing */
+.split > div:last-child {
+  padding: 8px 12px 10px;
+}
+
+/* Give the tabs and sections some breathing room */
+#liveTabs {
+  margin-bottom: 8px;
+}
+
+#liveResult {
+  margin-top: 8px;
+}
+
+#liveDriftBox {
+  margin-top: 8px;
+}
+
+
 </style>
 </head>
 <body>
@@ -685,10 +704,10 @@ body{
 
             <div class="live-tabs" role="tablist" aria-label="Live view">
               <button type="button" class="live-tab active" data-tab="summary" role="tab" aria-selected="true">
-                Summary
+                Style Match
               </button>
               <button type="button" class="live-tab" data-tab="drift" role="tab" aria-selected="false">
-                Drift compare
+                Consistency Check
               </button>
             </div>
           </div>
