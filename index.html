@@ -147,7 +147,7 @@ body{
   max-width:var(--wrap-max);
   width:98vw;
   margin:0 auto;
-  padding:8px 0 14px;
+  padding:10px 18px 18px;
 
   /* NEW: let content scroll inside drawer instead of growing it */
   max-height:100%;
@@ -331,6 +331,262 @@ body{
 
 #liveDriftBox {
   margin-top: 8px;
+}
+
+/* ===== Live Verification Cat + Butterfly ===== */
+
+#liveFunZone {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  margin-top: 12px;
+  overflow: hidden;
+  pointer-events: none;
+  display: none;             /* JS adds .active */
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#liveFunZone.active {
+  display: block;
+  opacity: 1;
+}
+
+/* Base sprite positioning */
+#liveFunZone .cat,
+#liveFunZone .butterfly {
+  position: absolute;
+}
+
+/* ---------------- CAT ---------------- */
+
+#liveFunZone .cat {
+  width: 120px;
+  height: 80px;
+  bottom: 4px;
+  left: 4%;
+  transform-origin: 50% 100%;
+  transform: translateX(0) scaleX(1);
+  animation: catAct 10s linear infinite;
+}
+
+/* Cat styling: black fill with light outline so it’s visible on dark bg */
+#liveFunZone .cat-body ellipse,
+#liveFunZone .cat-body rect,
+#liveFunZone .cat-body path,
+#liveFunZone .cat-head circle,
+#liveFunZone .cat-head polygon {
+  fill: #000;
+  stroke: #a0a0a0;
+  stroke-width: 1;
+}
+
+/* tail wagging */
+#liveFunZone .cat-tail path {
+  transform-origin: 30px 44px;
+  animation: catTail 0.4s ease-in-out infinite;
+}
+
+/* head used for “licking / looking around” */
+#liveFunZone .cat-head {
+  transform-origin: 90px 40px;
+  animation: catHead 10s linear infinite;
+}
+
+/* ---------------- BUTTERFLY ---------------- */
+
+#liveFunZone .butterfly {
+  width: 90px;
+  height: 60px;
+  bottom: 58px;
+  left: 22vw;
+  transform-origin: 50% 50%;
+  animation: butterflyAct 10s linear infinite;
+}
+
+/* butterfly look: blue wings, darker body, glow */
+#liveFunZone .butterfly-body ellipse {
+  fill: #3da7ff;
+  stroke: #c6e3ff;
+  stroke-width: 1.2;
+  filter: drop-shadow(0 0 4px rgba(61, 167, 255, 0.7));
+}
+
+#liveFunZone .butterfly-body rect {
+  fill: #1c4e80;
+}
+
+#liveFunZone .butterfly-body path {
+  fill: none;
+  stroke: #1c4e80;
+  stroke-width: 1.5;
+}
+
+/* subtle wing flap */
+#liveFunZone .butterfly-body {
+  transform-origin: 40px 30px;
+  animation: wingFlap 0.45s ease-in-out infinite;
+}
+
+/* ======= ANIMATIONS ======= */
+
+/* Tail always flicks a little (reads as “cat is alive”) */
+@keyframes catTail {
+  0%   { transform: rotate(15deg); }
+  50%  { transform: rotate(-10deg); }
+  100% { transform: rotate(15deg); }
+}
+
+/*
+catAct (10s loop):
+0–20%   : sit & flick tail, small crouch – watching
+20–45%  : run right toward butterfly
+45–60%  : pounce + land, quick “lick” / head bob
+60–70%  : turn around (flip)
+70–100% : run back left, being chased
+*/
+
+/* Cat behaviour:
+   0–20%  : stalk / creep
+   20–45% : run toward butterfly
+   45–60% : stop + groom (no horizontal move)
+   60–70% : notice, tense, flip to face left
+   70–100%: run back left while being chased
+*/
+@keyframes catAct {
+  0% {
+    transform: translateX(0) translateY(0) scaleX(1) scaleY(1);
+  }
+  12% {
+    transform: translateX(2vw) translateY(3px) scaleX(1) scaleY(0.95); /* crouch */
+  }
+  20% {
+    transform: translateX(4vw) translateY(0) scaleX(1) scaleY(1);
+  }
+
+  /* run toward butterfly */
+  30% {
+    transform: translateX(12vw) translateY(0) scaleX(1);
+  }
+  45% {
+    transform: translateX(22vw) translateY(0) scaleX(1);
+  }
+
+  /* STOP + pounce/land – stays roughly in place while grooming */
+  50% {
+    transform: translateX(22vw) translateY(-6px) scaleX(1) rotate(-6deg);
+  }
+  60% {
+    transform: translateX(22vw) translateY(0) scaleX(1) rotate(3deg);
+  }
+
+  /* tense + flip to face left (but still in same area) */
+  65% {
+    transform: translateX(22vw) translateY(0) scaleX(-1);
+  }
+  70% {
+    transform: translateX(22vw) translateY(0) scaleX(-1);
+  }
+
+  /* now run back left, butterfly behind */
+  85% {
+    transform: translateX(10vw) translateY(0) scaleX(-1);
+  }
+  100% {
+    transform: translateX(2vw) translateY(0) scaleX(-1);
+  }
+}
+  
+/* head motion:
+   idle most of the time; big “groom” bobs only during 45–60% of catAct
+*/
+@keyframes catHead {
+  0%, 35% {
+    transform: rotate(0deg);
+  }
+  /* begin grooming around when cat stops */
+  45% {
+    transform: rotate(-18deg);
+  }
+  50% {
+    transform: rotate(20deg);
+  }
+  55% {
+    transform: rotate(-12deg);
+  }
+  60% {
+    transform: rotate(8deg);
+  }
+  65% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+
+/* Butterfly:
+   0–20%  : drift just ahead
+   20–45% : stay ahead while bobbing
+   45–55% : sharp escape up/right
+   55–70% : off-screen reposition
+   70–100%: come back from right, chasing cat left
+*/
+@keyframes butterflyAct {
+  0% {
+    transform: translate(0vw, 0px) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  10% {
+    transform: translate(6vw, -8px) scale(1.03) rotate(-10deg);
+  }
+  20% {
+    transform: translate(12vw, -4px) scale(1) rotate(8deg);
+  }
+  32% {
+    transform: translate(22vw, -16px) scale(1.05) rotate(-12deg);
+  }
+  45% {
+    transform: translate(30vw, -6px) scale(1) rotate(10deg);
+  }
+
+  /* escape arc */
+  52% {
+    transform: translate(48vw, -60px) scale(0.9) rotate(18deg);
+    opacity: 0.8;
+  }
+  55% {
+    transform: translate(70vw, -90px) scale(0.8) rotate(26deg);
+    opacity: 0;
+  }
+
+  /* off-screen reposition while cat is grooming / flipping */
+  70% {
+    transform: translate(70vw, -20px) scale(0.9) rotate(-18deg);
+    opacity: 0;
+  }
+
+  /* re-enter from right, just behind cat (which is around 22vw at 70%) */
+  78% {
+    transform: translate(30vw, -10px) scale(1) rotate(8deg);
+    opacity: 1;
+  }
+  90% {
+    transform: translate(18vw, -6px) scale(1.03) rotate(-8deg);
+  }
+  100% {
+    transform: translate(10vw, -10px) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+
+/* wings flapping */
+@keyframes wingFlap {
+  0%   { transform: scaleY(1); }
+  50%  { transform: scaleY(0.82); }
+  100% { transform: scaleY(1); }
 }
 
 
@@ -732,15 +988,66 @@ body{
 
           <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
 
-          <!-- Drift compare lives inside the same card now -->
-          <div id="liveDriftBox" style="margin-top:10px; display:none">
-            <div class="muted">Drift compare (scan vs live sample)</div>
-            <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
+         <!-- Drift compare lives inside the same card now -->
+         <div class="card">
+          <div class="card-header">
+            <!-- header content -->
           </div>
-        </div>
-      </div>
-    </div>
 
+          <div class="card-body">
+            <!-- existing stuff in your card body -->
+
+            <!-- Drift compare lives inside the same card now -->
+            <div id="liveDriftBox" style="margin-top:10px; display:none">
+              <div class="muted">Drift compare (scan vs live sample)</div>
+              <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
+            </div>
+
+            <!-- FUN ANIMATION ZONE UNDER THE CARD CONTENT -->
+            <div id="liveFunZone">
+              <!-- Cat silhouette -->
+              <svg class="cat" viewBox="0 0 120 80" aria-hidden="true">
+                <!-- body + legs + tail -->
+                <g class="cat-body">
+                  <!-- body -->
+                  <ellipse cx="55" cy="48" rx="25" ry="16" />
+                  <!-- back leg -->
+                  <rect x="40" y="54" width="8" height="16" rx="3" />
+                  <!-- front leg -->
+                  <rect x="52" y="54" width="8" height="16" rx="3" />
+                  <!-- tail (separate group so we can wag) -->
+                  <g class="cat-tail">
+                    <path d="M30 44 Q18 38 22 28 Q28 18 40 24" />
+                  </g>
+                </g>
+
+                <!-- head/face (front of cat) -->
+                <g class="cat-head">
+                  <!-- head -->
+                  <circle cx="90" cy="40" r="11" />
+                  <!-- ears -->
+                  <polygon points="82,32 86,22 90,32" />
+                  <polygon points="90,32 94,22 98,32" />
+                </g>
+              </svg>
+
+              <!-- Butterfly -->
+              <svg class="butterfly" viewBox="0 0 80 60" aria-hidden="true">
+                <g class="butterfly-body">
+                  <!-- wings -->
+                  <ellipse cx="30" cy="30" rx="14" ry="18" />
+                  <ellipse cx="50" cy="30" rx="14" ry="18" />
+                  <!-- body -->
+                  <rect x="38" y="18" width="4" height="24" rx="2" />
+                  <!-- antennae -->
+                  <path d="M40 18 C34 10 32 8 30 6" />
+                  <path d="M40 18 C46 10 48 8 50 6" />
+                </g>
+              </svg>
+            </div>
+
+          </div> <!-- closes card-body -->
+        </div> <!-- closes card -->
 
 <script>
 
@@ -1895,6 +2202,64 @@ $("#btnDownload").addEventListener("click", downloadExportTxt);
   setFinalizeEnabled(false);
   setExportEnabled(false);
 })();
+
+// Handle Live Verification UI (drift box + cat/butterfly)
+let liveTimer = null;
+
+function setLiveVerificationUI(on) {
+  const funZone  = document.getElementById("liveFunZone");
+  const driftBox = document.getElementById("liveDriftBox");
+
+  if (funZone) {
+    funZone.classList.toggle("active", on);
+  }
+
+  if (driftBox) {
+    driftBox.style.display = on ? "block" : "none";
+  }
+}
+
+// Start live verification + 90s timeout
+function startLiveVerification() {
+  // turn it on
+  setLiveVerificationUI(true);
+
+  // reset any old timer
+  if (liveTimer) {
+    clearTimeout(liveTimer);
+    liveTimer = null;
+  }
+
+  // hard stop after 90s
+  liveTimer = setTimeout(() => {
+    setLiveVerificationUI(false);
+    liveTimer = null;
+  }, 90_000); // 90 seconds
+}
+
+// Stop live verification manually (Close/Finalize)
+function stopLiveVerification() {
+  setLiveVerificationUI(false);
+  if (liveTimer) {
+    clearTimeout(liveTimer);
+    liveTimer = null;
+  }
+}
+
+// Wire up buttons (change IDs if yours differ)
+document.getElementById("btnStartLive")?.addEventListener("click", () => {
+  startLiveVerification();
+});
+
+document.getElementById("btnCloseLive")?.addEventListener("click", () => {
+  stopLiveVerification();
+});
+
+document.getElementById("btnFinalize")?.addEventListener("click", () => {
+  stopLiveVerification();
+});
+
+
 
 </script>
 </body>
