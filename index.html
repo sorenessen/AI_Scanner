@@ -402,28 +402,25 @@ body{
   transform-origin: 50% 50%;
 }
 
-/* shared butterfly look: blue wings, darker body, glow */
+/* shared butterfly look: wings get animated colors, body stays darker */
 #liveFunZone .butterfly-body ellipse {
-  fill: #3da7ff;
+  fill: #3da7ff;                 /* base blue */
   stroke: #c6e3ff;
   stroke-width: 1.2;
   filter: drop-shadow(0 0 4px rgba(61, 167, 255, 0.7));
+  transform-origin: 40px 30px;
+  animation: wingFlap 0.45s ease-in-out infinite,
+             butterflyColor 6s linear infinite;
 }
 
 #liveFunZone .butterfly-body rect {
-  fill: #1c4e80;
+  fill: #1c4e80;                 /* body stays dark */
 }
 
 #liveFunZone .butterfly-body path {
   fill: none;
-  stroke: #1c4e80;
+  stroke: #1c4e80;               /* antennae/body outline */
   stroke-width: 1.5;
-}
-
-/* subtle wing flap */
-#liveFunZone .butterfly-body {
-  transform-origin: 40px 30px;
-  animation: wingFlap 0.45s ease-in-out infinite;
 }
 
 /* Position + animation assignment for each butterfly */
@@ -458,54 +455,54 @@ body{
 }
 
 /*
-Cat behaviour over 30s:
-0–20%  : stalk / creep near left
-20–45% : run toward butterfly (solo)
-45–60% : stop + groom (no horizontal move)
-60–70% : notice, tense, flip to face left
-70–100%: run back left while being chased (swarm)
+Cat behaviour over 30s (now covers more ground, feels faster):
+0–18%  : stalk / creep near left
+18–40% : run hard toward butterfly (solo), reaches mid-right
+40–58% : stop + groom (no horizontal move)
+58–70% : notice, tense, flip to face left
+70–100%: run hard back left while being chased (swarm), almost offscreen
 */
 @keyframes catAct {
   0% {
-    transform: translateX(0) translateY(0) scaleX(1) scaleY(1);
+    transform: translateX(0vw) translateY(0) scaleX(1) scaleY(1);
   }
-  12% {
-    transform: translateX(2vw) translateY(3px) scaleX(1) scaleY(0.95); /* crouch */
+  10% {
+    transform: translateX(3vw) translateY(3px) scaleX(1) scaleY(0.95); /* crouch */
   }
-  20% {
-    transform: translateX(4vw) translateY(0) scaleX(1) scaleY(1);
+  18% {
+    transform: translateX(6vw) translateY(0) scaleX(1) scaleY(1);
   }
 
-  /* run toward butterfly */
+  /* run toward butterfly – pushes deep into the bar */
   30% {
-    transform: translateX(12vw) translateY(0) scaleX(1);
+    transform: translateX(18vw) translateY(0) scaleX(1);
   }
-  45% {
-    transform: translateX(22vw) translateY(0) scaleX(1);
+  40% {
+    transform: translateX(32vw) translateY(0) scaleX(1);
   }
 
   /* STOP + pounce/land – stays roughly in place while grooming */
   50% {
-    transform: translateX(22vw) translateY(-6px) scaleX(1) rotate(-6deg);
+    transform: translateX(34vw) translateY(-6px) scaleX(1) rotate(-6deg);
   }
-  60% {
-    transform: translateX(22vw) translateY(0) scaleX(1) rotate(3deg);
+  58% {
+    transform: translateX(34vw) translateY(0) scaleX(1) rotate(3deg);
   }
 
   /* tense + flip to face left (but still in same area) */
-  65% {
-    transform: translateX(22vw) translateY(0) scaleX(-1);
+  64% {
+    transform: translateX(34vw) translateY(0) scaleX(-1);
   }
   70% {
-    transform: translateX(22vw) translateY(0) scaleX(-1);
+    transform: translateX(34vw) translateY(0) scaleX(-1);
   }
 
-  /* now run back left, butterflies behind */
+  /* now run back left, butterflies behind, almost off-screen by the end */
   85% {
-    transform: translateX(10vw) translateY(0) scaleX(-1);
+    transform: translateX(-2vw) translateY(0) scaleX(-1);
   }
   100% {
-    transform: translateX(2vw) translateY(0) scaleX(-1);
+    transform: translateX(-6vw) translateY(0) scaleX(-1);
   }
 }
 
@@ -537,47 +534,64 @@ Cat behaviour over 30s:
   }
 }
 
-/* ===== Butterfly story: 1 → 2 → 4 ===== */
+/* ===== Butterfly color: blue → pink → orange → blue ===== */
+@keyframes butterflyColor {
+  0%, 100% {
+    fill: #3da7ff;
+    stroke: #c6e3ff;
+  }
+  33% {
+    fill: #ff6fbf;   /* pink */
+    stroke: #ffd1ea;
+  }
+  66% {
+    fill: #ffae42;   /* orange */
+    stroke: #ffe0a3;
+  }
+}
+
+/* ===== Butterfly story: 1 → 2 → 4, triangle swarm at end, more ground ===== */
 
 /*
 b1 (solo) – "seed":
-0–35% : ahead of cat, being chased
-35–50%: escape up-right, vanish
+0–32% : ahead of cat, being chased (travels further right now)
+32–50%: escape up-right, vanish
 50–75%: off-screen
-75–100%: back as part of final swarm chasing cat left
+75–100%: back as TOP of final triangle swarm chasing cat left
 */
 @keyframes butterflySolo {
   0% {
-    transform: translate(0vw, 0px) scale(1) rotate(0deg);
+    transform: translate(2vw, 0px) scale(1) rotate(0deg);
     opacity: 1;
   }
-  15% {
-    transform: translate(6vw, -8px) scale(1.03) rotate(-10deg);
+  16% {
+    transform: translate(12vw, -10px) scale(1.03) rotate(-10deg);
   }
-  35% {
-    transform: translate(14vw, -4px) scale(1.05) rotate(8deg);
+  32% {
+    transform: translate(26vw, -6px) scale(1.07) rotate(8deg);
   }
-  45% {
-    transform: translate(28vw, -40px) scale(0.9) rotate(18deg);
-    opacity: 0.8;
+  42% {
+    transform: translate(42vw, -36px) scale(0.96) rotate(18deg);
+    opacity: 0.85;
   }
   50% {
-    transform: translate(40vw, -80px) scale(0.8) rotate(26deg);
+    transform: translate(58vw, -82px) scale(0.85) rotate(28deg);
     opacity: 0;
   }
   75% {
-    transform: translate(40vw, -20px) scale(0.9) rotate(-10deg);
+    transform: translate(58vw, -26px) scale(0.9) rotate(-10deg);
     opacity: 0;
   }
+  /* swarm: top point of triangle, moving fast back left */
   85% {
-    transform: translate(28vw, -10px) scale(1) rotate(6deg);
+    transform: translate(30vw, -22px) scale(1) rotate(6deg);
     opacity: 1;
   }
   95% {
-    transform: translate(16vw, -8px) scale(1.02) rotate(-6deg);
+    transform: translate(12vw, -20px) scale(1.02) rotate(-4deg);
   }
   100% {
-    transform: translate(12vw, -6px) scale(1) rotate(0deg);
+    transform: translate(6vw, -20px) scale(1) rotate(0deg);
     opacity: 1;
   }
 }
@@ -585,9 +599,9 @@ b1 (solo) – "seed":
 /*
 b2 + b3 (pair):
 0–35% : hidden
-35–65%: appear as a pair, get chased right
+35–65%: appear as a pair, get chased right (deeper into the bar)
 65–75%: escape up-right
-75–100%: come back as part of final swarm
+75–100%: come back as BOTTOM corners of triangle
 */
 @keyframes butterflyPair {
   0%, 34% {
@@ -596,28 +610,29 @@ b2 + b3 (pair):
   }
   40% {
     opacity: 1;
-    transform: translate(12vw, -8px) scale(1.02) rotate(-8deg);
+    transform: translate(16vw, -10px) scale(1.04) rotate(-8deg);
   }
   55% {
-    transform: translate(22vw, -14px) scale(1.05) rotate(10deg);
+    transform: translate(30vw, -16px) scale(1.07) rotate(10deg);
   }
   65% {
-    transform: translate(32vw, -40px) scale(0.9) rotate(20deg);
-    opacity: 0.8;
+    transform: translate(46vw, -44px) scale(0.96) rotate(20deg);
+    opacity: 0.85;
   }
   75% {
-    transform: translate(42vw, -70px) scale(0.8) rotate(28deg);
+    transform: translate(62vw, -78px) scale(0.86) rotate(28deg);
     opacity: 0;
   }
+  /* swarm: bottom corners of triangle, chasing left quickly */
   85% {
-    transform: translate(26vw, -10px) scale(1) rotate(6deg);
+    transform: translate(26vw, -4px) scale(1) rotate(4deg);
     opacity: 1;
   }
   95% {
-    transform: translate(16vw, -8px) scale(1.02) rotate(-6deg);
+    transform: translate(10vw, -4px) scale(1.02) rotate(-4deg);
   }
   100% {
-    transform: translate(12vw, -6px) scale(1) rotate(0deg);
+    transform: translate(4vw, -4px) scale(1) rotate(0deg);
     opacity: 1;
   }
 }
@@ -625,33 +640,32 @@ b2 + b3 (pair):
 /*
 b4 (swarm-only):
 0–70% : hidden
-70–100%: appears with the others chasing cat back left
+70–100%: appears as BACK point of the triangle, also moving far left
 */
 @keyframes butterflySwarm {
   0%, 69% {
-    transform: translate(40vw, -10px) scale(1) rotate(0deg);
+    transform: translate(60vw, -14px) scale(1) rotate(0deg);
     opacity: 0;
   }
   78% {
-    transform: translate(30vw, -8px) scale(1.03) rotate(-8deg);
+    transform: translate(36vw, -14px) scale(1) rotate(-4deg);
     opacity: 1;
   }
   90% {
-    transform: translate(18vw, -6px) scale(1.02) rotate(6deg);
+    transform: translate(18vw, -14px) scale(1.02) rotate(4deg);
   }
   100% {
-    transform: translate(12vw, -6px) scale(1) rotate(0deg);
+    transform: translate(8vw, -14px) scale(1) rotate(0deg);
     opacity: 1;
   }
 }
 
-/* wings flapping */
+/* wings flapping (used by butterfly-body ellipse) */
 @keyframes wingFlap {
   0%   { transform: scaleY(1); }
   50%  { transform: scaleY(0.82); }
   100% { transform: scaleY(1); }
 }
-
 
 </style>
 </head>
