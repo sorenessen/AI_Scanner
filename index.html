@@ -360,30 +360,24 @@ body{
 
 /* ---------------- CAT (CopyCat-style silhouette) ---------------- */
 
+/* CAT (CopyCat-style silhouette) */
 #liveFunZone .cat {
-  width: 120px;
-  height: 90px;
+  position: absolute;
   bottom: 4px;
   left: 4%;
+  width: 150px;          /* a bit larger */
+  height: auto;
   transform-origin: 50% 100%;
-  transform: translateX(0) translateY(0);
-  animation: catAct 30s linear infinite;
+  animation: catAct 18s linear infinite;
 }
 
-/* solid silhouette, no weird outlines */
-#liveFunZone .cat-body path,
-#liveFunZone .cat-tail path {
-  fill: #07151d;     /* very dark blue/black */
-  stroke: none;
-}
-
-/* chest highlight curve */
-#liveFunZone .cat-chest {
-  fill: none;
-  stroke: #f5f0e5;
-  stroke-width: 2;
-  stroke-linecap: round;
-}
+/*
+  0–18%  : prowl on left
+  18–40% : run right toward butterflies
+  40–58% : dramatic grooming rock (reads as "lick balls")
+  58–70% : startled pop
+  70–100%: sprint back left, “oh shit the swarm is coming”
+*/
 
 /* ---------------- BUTTERFLIES ---------------- */
 
@@ -451,47 +445,52 @@ Cat behaviour over 30s (faster, more ground):
 58–70% : smooth “turn” (no paper flip)
 70–100%: run hard back left while being chased (swarm)
 */
+
 @keyframes catAct {
+  /* idle / tiny crouch */
   0% {
-    transform: translateX(0vw) translateY(0);
+    transform: translateX(0vw) translateY(0) scale(1) rotate(0deg);
   }
   10% {
-    transform: translateX(3vw) translateY(3px); /* crouch */
+    transform: translateX(1vw) translateY(4px) scale(0.97, 1.05) rotate(-6deg);
   }
   18% {
-    transform: translateX(6vw) translateY(0);
+    transform: translateX(3vw) translateY(0) scale(1) rotate(0deg);
   }
 
-  /* run toward butterfly – pushes deep into the bar */
-  30% {
-    transform: translateX(18vw) translateY(0);
+  /* run toward the right */
+  28% {
+    transform: translateX(14vw) translateY(-2px) scale(1.04) rotate(4deg);
   }
   40% {
-    transform: translateX(32vw) translateY(0);
+    transform: translateX(26vw) translateY(0px) scale(1.05) rotate(-4deg);
   }
 
-  /* STOP + groom – stays roughly in place */
-  50% {
-    transform: translateX(34vw) translateY(-4px) rotate(-3deg);
+  /* grooming: obvious rock + squash/stretch */
+  46% {
+    transform: translateX(28vw) translateY(12px) scale(0.9, 1.08) rotate(-22deg);
+  }
+  52% {
+    transform: translateX(28vw) translateY(8px) scale(0.93, 1.04) rotate(18deg);
   }
   58% {
-    transform: translateX(34vw) translateY(0) rotate(2deg);
+    transform: translateX(28vw) translateY(10px) scale(0.9, 1.08) rotate(-18deg);
   }
 
-  /* “turn around” – little looping arc instead of flip */
-  64% {
-    transform: translateX(32vw) translateY(-6px) rotate(8deg);
-  }
-  70% {
-    transform: translateX(30vw) translateY(0) rotate(-6deg);
+  /* startled pop */
+  65% {
+    transform: translateX(28vw) translateY(-14px) scale(1.06) rotate(2deg);
   }
 
-  /* now run back left, chased by swarm */
-  85% {
-    transform: translateX(-2vw) translateY(0) rotate(-3deg);
+  /* sprint back left, slightly tilted */
+  75% {
+    transform: translateX(16vw) translateY(-6px) scale(1.04) rotate(-8deg);
+  }
+  90% {
+    transform: translateX(-6vw) translateY(0px) scale(0.98, 1.02) rotate(-10deg);
   }
   100% {
-    transform: translateX(-6vw) translateY(0) rotate(0deg);
+    transform: translateX(0vw) translateY(0) scale(1) rotate(0deg);
   }
 }
 
@@ -1042,113 +1041,39 @@ b4 (swarm-only):
               <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
             </div>
 
-            <div id="liveFunZone">
-  <!-- CAT — CopyCat-like sitting silhouette -->
-  <svg class="cat" viewBox="0 0 100 110" aria-hidden="true">
-    <!-- main body + head as one silhouette -->
-    <g class="cat-body">
-      <path d="
-        M40 104
-        Q32 100 30 93
-        L30 72
-        Q30 60 35 52
-        Q31 44 31 34
-        Q31 22 39 15
-        Q46 9 55 9
-        Q64 9 71 15
-        Q79 22 79 34
-        Q79 43 75 50
-        Q81 58 81 69
-        L81 88
-        Q81 98 74 104
-        Z
-      " />
-    </g>
+ <!-- CAT — CopyCat-like sitting silhouette -->
+<div id="liveFunZone">
 
-    <!-- ears sitting on top of the silhouette -->
-    <g>
-      <path d="M48 20 L45 10 L40 20 Z" />
-      <path d="M60 20 L65 10 L68 21 Z" />
-    </g>
-
-    <!-- tail curling forward like the logo -->
-    <g class="cat-tail">
-      <path d="
-        M34 82
-        Q22 80 22 68
-        Q22 56 30 52
-        Q26 58 26 64
-        Q26 72 34 76
-      " />
-    </g>
-
-    <!-- chest highlight curve -->
-    <path
-      class="cat-chest"
-      d="M54 96 Q60 82 62 68 Q63 58 63 50"
-    />
-  </svg>
+  <!-- CAT: real logo sprite -->
+  <img
+    class="cat"
+    src="/static/cat-logo.png"
+    alt="CopyCat mascot"
+  />
 
   <!-- BUTTERFLY #1 (solo → then top of triangle) -->
   <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
     <g class="butterfly-body">
-      <!-- upper wings -->
-      <ellipse cx="30" cy="22" rx="11" ry="14" />
-      <ellipse cx="50" cy="22" rx="11" ry="14" />
-      <!-- lower wings -->
-      <ellipse cx="28" cy="38" rx="9" ry="12" />
-      <ellipse cx="52" cy="38" rx="9" ry="12" />
-      <!-- body -->
-      <rect x="38" y="22" width="4" height="20" rx="2" />
-      <!-- antennae -->
-      <path d="M40 22 C35 14 33 12 30 10" />
-      <path d="M40 22 C45 14 47 12 50 10" />
+      <!-- wings/body/etc -->
     </g>
   </svg>
 
   <!-- BUTTERFLY #2 -->
   <svg class="butterfly b2" viewBox="0 0 80 60" aria-hidden="true">
-    <g class="butterfly-body">
-      <ellipse cx="30" cy="22" rx="11" ry="14" />
-      <ellipse cx="50" cy="22" rx="11" ry="14" />
-      <ellipse cx="28" cy="38" rx="9" ry="12" />
-      <ellipse cx="52" cy="38" rx="9" ry="12" />
-      <rect x="38" y="22" width="4" height="20" rx="2" />
-      <path d="M40 22 C35 14 33 12 30 10" />
-      <path d="M40 22 C45 14 47 12 50 10" />
-    </g>
+    <g class="butterfly-body"> … </g>
   </svg>
 
   <!-- BUTTERFLY #3 -->
   <svg class="butterfly b3" viewBox="0 0 80 60" aria-hidden="true">
-    <g class="butterfly-body">
-      <ellipse cx="30" cy="22" rx="11" ry="14" />
-      <ellipse cx="50" cy="22" rx="11" ry="14" />
-      <ellipse cx="28" cy="38" rx="9" ry="12" />
-      <ellipse cx="52" cy="38" rx="9" ry="12" />
-      <rect x="38" y="22" width="4" height="20" rx="2" />
-      <path d="M40 22 C35 14 33 12 30 10" />
-      <path d="M40 22 C45 14 47 12 50 10" />
-    </g>
+    <g class="butterfly-body"> … </g>
   </svg>
 
-  <!-- BUTTERFLY #4 (swarm-only) -->
+  <!-- BUTTERFLY #4 -->
   <svg class="butterfly b4" viewBox="0 0 80 60" aria-hidden="true">
-    <g class="butterfly-body">
-      <ellipse cx="30" cy="22" rx="11" ry="14" />
-      <ellipse cx="50" cy="22" rx="11" ry="14" />
-      <ellipse cx="28" cy="38" rx="9" ry="12" />
-      <ellipse cx="52" cy="38" rx="9" ry="12" />
-      <rect x="38" y="22" width="4" height="20" rx="2" />
-      <path d="M40 22 C35 14 33 12 30 10" />
-      <path d="M40 22 C45 14 47 12 50 10" />
-    </g>
+    <g class="butterfly-body"> … </g>
   </svg>
-</div>
+</div> <!-- ✅ liveFunZone closes here -->
 
-
-          </div> <!-- closes card-body -->
-        </div> <!-- closes card -->
 
 <script>
 
