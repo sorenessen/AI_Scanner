@@ -358,39 +358,31 @@ body{
   position: absolute;
 }
 
-/* ---------------- CAT ---------------- */
+/* ---------------- CAT (CopyCat-style silhouette) ---------------- */
 
 #liveFunZone .cat {
   width: 120px;
-  height: 80px;
+  height: 90px;
   bottom: 4px;
   left: 4%;
   transform-origin: 50% 100%;
-  transform: translateX(0) scaleX(1);
+  transform: translateX(0) translateY(0);
   animation: catAct 30s linear infinite;
 }
 
-/* Cat styling: black fill with light outline so it’s visible on dark bg */
-#liveFunZone .cat-body ellipse,
-#liveFunZone .cat-body rect,
+/* solid silhouette, no weird outlines */
 #liveFunZone .cat-body path,
-#liveFunZone .cat-head circle,
-#liveFunZone .cat-head polygon {
-  fill: #000;
-  stroke: #a0a0a0;
-  stroke-width: 1;
-}
-
-/* tail wagging */
 #liveFunZone .cat-tail path {
-  transform-origin: 30px 44px;
-  animation: catTail 0.4s ease-in-out infinite;
+  fill: #07151d;     /* very dark blue/black */
+  stroke: none;
 }
 
-/* head used for “licking / looking around” */
-#liveFunZone .cat-head {
-  transform-origin: 90px 40px;
-  animation: catHead 30s linear infinite;
+/* chest highlight curve */
+#liveFunZone .cat-chest {
+  fill: none;
+  stroke: #f5f0e5;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 /* ---------------- BUTTERFLIES ---------------- */
@@ -402,25 +394,26 @@ body{
   transform-origin: 50% 50%;
 }
 
-/* shared butterfly look: wings get animated colors, body stays darker */
+/* wings: color-cycle + glow */
 #liveFunZone .butterfly-body ellipse {
-  fill: #3da7ff;                 /* base blue */
-  stroke: #c6e3ff;
-  stroke-width: 1.2;
-  filter: drop-shadow(0 0 4px rgba(61, 167, 255, 0.7));
+  fill: #2d7ff9;  /* start blue */
+  stroke: #cbe1ff;
+  stroke-width: 1.3;
+  filter: drop-shadow(0 0 4px rgba(45, 127, 249, 0.7));
   transform-origin: 40px 30px;
-  animation: wingFlap 0.45s ease-in-out infinite,
+  animation: wingFlap 0.4s ease-in-out infinite,
              butterflyColor 6s linear infinite;
 }
 
+/* butterfly body + antennae */
 #liveFunZone .butterfly-body rect {
-  fill: #1c4e80;                 /* body stays dark */
+  fill: #14345d;
 }
 
 #liveFunZone .butterfly-body path {
   fill: none;
-  stroke: #1c4e80;               /* antennae/body outline */
-  stroke-width: 1.5;
+  stroke: #14345d;
+  stroke-width: 1.4;
 }
 
 /* Position + animation assignment for each butterfly */
@@ -430,16 +423,19 @@ body{
   animation: butterflySolo 30s linear infinite;
 }
 
+/* bottom-left of the triangle pair */
 #liveFunZone .butterfly.b2 {
   left: 20vw;
   animation: butterflyPair 30s linear infinite;
 }
 
+/* bottom-right of the triangle pair */
 #liveFunZone .butterfly.b3 {
   left: 23vw;
   animation: butterflyPair 30s linear infinite;
 }
 
+/* back / trailing point of the triangle swarm */
 #liveFunZone .butterfly.b4 {
   left: 26vw;
   animation: butterflySwarm 30s linear infinite;
@@ -447,98 +443,63 @@ body{
 
 /* ======= ANIMATIONS ======= */
 
-/* Tail always flicks a little (reads as “cat is alive”) */
-@keyframes catTail {
-  0%   { transform: rotate(15deg); }
-  50%  { transform: rotate(-10deg); }
-  100% { transform: rotate(15deg); }
-}
-
 /*
-Cat behaviour over 30s (now covers more ground, feels faster):
+Cat behaviour over 30s (faster, more ground):
 0–18%  : stalk / creep near left
 18–40% : run hard toward butterfly (solo), reaches mid-right
-40–58% : stop + groom (no horizontal move)
-58–70% : notice, tense, flip to face left
-70–100%: run hard back left while being chased (swarm), almost offscreen
+40–58% : stop + groom
+58–70% : smooth “turn” (no paper flip)
+70–100%: run hard back left while being chased (swarm)
 */
 @keyframes catAct {
   0% {
-    transform: translateX(0vw) translateY(0) scaleX(1) scaleY(1);
+    transform: translateX(0vw) translateY(0);
   }
   10% {
-    transform: translateX(3vw) translateY(3px) scaleX(1) scaleY(0.95); /* crouch */
+    transform: translateX(3vw) translateY(3px); /* crouch */
   }
   18% {
-    transform: translateX(6vw) translateY(0) scaleX(1) scaleY(1);
+    transform: translateX(6vw) translateY(0);
   }
 
   /* run toward butterfly – pushes deep into the bar */
   30% {
-    transform: translateX(18vw) translateY(0) scaleX(1);
+    transform: translateX(18vw) translateY(0);
   }
   40% {
-    transform: translateX(32vw) translateY(0) scaleX(1);
+    transform: translateX(32vw) translateY(0);
   }
 
-  /* STOP + pounce/land – stays roughly in place while grooming */
+  /* STOP + groom – stays roughly in place */
   50% {
-    transform: translateX(34vw) translateY(-6px) scaleX(1) rotate(-6deg);
+    transform: translateX(34vw) translateY(-4px) rotate(-3deg);
   }
   58% {
-    transform: translateX(34vw) translateY(0) scaleX(1) rotate(3deg);
+    transform: translateX(34vw) translateY(0) rotate(2deg);
   }
 
-  /* tense + flip to face left (but still in same area) */
+  /* “turn around” – little looping arc instead of flip */
   64% {
-    transform: translateX(34vw) translateY(0) scaleX(-1);
+    transform: translateX(32vw) translateY(-6px) rotate(8deg);
   }
   70% {
-    transform: translateX(34vw) translateY(0) scaleX(-1);
+    transform: translateX(30vw) translateY(0) rotate(-6deg);
   }
 
-  /* now run back left, butterflies behind, almost off-screen by the end */
+  /* now run back left, chased by swarm */
   85% {
-    transform: translateX(-2vw) translateY(0) scaleX(-1);
+    transform: translateX(-2vw) translateY(0) rotate(-3deg);
   }
   100% {
-    transform: translateX(-6vw) translateY(0) scaleX(-1);
-  }
-}
-
-/* head motion:
-   idle most of the time; big “groom” bobs only during 45–60% of catAct
-*/
-@keyframes catHead {
-  0%, 35% {
-    transform: rotate(0deg);
-  }
-  /* begin grooming around when cat stops */
-  45% {
-    transform: rotate(-18deg);
-  }
-  50% {
-    transform: rotate(20deg);
-  }
-  55% {
-    transform: rotate(-12deg);
-  }
-  60% {
-    transform: rotate(8deg);
-  }
-  65% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(0deg);
+    transform: translateX(-6vw) translateY(0) rotate(0deg);
   }
 }
 
 /* ===== Butterfly color: blue → pink → orange → blue ===== */
 @keyframes butterflyColor {
   0%, 100% {
-    fill: #3da7ff;
-    stroke: #c6e3ff;
+    fill: #2d7ff9;
+    stroke: #cbe1ff;
   }
   33% {
     fill: #ff6fbf;   /* pink */
@@ -550,11 +511,11 @@ Cat behaviour over 30s (now covers more ground, feels faster):
   }
 }
 
-/* ===== Butterfly story: 1 → 2 → 4, triangle swarm at end, more ground ===== */
+/* ===== Butterfly story: 1 → 2 → 4, triangle swarm at end, faster ===== */
 
 /*
 b1 (solo) – "seed":
-0–32% : ahead of cat, being chased (travels further right now)
+0–32% : ahead of cat, being chased
 32–50%: escape up-right, vanish
 50–75%: off-screen
 75–100%: back as TOP of final triangle swarm chasing cat left
@@ -599,7 +560,7 @@ b1 (solo) – "seed":
 /*
 b2 + b3 (pair):
 0–35% : hidden
-35–65%: appear as a pair, get chased right (deeper into the bar)
+35–65%: appear as a pair, get chased right
 65–75%: escape up-right
 75–100%: come back as BOTTOM corners of triangle
 */
@@ -660,12 +621,13 @@ b4 (swarm-only):
   }
 }
 
-/* wings flapping (used by butterfly-body ellipse) */
+/* wings flapping */
 @keyframes wingFlap {
   0%   { transform: scaleY(1); }
   50%  { transform: scaleY(0.82); }
   100% { transform: scaleY(1); }
 }
+
 
 </style>
 </head>
@@ -1080,75 +1042,109 @@ b4 (swarm-only):
               <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
             </div>
 
-            <!-- FUN ANIMATION ZONE UNDER THE CARD CONTENT -->
             <div id="liveFunZone">
-              <!-- CAT SVG -->
-              <svg class="cat" viewBox="0 0 120 80" aria-hidden="true">
-                <g class="cat-body">
-                  <!-- body -->
-                  <ellipse cx="55" cy="48" rx="25" ry="16" />
-                  <!-- legs -->
-                  <rect x="40" y="54" width="8" height="16" rx="3" />
-                  <rect x="52" y="54" width="8" height="16" rx="3" />
-                  <!-- tail (we animate this separately) -->
-                  <g class="cat-tail">
-                    <path d="M30 44 Q18 38 22 28 Q28 18 40 24" />
-                  </g>
-                </g>
+  <!-- CAT — CopyCat-like sitting silhouette -->
+  <svg class="cat" viewBox="0 0 100 110" aria-hidden="true">
+    <!-- main body + head as one silhouette -->
+    <g class="cat-body">
+      <path d="
+        M40 104
+        Q32 100 30 93
+        L30 72
+        Q30 60 35 52
+        Q31 44 31 34
+        Q31 22 39 15
+        Q46 9 55 9
+        Q64 9 71 15
+        Q79 22 79 34
+        Q79 43 75 50
+        Q81 58 81 69
+        L81 88
+        Q81 98 74 104
+        Z
+      " />
+    </g>
 
-                <g class="cat-head">
-                  <!-- head -->
-                  <circle cx="90" cy="40" r="11" />
-                  <!-- ears -->
-                  <polygon points="82,32 86,22 90,32" />
-                  <polygon points="90,32 94,22 98,32" />
-                </g>
-              </svg>
+    <!-- ears sitting on top of the silhouette -->
+    <g>
+      <path d="M48 20 L45 10 L40 20 Z" />
+      <path d="M60 20 L65 10 L68 21 Z" />
+    </g>
 
-              <!-- BUTTERFLY #1 (solo at start, then joins swarm) -->
-              <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
-                <g class="butterfly-body">
-                  <ellipse cx="30" cy="30" rx="14" ry="18" />
-                  <ellipse cx="50" cy="30" rx="14" ry="18" />
-                  <rect x="38" y="18" width="4" height="24" rx="2" />
-                  <path d="M40 18 C34 10 32 8 30 6" />
-                  <path d="M40 18 C46 10 48 8 50 6" />
-                </g>
-              </svg>
+    <!-- tail curling forward like the logo -->
+    <g class="cat-tail">
+      <path d="
+        M34 82
+        Q22 80 22 68
+        Q22 56 30 52
+        Q26 58 26 64
+        Q26 72 34 76
+      " />
+    </g>
 
-              <!-- BUTTERFLY #2 (part of the pair) -->
-              <svg class="butterfly b2" viewBox="0 0 80 60" aria-hidden="true">
-                <g class="butterfly-body">
-                  <ellipse cx="30" cy="30" rx="14" ry="18" />
-                  <ellipse cx="50" cy="30" rx="14" ry="18" />
-                  <rect x="38" y="18" width="4" height="24" rx="2" />
-                  <path d="M40 18 C34 10 32 8 30 6" />
-                  <path d="M40 18 C46 10 48 8 50 6" />
-                </g>
-              </svg>
+    <!-- chest highlight curve -->
+    <path
+      class="cat-chest"
+      d="M54 96 Q60 82 62 68 Q63 58 63 50"
+    />
+  </svg>
 
-              <!-- BUTTERFLY #3 (part of the pair) -->
-              <svg class="butterfly b3" viewBox="0 0 80 60" aria-hidden="true">
-                <g class="butterfly-body">
-                  <ellipse cx="30" cy="30" rx="14" ry="18" />
-                  <ellipse cx="50" cy="30" rx="14" ry="18" />
-                  <rect x="38" y="18" width="4" height="24" rx="2" />
-                  <path d="M40 18 C34 10 32 8 30 6" />
-                  <path d="M40 18 C46 10 48 8 50 6" />
-                </g>
-              </svg>
+  <!-- BUTTERFLY #1 (solo → then top of triangle) -->
+  <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
+    <g class="butterfly-body">
+      <!-- upper wings -->
+      <ellipse cx="30" cy="22" rx="11" ry="14" />
+      <ellipse cx="50" cy="22" rx="11" ry="14" />
+      <!-- lower wings -->
+      <ellipse cx="28" cy="38" rx="9" ry="12" />
+      <ellipse cx="52" cy="38" rx="9" ry="12" />
+      <!-- body -->
+      <rect x="38" y="22" width="4" height="20" rx="2" />
+      <!-- antennae -->
+      <path d="M40 22 C35 14 33 12 30 10" />
+      <path d="M40 22 C45 14 47 12 50 10" />
+    </g>
+  </svg>
 
-              <!-- BUTTERFLY #4 (only shows up in the final “swarm”) -->
-              <svg class="butterfly b4" viewBox="0 0 80 60" aria-hidden="true">
-                <g class="butterfly-body">
-                  <ellipse cx="30" cy="30" rx="14" ry="18" />
-                  <ellipse cx="50" cy="30" rx="14" ry="18" />
-                  <rect x="38" y="18" width="4" height="24" rx="2" />
-                  <path d="M40 18 C34 10 32 8 30 6" />
-                  <path d="M40 18 C46 10 48 8 50 6" />
-                </g>
-              </svg>
-            </div>
+  <!-- BUTTERFLY #2 -->
+  <svg class="butterfly b2" viewBox="0 0 80 60" aria-hidden="true">
+    <g class="butterfly-body">
+      <ellipse cx="30" cy="22" rx="11" ry="14" />
+      <ellipse cx="50" cy="22" rx="11" ry="14" />
+      <ellipse cx="28" cy="38" rx="9" ry="12" />
+      <ellipse cx="52" cy="38" rx="9" ry="12" />
+      <rect x="38" y="22" width="4" height="20" rx="2" />
+      <path d="M40 22 C35 14 33 12 30 10" />
+      <path d="M40 22 C45 14 47 12 50 10" />
+    </g>
+  </svg>
+
+  <!-- BUTTERFLY #3 -->
+  <svg class="butterfly b3" viewBox="0 0 80 60" aria-hidden="true">
+    <g class="butterfly-body">
+      <ellipse cx="30" cy="22" rx="11" ry="14" />
+      <ellipse cx="50" cy="22" rx="11" ry="14" />
+      <ellipse cx="28" cy="38" rx="9" ry="12" />
+      <ellipse cx="52" cy="38" rx="9" ry="12" />
+      <rect x="38" y="22" width="4" height="20" rx="2" />
+      <path d="M40 22 C35 14 33 12 30 10" />
+      <path d="M40 22 C45 14 47 12 50 10" />
+    </g>
+  </svg>
+
+  <!-- BUTTERFLY #4 (swarm-only) -->
+  <svg class="butterfly b4" viewBox="0 0 80 60" aria-hidden="true">
+    <g class="butterfly-body">
+      <ellipse cx="30" cy="22" rx="11" ry="14" />
+      <ellipse cx="50" cy="22" rx="11" ry="14" />
+      <ellipse cx="28" cy="38" rx="9" ry="12" />
+      <ellipse cx="52" cy="38" rx="9" ry="12" />
+      <rect x="38" y="22" width="4" height="20" rx="2" />
+      <path d="M40 22 C35 14 33 12 30 10" />
+      <path d="M40 22 C45 14 47 12 50 10" />
+    </g>
+  </svg>
+</div>
 
 
           </div> <!-- closes card-body -->
