@@ -337,21 +337,23 @@ body{
 /* ===== Live Verification Cat + Butterfly ===== */
 
 /* Give the drift card its own slightly lighter scene background */
+/* ===== Live Verification Cat + Butterfly ===== */
+
+/* Give the drift card its own slightly lighter scene background */
 #liveDriftBox {
   background: #141b33;
   position: relative;
   overflow: hidden;
 }
 
-/* Scene container for cat + butterflies */
 #liveFunZone {
   position: relative;
   width: 100%;
-  height: 140px;
+  height: 220px;           /* was 140px – this fixes the “half cat” */
   margin-top: 12px;
   overflow: hidden;
   pointer-events: none;
-  display: none;             /* JS adds .active */
+  display: none;
   opacity: 0;
   border-radius: 12px;
   background:
@@ -359,6 +361,7 @@ body{
   box-shadow: 0 0 18px rgba(0,0,0,0.75) inset;
   transition: opacity 0.35s ease;
 }
+
 
 #liveFunZone.active {
   display: block;
@@ -371,75 +374,65 @@ body{
   position: absolute;
 }
 
-/* ---------------- CAT (CopyCat-style silhouette) ---------------- */
+/* ---------- CAT: sprite sheet from /static/cat-sprite.png ---------- */
+/* Assumes 4x4 grid of 16 frames, each 256x256.
+   If that’s different, we’ll tweak the JS frame size, not this CSS. */
 
+/* CAT: sprite sheet + horizontal prowl */
 #liveFunZone .cat {
-  bottom: 6px;
-  left: 4%;
-  width: 150px;          /* clearly visible */
-  height: auto;
+  bottom: -8px;                                /* sit on “floor” of taller zone */
+  left: 2%;
+  width: 256px;
+  height: 256px;
+  background-image: url("/static/cat-sprite.png");
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
   transform-origin: 50% 100%;
   z-index: 1;
-  animation: catAct 14s ease-in-out infinite;
 }
 
-/*
-Cat behaviour over 14s:
+/* Only animate when Live Fun Zone is active */
+#liveFunZone.active .cat {
+  animation: catProwl 10s ease-in-out infinite;
+}
 
-0–18%  : prowl + butt wiggle on left
-18–40% : run right toward butterflies
-40–58% : dramatic grooming rock (reads as “licking balls”)
-58–72% : startled pop + quick glance
-72–100%: sprint back left while “fleeing” the swarm
-*/
-
-/* Cat: idle, groom, tiny hop – anchored on the left */
-@keyframes catAct {
-  /* neutral sit */
+/* Move from left → mid-right → left while it runs its frames */
+@keyframes catProwl {
   0% {
-    transform: translateX(0) translateY(0) scale(1) rotate(0deg);
-  }
-
-  /* slow “breathing” */
-  10% {
-    transform: translateX(0) translateY(1px) scale(0.99, 1.01) rotate(-2deg);
+    transform: translateX(0) scale(0.80);
   }
   20% {
-    transform: translateX(0) translateY(0) scale(1) rotate(1deg);
-  }
-
-  /* little groom wiggle */
-  30% {
-    transform: translateX(0) translateY(3px) scale(0.97, 1.03) rotate(-4deg);
+    transform: translateX(14vw) scale(0.80);
   }
   40% {
-    transform: translateX(0) translateY(1px) scale(0.98, 1.02) rotate(3deg);
+    transform: translateX(26vw) scale(0.80);
   }
-  50% {
-    transform: translateX(0) translateY(2px) scale(0.97, 1.03) rotate(-3deg);
-  }
-
-  /* small “what was that?!” pop */
   60% {
-    transform: translateX(0) translateY(-4px) scale(1.03) rotate(0deg);
-  }
-
-  /* tiny hop forward-ish (but still anchored) */
-  70% {
-    transform: translateX(2px) translateY(-2px) scale(1.02) rotate(-2deg);
+    transform: translateX(32vw) scale(0.80);
   }
   80% {
-    transform: translateX(0) translateY(0) scale(1) rotate(1deg);
+    transform: translateX(16vw) scale(0.80);
   }
-
-  /* settle back to neutral */
   100% {
-    transform: translateX(0) translateY(0) scale(1) rotate(0deg);
+    transform: translateX(0) scale(0.80);
   }
 }
 
 
-/* ---------------- BUTTERFLIES ---------------- */
+/* “Butt wiggle / grooming / panic” body motion – sprite frames are layered on top */
+@keyframes catAct {
+  0%   { transform: translateX(0) translateY(0)   scale(0.7) rotate(0deg); }
+  10%  { transform: translateX(-4px) translateY(3px)  scale(0.7,0.74) rotate(-3deg); }
+  20%  { transform: translateX(0)   translateY(0)   scale(0.7,0.7)  rotate(2deg); }
+  30%  { transform: translateX(3px) translateY(4px)  scale(0.68,0.76) rotate(-4deg); }
+  40%  { transform: translateX(0)   translateY(2px)  scale(0.69,0.73) rotate(4deg); }
+  55%  { transform: translateX(2px) translateY(-4px) scale(0.72)      rotate(0deg); }
+  70%  { transform: translateX(6px) translateY(-2px) scale(0.71)      rotate(-2deg); }
+  85%  { transform: translateX(2px) translateY(0)    scale(0.7)       rotate(1deg); }
+  100% { transform: translateX(0)   translateY(0)    scale(0.7)       rotate(0deg); }
+}
+
+/* ---------- Butterflies (CSS/SVG for now; sprite file later if you want) ---------- */
 
 #liveFunZone .butterfly {
   width: 90px;
@@ -474,160 +467,58 @@ Cat behaviour over 14s:
 }
 
 /* Position + animation assignment for each butterfly */
+#liveFunZone .butterfly.b1 { left: 18vw; animation: butterflySolo 14s linear infinite; }
+#liveFunZone .butterfly.b2 { left: 20vw; animation: butterflyPair 14s linear infinite; }
+#liveFunZone .butterfly.b3 { left: 23vw; animation: butterflyPair 14s linear infinite; }
+#liveFunZone .butterfly.b4 { left: 26vw; animation: butterflySwarm 14s linear infinite; }
 
-#liveFunZone .butterfly.b1 {
-  left: 18vw;
-  animation: butterflySolo 14s linear infinite;
-}
-
-/* bottom-left of the triangle pair */
-#liveFunZone .butterfly.b2 {
-  left: 20vw;
-  animation: butterflyPair 14s linear infinite;
-}
-
-/* bottom-right of the triangle pair */
-#liveFunZone .butterfly.b3 {
-  left: 23vw;
-  animation: butterflyPair 14s linear infinite;
-}
-
-/* trailing point of the triangle swarm */
-#liveFunZone .butterfly.b4 {
-  left: 26vw;
-  animation: butterflySwarm 14s linear infinite;
-}
-
-/* ===== Butterfly color: blue → pink → orange → blue ===== */
+/* Butterfly color: blue → pink → orange → blue */
 @keyframes butterflyColor {
-  0%, 100% {
-    fill: #2d7ff9;
-    stroke: #cbe1ff;
-  }
-  33% {
-    fill: #ff6fbf;   /* pink */
-    stroke: #ffd1ea;
-  }
-  66% {
-    fill: #ffae42;   /* orange */
-    stroke: #ffe0a3;
-  }
+  0%, 100% { fill: #2d7ff9; stroke: #cbe1ff; }
+  33%      { fill: #ff6fbf; stroke: #ffd1ea; }
+  66%      { fill: #ffae42; stroke: #ffe0a3; }
 }
 
-/*
-b1 (solo) – "seed":
-0–32% : ahead of cat, being chased
-32–55%: escape up-right, vanish
-55–78%: off-screen
-78–100%: back as TOP of final triangle swarm chasing cat left
-*/
+/* b1: solo, then top of triangle swarm */
 @keyframes butterflySolo {
-  0% {
-    transform: translate(2vw, 0px) scale(1) rotate(0deg);
-    opacity: 1;
-  }
-  16% {
-    transform: translate(12vw, -10px) scale(1.03) rotate(-10deg);
-  }
-  32% {
-    transform: translate(24vw, -6px) scale(1.07) rotate(8deg);
-  }
-  45% {
-    transform: translate(40vw, -34px) scale(0.96) rotate(18deg);
-    opacity: 0.85;
-  }
-  55% {
-    transform: translate(56vw, -78px) scale(0.85) rotate(28deg);
-    opacity: 0;
-  }
-  78% {
-    transform: translate(56vw, -26px) scale(0.9) rotate(-10deg);
-    opacity: 0;
-  }
-  /* swarm: top point of triangle, moving fast back left */
-  88% {
-    transform: translate(30vw, -24px) scale(1) rotate(6deg);
-    opacity: 1;
-  }
-  96% {
-    transform: translate(14vw, -22px) scale(1.02) rotate(-4deg);
-  }
-  100% {
-    transform: translate(8vw, -20px) scale(1) rotate(0deg);
-    opacity: 1;
-  }
+  0%   { transform: translate(2vw, 0px)  scale(1)   rotate(0deg);   opacity: 1;   }
+  16%  { transform: translate(12vw,-10px) scale(1.03) rotate(-10deg);             }
+  32%  { transform: translate(24vw,-6px)  scale(1.07) rotate(8deg);               }
+  45%  { transform: translate(40vw,-34px) scale(0.96) rotate(18deg); opacity:.85; }
+  55%  { transform: translate(56vw,-78px) scale(0.85) rotate(28deg); opacity:0;   }
+  78%  { transform: translate(56vw,-26px) scale(0.9)  rotate(-10deg);opacity:0;   }
+  88%  { transform: translate(30vw,-24px) scale(1)   rotate(6deg);   opacity:1;   }
+  96%  { transform: translate(14vw,-22px) scale(1.02) rotate(-4deg);              }
+  100% { transform: translate(8vw,-20px)  scale(1)   rotate(0deg);  opacity:1;    }
 }
 
-/*
-b2 + b3 (pair):
-0–35% : hidden
-35–65%: appear as a pair, get chased right
-65–78%: escape up-right
-78–100%: come back as bottom corners of triangle
-*/
+/* b2 / b3: chased pair, then bottom corners of triangle */
 @keyframes butterflyPair {
-  0%, 34% {
-    transform: translate(10vw, -10px) scale(1) rotate(0deg);
-    opacity: 0;
-  }
-  40% {
-    opacity: 1;
-    transform: translate(16vw, -10px) scale(1.04) rotate(-8deg);
-  }
-  55% {
-    transform: translate(28vw, -16px) scale(1.07) rotate(10deg);
-  }
-  65% {
-    transform: translate(44vw, -42px) scale(0.96) rotate(20deg);
-    opacity: 0.85;
-  }
-  78% {
-    transform: translate(60vw, -76px) scale(0.86) rotate(28deg);
-    opacity: 0;
-  }
-  /* swarm: bottom corners of triangle, chasing left quickly */
-  88% {
-    transform: translate(26vw, -4px) scale(1) rotate(4deg);
-    opacity: 1;
-  }
-  96% {
-    transform: translate(10vw, -4px) scale(1.02) rotate(-4deg);
-  }
-  100% {
-    transform: translate(4vw, -4px) scale(1) rotate(0deg);
-    opacity: 1;
-  }
+  0%,34% { transform: translate(10vw,-10px) scale(1) rotate(0deg); opacity:0;  }
+  40%    { transform: translate(16vw,-10px) scale(1.04) rotate(-8deg);opacity:1;}
+  55%    { transform: translate(28vw,-16px) scale(1.07) rotate(10deg);         }
+  65%    { transform: translate(44vw,-42px) scale(0.96) rotate(20deg);opacity:.85;}
+  78%    { transform: translate(60vw,-76px) scale(0.86) rotate(28deg);opacity:0; }
+  88%    { transform: translate(26vw,-4px)  scale(1)    rotate(4deg); opacity:1;  }
+  96%    { transform: translate(10vw,-4px)  scale(1.02) rotate(-4deg);           }
+  100%   { transform: translate(4vw,-4px)   scale(1)    rotate(0deg); opacity:1;  }
 }
 
-/*
-b4 (swarm-only):
-0–72% : hidden
-72–100%: appears as back point of the triangle, also moving left
-*/
+/* b4: back point of triangle only */
 @keyframes butterflySwarm {
-  0%, 71% {
-    transform: translate(60vw, -14px) scale(1) rotate(0deg);
-    opacity: 0;
-  }
-  80% {
-    transform: translate(36vw, -14px) scale(1) rotate(-4deg);
-    opacity: 1;
-  }
-  94% {
-    transform: translate(18vw, -14px) scale(1.02) rotate(4deg);
-  }
-  100% {
-    transform: translate(8vw, -14px) scale(1) rotate(0deg);
-    opacity: 1;
-  }
+  0%,71% { transform: translate(60vw,-14px) scale(1) rotate(0deg); opacity:0; }
+  80%    { transform: translate(36vw,-14px) scale(1) rotate(-4deg);opacity:1; }
+  94%    { transform: translate(18vw,-14px) scale(1.02) rotate(4deg);         }
+  100%   { transform: translate(8vw,-14px)  scale(1) rotate(0deg);  opacity:1; }
 }
 
 /* wings flapping */
 @keyframes wingFlap {
-  0%   { transform: scaleY(1); }
+  0%   { transform: scaleY(1);    }
   50%  { transform: scaleY(0.82); }
-  100% { transform: scaleY(1); }
+  100% { transform: scaleY(1);    }
 }
+
 
 
 </style>
@@ -1029,17 +920,18 @@ b4 (swarm-only):
       <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
 
 <!-- Drift compare lives inside the same card now -->
-<div id="liveDriftBox" style="margin-top:10px; display:none">
+<<div id="liveDriftBox" style="margin-top:10px; display:none">
   <div class="muted">Drift compare (scan vs live sample)</div>
   <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
 
-  <!-- CAT — CopyCat-like sitting silhouette + butterflies -->
+  <!-- CAT + BUTTERFLY SCENE -->
   <div id="liveFunZone">
-    <img
+    <!-- CAT: sprite-based mascot -->
+    <div
       class="cat"
-      src="/static/cat-logo.png"
-      alt="CopyCat mascot"
-    />
+      role="img"
+      aria-label="CopyCat mascot"
+    ></div>
 
     <!-- BUTTERFLY #1 (solo → then top of triangle) -->
     <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
@@ -1094,7 +986,6 @@ b4 (swarm-only):
     </svg>
   </div>
 </div>
-
 
 
 <script>
@@ -2306,6 +2197,85 @@ document.getElementById("btnCloseLive")?.addEventListener("click", () => {
 document.getElementById("btnFinalize")?.addEventListener("click", () => {
   stopLiveVerification();
 });
+
+(function () {
+  const CAT_FRAME_W = 256;      // one frame width  (px)
+  const CAT_FRAME_H = 256;      // one frame height (px)
+  const CAT_COLS    = 4;        // 4 frames per row
+  const CAT_TOTAL   = 16;       // 4x4 grid
+
+  let catFrame = 0;
+  let catTimer = null;
+
+  function setCatFrame(el, frameIndex) {
+    const col = frameIndex % CAT_COLS;
+    const row = Math.floor(frameIndex / CAT_COLS);
+    const x = -col * CAT_FRAME_W;
+    const y = -row * CAT_FRAME_H;
+    el.style.backgroundPosition = `${x}px ${y}px`;
+  }
+
+  function startCatSprite() {
+    const cat = document.querySelector('#liveFunZone .cat');
+    if (!cat) return;
+    if (catTimer) return; // already running
+
+    // Ensure we start at frame 0
+    catFrame = 0;
+    setCatFrame(cat, catFrame);
+
+    catTimer = window.setInterval(() => {
+      catFrame = (catFrame + 1) % CAT_TOTAL;
+      setCatFrame(cat, catFrame);
+    }, 1000 / 12); // 12 fps
+  }
+
+  function stopCatSprite() {
+    if (catTimer) {
+      window.clearInterval(catTimer);
+      catTimer = null;
+    }
+  }
+
+  function setFunZoneActive(on) {
+    const zone = document.getElementById('liveFunZone');
+    if (!zone) return;
+    if (on) {
+      zone.classList.add('active');
+      startCatSprite();
+    } else {
+      zone.classList.remove('active');
+      stopCatSprite();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const btnStart    = document.getElementById('btnStartLive');
+    const btnFinalize = document.getElementById('btnFinalize');
+    const btnClose    = document.getElementById('btnCloseLive');
+
+    if (btnStart) {
+      btnStart.addEventListener('click', () => {
+        // We assume your existing code still does the real timer;
+        // we only worry about visuals here.
+        setFunZoneActive(true);
+      });
+    }
+
+    function endLive() {
+      setFunZoneActive(false);
+    }
+
+    if (btnFinalize) btnFinalize.addEventListener('click', endLive);
+    if (btnClose)    btnClose.addEventListener('click', endLive);
+
+    // Optional: if you expose a global hook for live status, wire it too
+    if (typeof window.setLiveMascotState === 'function') {
+      // if you ever want to call setLiveMascotState(true/false) from your main JS
+      window.setLiveMascotState = setFunZoneActive;
+    }
+  });
+})();
 
 
 
