@@ -333,18 +333,31 @@ body{
   margin-top: 8px;
 }
 
+
 /* ===== Live Verification Cat + Butterfly ===== */
 
+/* Give the drift card its own slightly lighter scene background */
+#liveDriftBox {
+  background: #141b33;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scene container for cat + butterflies */
 #liveFunZone {
   position: relative;
   width: 100%;
-  height: 120px;
+  height: 140px;
   margin-top: 12px;
   overflow: hidden;
   pointer-events: none;
   display: none;             /* JS adds .active */
   opacity: 0;
-  transition: opacity 0.3s ease;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 20% 0%, #263566 0, #141a33 40%, #0a0d1f 100%);
+  box-shadow: 0 0 18px rgba(0,0,0,0.75) inset;
+  transition: opacity 0.35s ease;
 }
 
 #liveFunZone.active {
@@ -360,32 +373,80 @@ body{
 
 /* ---------------- CAT (CopyCat-style silhouette) ---------------- */
 
-/* CAT (CopyCat-style silhouette) */
 #liveFunZone .cat {
-  position: absolute;
-  bottom: 4px;
+  bottom: 6px;
   left: 4%;
-  width: 150px;          /* a bit larger */
+  width: 150px;          /* clearly visible */
   height: auto;
   transform-origin: 50% 100%;
-  animation: catAct 18s linear infinite;
+  z-index: 1;
+  animation: catAct 14s ease-in-out infinite;
 }
 
 /*
-  0–18%  : prowl on left
-  18–40% : run right toward butterflies
-  40–58% : dramatic grooming rock (reads as "lick balls")
-  58–70% : startled pop
-  70–100%: sprint back left, “oh shit the swarm is coming”
+Cat behaviour over 14s:
+
+0–18%  : prowl + butt wiggle on left
+18–40% : run right toward butterflies
+40–58% : dramatic grooming rock (reads as “licking balls”)
+58–72% : startled pop + quick glance
+72–100%: sprint back left while “fleeing” the swarm
 */
+
+/* Cat: idle, groom, tiny hop – anchored on the left */
+@keyframes catAct {
+  /* neutral sit */
+  0% {
+    transform: translateX(0) translateY(0) scale(1) rotate(0deg);
+  }
+
+  /* slow “breathing” */
+  10% {
+    transform: translateX(0) translateY(1px) scale(0.99, 1.01) rotate(-2deg);
+  }
+  20% {
+    transform: translateX(0) translateY(0) scale(1) rotate(1deg);
+  }
+
+  /* little groom wiggle */
+  30% {
+    transform: translateX(0) translateY(3px) scale(0.97, 1.03) rotate(-4deg);
+  }
+  40% {
+    transform: translateX(0) translateY(1px) scale(0.98, 1.02) rotate(3deg);
+  }
+  50% {
+    transform: translateX(0) translateY(2px) scale(0.97, 1.03) rotate(-3deg);
+  }
+
+  /* small “what was that?!” pop */
+  60% {
+    transform: translateX(0) translateY(-4px) scale(1.03) rotate(0deg);
+  }
+
+  /* tiny hop forward-ish (but still anchored) */
+  70% {
+    transform: translateX(2px) translateY(-2px) scale(1.02) rotate(-2deg);
+  }
+  80% {
+    transform: translateX(0) translateY(0) scale(1) rotate(1deg);
+  }
+
+  /* settle back to neutral */
+  100% {
+    transform: translateX(0) translateY(0) scale(1) rotate(0deg);
+  }
+}
+
 
 /* ---------------- BUTTERFLIES ---------------- */
 
 #liveFunZone .butterfly {
   width: 90px;
   height: 60px;
-  bottom: 58px;
+  bottom: 60px;
   transform-origin: 50% 50%;
+  z-index: 2;  /* above cat */
 }
 
 /* wings: color-cycle + glow */
@@ -393,7 +454,9 @@ body{
   fill: #2d7ff9;  /* start blue */
   stroke: #cbe1ff;
   stroke-width: 1.3;
-  filter: drop-shadow(0 0 4px rgba(45, 127, 249, 0.7));
+  filter:
+    drop-shadow(0 0 4px rgba(45,127,249,0.9))
+    drop-shadow(0 0 8px rgba(45,127,249,0.7));
   transform-origin: 40px 30px;
   animation: wingFlap 0.4s ease-in-out infinite,
              butterflyColor 6s linear infinite;
@@ -401,12 +464,12 @@ body{
 
 /* butterfly body + antennae */
 #liveFunZone .butterfly-body rect {
-  fill: #14345d;
+  fill: #101b34;
 }
 
 #liveFunZone .butterfly-body path {
   fill: none;
-  stroke: #14345d;
+  stroke: #101b34;
   stroke-width: 1.4;
 }
 
@@ -414,84 +477,25 @@ body{
 
 #liveFunZone .butterfly.b1 {
   left: 18vw;
-  animation: butterflySolo 30s linear infinite;
+  animation: butterflySolo 14s linear infinite;
 }
 
 /* bottom-left of the triangle pair */
 #liveFunZone .butterfly.b2 {
   left: 20vw;
-  animation: butterflyPair 30s linear infinite;
+  animation: butterflyPair 14s linear infinite;
 }
 
 /* bottom-right of the triangle pair */
 #liveFunZone .butterfly.b3 {
   left: 23vw;
-  animation: butterflyPair 30s linear infinite;
+  animation: butterflyPair 14s linear infinite;
 }
 
-/* back / trailing point of the triangle swarm */
+/* trailing point of the triangle swarm */
 #liveFunZone .butterfly.b4 {
   left: 26vw;
-  animation: butterflySwarm 30s linear infinite;
-}
-
-/* ======= ANIMATIONS ======= */
-
-/*
-Cat behaviour over 30s (faster, more ground):
-0–18%  : stalk / creep near left
-18–40% : run hard toward butterfly (solo), reaches mid-right
-40–58% : stop + groom
-58–70% : smooth “turn” (no paper flip)
-70–100%: run hard back left while being chased (swarm)
-*/
-
-@keyframes catAct {
-  /* idle / tiny crouch */
-  0% {
-    transform: translateX(0vw) translateY(0) scale(1) rotate(0deg);
-  }
-  10% {
-    transform: translateX(1vw) translateY(4px) scale(0.97, 1.05) rotate(-6deg);
-  }
-  18% {
-    transform: translateX(3vw) translateY(0) scale(1) rotate(0deg);
-  }
-
-  /* run toward the right */
-  28% {
-    transform: translateX(14vw) translateY(-2px) scale(1.04) rotate(4deg);
-  }
-  40% {
-    transform: translateX(26vw) translateY(0px) scale(1.05) rotate(-4deg);
-  }
-
-  /* grooming: obvious rock + squash/stretch */
-  46% {
-    transform: translateX(28vw) translateY(12px) scale(0.9, 1.08) rotate(-22deg);
-  }
-  52% {
-    transform: translateX(28vw) translateY(8px) scale(0.93, 1.04) rotate(18deg);
-  }
-  58% {
-    transform: translateX(28vw) translateY(10px) scale(0.9, 1.08) rotate(-18deg);
-  }
-
-  /* startled pop */
-  65% {
-    transform: translateX(28vw) translateY(-14px) scale(1.06) rotate(2deg);
-  }
-
-  /* sprint back left, slightly tilted */
-  75% {
-    transform: translateX(16vw) translateY(-6px) scale(1.04) rotate(-8deg);
-  }
-  90% {
-    transform: translateX(-6vw) translateY(0px) scale(0.98, 1.02) rotate(-10deg);
-  }
-  100% {
-    transform: translateX(0vw) translateY(0) scale(1) rotate(0deg);
-  }
+  animation: butterflySwarm 14s linear infinite;
 }
 
 /* ===== Butterfly color: blue → pink → orange → blue ===== */
@@ -510,14 +514,12 @@ Cat behaviour over 30s (faster, more ground):
   }
 }
 
-/* ===== Butterfly story: 1 → 2 → 4, triangle swarm at end, faster ===== */
-
 /*
 b1 (solo) – "seed":
 0–32% : ahead of cat, being chased
-32–50%: escape up-right, vanish
-50–75%: off-screen
-75–100%: back as TOP of final triangle swarm chasing cat left
+32–55%: escape up-right, vanish
+55–78%: off-screen
+78–100%: back as TOP of final triangle swarm chasing cat left
 */
 @keyframes butterflySolo {
   0% {
@@ -528,30 +530,30 @@ b1 (solo) – "seed":
     transform: translate(12vw, -10px) scale(1.03) rotate(-10deg);
   }
   32% {
-    transform: translate(26vw, -6px) scale(1.07) rotate(8deg);
+    transform: translate(24vw, -6px) scale(1.07) rotate(8deg);
   }
-  42% {
-    transform: translate(42vw, -36px) scale(0.96) rotate(18deg);
+  45% {
+    transform: translate(40vw, -34px) scale(0.96) rotate(18deg);
     opacity: 0.85;
   }
-  50% {
-    transform: translate(58vw, -82px) scale(0.85) rotate(28deg);
+  55% {
+    transform: translate(56vw, -78px) scale(0.85) rotate(28deg);
     opacity: 0;
   }
-  75% {
-    transform: translate(58vw, -26px) scale(0.9) rotate(-10deg);
+  78% {
+    transform: translate(56vw, -26px) scale(0.9) rotate(-10deg);
     opacity: 0;
   }
   /* swarm: top point of triangle, moving fast back left */
-  85% {
-    transform: translate(30vw, -22px) scale(1) rotate(6deg);
+  88% {
+    transform: translate(30vw, -24px) scale(1) rotate(6deg);
     opacity: 1;
   }
-  95% {
-    transform: translate(12vw, -20px) scale(1.02) rotate(-4deg);
+  96% {
+    transform: translate(14vw, -22px) scale(1.02) rotate(-4deg);
   }
   100% {
-    transform: translate(6vw, -20px) scale(1) rotate(0deg);
+    transform: translate(8vw, -20px) scale(1) rotate(0deg);
     opacity: 1;
   }
 }
@@ -560,8 +562,8 @@ b1 (solo) – "seed":
 b2 + b3 (pair):
 0–35% : hidden
 35–65%: appear as a pair, get chased right
-65–75%: escape up-right
-75–100%: come back as BOTTOM corners of triangle
+65–78%: escape up-right
+78–100%: come back as bottom corners of triangle
 */
 @keyframes butterflyPair {
   0%, 34% {
@@ -573,22 +575,22 @@ b2 + b3 (pair):
     transform: translate(16vw, -10px) scale(1.04) rotate(-8deg);
   }
   55% {
-    transform: translate(30vw, -16px) scale(1.07) rotate(10deg);
+    transform: translate(28vw, -16px) scale(1.07) rotate(10deg);
   }
   65% {
-    transform: translate(46vw, -44px) scale(0.96) rotate(20deg);
+    transform: translate(44vw, -42px) scale(0.96) rotate(20deg);
     opacity: 0.85;
   }
-  75% {
-    transform: translate(62vw, -78px) scale(0.86) rotate(28deg);
+  78% {
+    transform: translate(60vw, -76px) scale(0.86) rotate(28deg);
     opacity: 0;
   }
   /* swarm: bottom corners of triangle, chasing left quickly */
-  85% {
+  88% {
     transform: translate(26vw, -4px) scale(1) rotate(4deg);
     opacity: 1;
   }
-  95% {
+  96% {
     transform: translate(10vw, -4px) scale(1.02) rotate(-4deg);
   }
   100% {
@@ -599,19 +601,19 @@ b2 + b3 (pair):
 
 /*
 b4 (swarm-only):
-0–70% : hidden
-70–100%: appears as BACK point of the triangle, also moving far left
+0–72% : hidden
+72–100%: appears as back point of the triangle, also moving left
 */
 @keyframes butterflySwarm {
-  0%, 69% {
+  0%, 71% {
     transform: translate(60vw, -14px) scale(1) rotate(0deg);
     opacity: 0;
   }
-  78% {
+  80% {
     transform: translate(36vw, -14px) scale(1) rotate(-4deg);
     opacity: 1;
   }
-  90% {
+  94% {
     transform: translate(18vw, -14px) scale(1.02) rotate(4deg);
   }
   100% {
@@ -1022,57 +1024,77 @@ b4 (swarm-only):
             </div>
           </div>
 
-          <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
+      <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
 
-          <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
+      <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
 
-         <!-- Drift compare lives inside the same card now -->
-         <div class="card">
-          <div class="card-header">
-            <!-- header content -->
-          </div>
+<!-- Drift compare lives inside the same card now -->
+<div id="liveDriftBox" style="margin-top:10px; display:none">
+  <div class="muted">Drift compare (scan vs live sample)</div>
+  <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
 
-          <div class="card-body">
-            <!-- existing stuff in your card body -->
+  <!-- CAT — CopyCat-like sitting silhouette + butterflies -->
+  <div id="liveFunZone">
+    <img
+      class="cat"
+      src="/static/cat-logo.png"
+      alt="CopyCat mascot"
+    />
 
-            <!-- Drift compare lives inside the same card now -->
-            <div id="liveDriftBox" style="margin-top:10px; display:none">
-              <div class="muted">Drift compare (scan vs live sample)</div>
-              <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
-            </div>
+    <!-- BUTTERFLY #1 (solo → then top of triangle) -->
+    <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
+      <g class="butterfly-body">
+        <ellipse cx="30" cy="22" rx="11" ry="14" />
+        <ellipse cx="50" cy="22" rx="11" ry="14" />
+        <ellipse cx="28" cy="38" rx="9" ry="12" />
+        <ellipse cx="52" cy="38" rx="9" ry="12" />
+        <rect x="38" y="22" width="4" height="20" rx="2" />
+        <path d="M40 22 C35 14 33 12 30 10" />
+        <path d="M40 22 C45 14 47 12 50 10" />
+      </g>
+    </svg>
 
- <!-- CAT — CopyCat-like sitting silhouette -->
-<div id="liveFunZone">
+    <!-- BUTTERFLY #2 -->
+    <svg class="butterfly b2" viewBox="0 0 80 60" aria-hidden="true">
+      <g class="butterfly-body">
+        <ellipse cx="30" cy="22" rx="11" ry="14" />
+        <ellipse cx="50" cy="22" rx="11" ry="14" />
+        <ellipse cx="28" cy="38" rx="9" ry="12" />
+        <ellipse cx="52" cy="38" rx="9" ry="12" />
+        <rect x="38" y="22" width="4" height="20" rx="2" />
+        <path d="M40 22 C35 14 33 12 30 10" />
+        <path d="M40 22 C45 14 47 12 50 10" />
+      </g>
+    </svg>
 
-  <!-- CAT: real logo sprite -->
-  <img
-    class="cat"
-    src="/static/cat-logo.png"
-    alt="CopyCat mascot"
-  />
+    <!-- BUTTERFLY #3 -->
+    <svg class="butterfly b3" viewBox="0 0 80 60" aria-hidden="true">
+      <g class="butterfly-body">
+        <ellipse cx="30" cy="22" rx="11" ry="14" />
+        <ellipse cx="50" cy="22" rx="11" ry="14" />
+        <ellipse cx="28" cy="38" rx="9" ry="12" />
+        <ellipse cx="52" cy="38" rx="9" ry="12" />
+        <rect x="38" y="22" width="4" height="20" rx="2" />
+        <path d="M40 22 C35 14 33 12 30 10" />
+        <path d="M40 22 C45 14 47 12 50 10" />
+      </g>
+    </svg>
 
-  <!-- BUTTERFLY #1 (solo → then top of triangle) -->
-  <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
-    <g class="butterfly-body">
-      <!-- wings/body/etc -->
-    </g>
-  </svg>
+    <!-- BUTTERFLY #4 (swarm-only) -->
+    <svg class="butterfly b4" viewBox="0 0 80 60" aria-hidden="true">
+      <g class="butterfly-body">
+        <ellipse cx="30" cy="22" rx="11" ry="14" />
+        <ellipse cx="50" cy="22" rx="11" ry="14" />
+        <ellipse cx="28" cy="38" rx="9" ry="12" />
+        <ellipse cx="52" cy="38" rx="9" ry="12" />
+        <rect x="38" y="22" width="4" height="20" rx="2" />
+        <path d="M40 22 C35 14 33 12 30 10" />
+        <path d="M40 22 C45 14 47 12 50 10" />
+      </g>
+    </svg>
+  </div>
+</div>
 
-  <!-- BUTTERFLY #2 -->
-  <svg class="butterfly b2" viewBox="0 0 80 60" aria-hidden="true">
-    <g class="butterfly-body"> … </g>
-  </svg>
-
-  <!-- BUTTERFLY #3 -->
-  <svg class="butterfly b3" viewBox="0 0 80 60" aria-hidden="true">
-    <g class="butterfly-body"> … </g>
-  </svg>
-
-  <!-- BUTTERFLY #4 -->
-  <svg class="butterfly b4" viewBox="0 0 80 60" aria-hidden="true">
-    <g class="butterfly-body"> … </g>
-  </svg>
-</div> <!-- ✅ liveFunZone closes here -->
 
 
 <script>
