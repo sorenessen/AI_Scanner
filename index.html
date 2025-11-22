@@ -423,7 +423,26 @@ body{
   .explain-section b{ color:#fff; }
   .explain-list{ margin:.35rem 0 0 .9rem; }
   .explain-note{ opacity:.85; }
-  #pdBadge{ margin-left: 8px; }
+  /* Base PD badge shape */
+#pdBadge {
+  margin-left: 8px;
+  padding: 0.12rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* DARK THEME LOOK (default) */
+#pdBadge.pd-ok {
+  background: #163626;
+  color: #cafad7;
+}
+#pdBadge.pd-none {
+  background: #2f2a12;
+  color: #f4e2c0;
+}
+
 
   /* Live drawer right-side spacing */
 .split > div:last-child {
@@ -629,108 +648,115 @@ body{
   100% { transform: scaleY(1);    }
 }
 
-/* === Light theme polish (CopyCat) === */
-/* IMPORTANT: matches data-theme="light-paper" */
+/* === Light theme polish (CopyCat) =============================== */
+/* Make both data-theme="light" and "light-paper" use the same palette */
+
+:root[data-theme="light"],
 :root[data-theme="light-paper"] {
   /* Warm cream palette */
-  --bg: #f4ecdd;
-  --panel: #f2e4ce;
-  --panel-2: #ecdec8;
-  --text: #23160c;
-  --muted: #6f5a43;
-  --accent: #3154a0;
-  --border: #cfbda1;
+  --bg:       #f4ecdd;
+  --panel:    #f2e4ce;
+  --panel-2:  #ecdec8;
+  --text:     #23160c;
+  --muted:    #6f5a43;
+  --accent:   #3154a0;
+  --border:   #cfbda1;
 
   /* Result + badge surfaces */
-  --bar-bg: #f1dfb6;   /* probability bar background */
-  --pill-bg: #f3d59b;  /* generic pill / badge background */
+  --bar-bg:   #f1dfb6;   /* probability bar background */
+  --pill-bg:  #f3d59b;   /* generic pill / badge background */
 
   /* Tooltip colors on cream */
-  --tip-bg: rgba(255, 252, 244, 0.98);
+  --tip-bg:   rgba(255, 252, 244, 0.98);
   --tip-border: rgba(180, 140, 70, 0.5);
   --tip-text: #2b2116;
 }
 
 /* Probability bar in "Result" */
+:root[data-theme="light"] .bar,
 :root[data-theme="light-paper"] .bar {
   background: var(--bar-bg);
 }
 
-/* Generic pills / badges (mode chip, “Inconclusive 36%”, etc.) */
+/* All generic pills / badges (top-left status, mode badge, etc.) */
+:root[data-theme="light"] .pill,
 :root[data-theme="light-paper"] .pill {
   background: var(--pill-bg);
   color: #2b2116;
+  border-color: rgba(0,0,0,0.14);
 }
 
-/* Big verdict pill in Result (dark green body, keep white text) */
+/* PD: 4 badge next to the title */
+:root[data-theme="light"] #pdBadge,
+:root[data-theme="light-paper"] #pdBadge {
+  background: var(--pill-bg);
+  color: #2b2116;
+  font-weight: 600;
+}
+
+/* Verdict pill keeps its dynamic background; just force readable text */
+:root[data-theme="light"] #verdictPill,
 :root[data-theme="light-paper"] #verdictPill {
   color: #ffffff;
 }
 
-/* Primary buttons – same blue, readable on cream */
+/* Primary buttons – professional blue on cream */
+:root[data-theme="light"] .btn,
 :root[data-theme="light-paper"] .btn {
   background: var(--accent);
   color: #fdfbf5;
 }
 
-/* Secondary / ghost buttons – soften navy */
+/* Secondary / ghost buttons – softer in light mode */
+:root[data-theme="light"] .btn.secondary,
 :root[data-theme="light-paper"] .btn.secondary,
+:root[data-theme="light"] .btn.ghost,
 :root[data-theme="light-paper"] .btn.ghost {
   background: #f0e0c4;
   color: #2b2116;
   border-color: var(--border);
 }
 
-/* Tiny top-row indicators (version, PD:4, active mode) */
+/* Tiny top-row indicators */
+:root[data-theme="light"] #version,
 :root[data-theme="light-paper"] #version,
-:root[data-theme="light-paper"] #pdBadge,
+:root[data-theme="light"] #activeModeBadge,
 :root[data-theme="light-paper"] #activeModeBadge {
   color: var(--text);
 }
 
-/* Tooltip bubble text on cream */
-:root[data-theme="light-paper"] .help-dot > .tip {
-  color: #2b2116;
-}
-
-/* === Final light-theme tweaks ==================================== */
-
-/* 1) Consistency Check / drift box – stop using dark navy in light mode */
+/* Consistency Check / drift panel – no more navy slab in light mode */
+:root[data-theme="light"] #liveDriftBox,
 :root[data-theme="light-paper"] #liveDriftBox {
-  background: var(--panel-2);   /* same cream as other cards */
+  background: var(--panel-2);
   color: var(--text);
 }
 
-/* Make sure inner text uses normal text color */
-:root[data-theme="light-paper"] #liveDriftBox h4,
-:root[data-theme="light-paper"] #liveDriftBox .kv,
-:root[data-theme="light-paper"] #liveDriftBox .muted {
-  color: var(--text);
-}
-
-/* 2) Top "PD: 4" bean next to title */
-:root[data-theme="light-paper"] #pdBadge {
-  background: var(--pill-bg);   /* warm cream chip */
-  color: #2b2116;
-  border-radius: 999px;
-  padding: 0.15rem 0.6rem;
-  border: 1px solid rgba(0,0,0,0.18);
-}
-
-/* 3) Style Match / Consistency Check toggle pills */
+/* Style Match / Consistency Check toggle pills */
+:root[data-theme="light"] .live-tabs,
 :root[data-theme="light-paper"] .live-tabs {
   background: #f0e0c4;
   border-color: var(--border);
 }
 
+:root[data-theme="light"] .live-tab,
 :root[data-theme="light-paper"] .live-tab {
   color: var(--muted);
 }
 
+:root[data-theme="light"] .live-tab.active,
 :root[data-theme="light-paper"] .live-tab.active {
-  background: var(--accent);    /* blue accent */
-  color: #ffffff;               /* readable on blue */
+  background: var(--accent);
+  color: #ffffff;
 }
+
+/* Tooltip bubble text on cream */
+:root[data-theme="light"] .help-dot > .tip,
+:root[data-theme="light-paper"] .help-dot > .tip {
+  color: #2b2116;
+}
+
+
 
 
 </style>
@@ -2259,16 +2285,31 @@ async function loadVersion(){
     const v = await api("/version");
     $("#version").textContent = `v${v.version || "0.3.8"} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
     $("#ensemBadge").textContent = v.ensemble ? "Ensemble: on" : "Ensemble: off";
-    const pdn = Number(v.fingerprint_centroids ?? 0);
-    const pd  = $("#pdBadge");
-    if (pd) {
-      const has = pdn > 0;
-      pd.textContent = has ? `PD: ${pdn}` : "PD: none";
-      pd.style.background = has ? "#163626" : "#2f2a12";
-      pd.style.borderColor = "var(--border)";
-      pd.setAttribute("aria-label", has ? `${pdn} PD fingerprint centroids loaded` : "No PD fingerprint centroids loaded");
-      window.__pdCentroids = pdn;
-    }
+   const pdn = Number(v.fingerprint_centroids ?? 0);
+const pd  = $("#pdBadge");
+if (pd) {
+  const has = pdn > 0;
+
+  // Clear any old inline styles so CSS can win
+  pd.style.background  = "";
+  pd.style.borderColor = "";
+
+  pd.textContent = has ? `PD: ${pdn}` : "PD: none";
+
+  // Use classes instead of inline styles
+  pd.classList.toggle("pd-ok",   has);
+  pd.classList.toggle("pd-none", !has);
+
+  pd.setAttribute(
+    "aria-label",
+    has ? `${pdn} PD fingerprint centroids loaded`
+        : "No PD fingerprint centroids loaded"
+  );
+
+  window.__pdCentroids = pdn;
+}
+
+
   }catch{
     $("#version").textContent = "v0.3.5";
   }
