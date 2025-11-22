@@ -424,14 +424,19 @@ body{
   .explain-list{ margin:.35rem 0 0 .9rem; }
   .explain-note{ opacity:.85; }
   /* Base PD badge shape */
-#pdBadge {
+
+/* PD badge – base (dark theme) styling */
+#pdBadge{
   margin-left: 8px;
-  padding: 0.12rem 0.6rem;
+  padding: 0.1rem 0.6rem;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
+  border: 1px solid var(--border);
+  background: #163626; /* dark PD green for dark theme */
+  color: #e6ffe6;
 }
+
 
 /* DARK THEME LOOK (default) */
 #pdBadge.pd-ok {
@@ -460,6 +465,14 @@ body{
 
 #liveDriftBox {
   margin-top: 8px;
+}
+
+/* PD: 4 badge next to the title */
+:root[data-theme="light"] #pdBadge,
+:root[data-theme="light-paper"] #pdBadge {
+  background: var(--pill-bg);
+  color: #2b2116;
+  font-weight: 600;
 }
 
 
@@ -2286,28 +2299,30 @@ async function loadVersion(){
     $("#version").textContent = `v${v.version || "0.3.8"} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
     $("#ensemBadge").textContent = v.ensemble ? "Ensemble: on" : "Ensemble: off";
    const pdn = Number(v.fingerprint_centroids ?? 0);
-const pd  = $("#pdBadge");
-if (pd) {
-  const has = pdn > 0;
+   const pd  = $("#pdBadge");
+    if (pd) {
+      const has = pdn > 0;
 
-  // Clear any old inline styles so CSS can win
-  pd.style.background  = "";
-  pd.style.borderColor = "";
+      // Text
+      pd.textContent = has ? `PD: ${pdn}` : "PD: none";
 
-  pd.textContent = has ? `PD: ${pdn}` : "PD: none";
+      // Remove any old inline styles so CSS can take over
+      pd.removeAttribute("style");
 
-  // Use classes instead of inline styles
-  pd.classList.toggle("pd-ok",   has);
-  pd.classList.toggle("pd-none", !has);
+      // Toggle dark-theme state classes
+      pd.classList.remove("pd-ok", "pd-none");
+      pd.classList.add(has ? "pd-ok" : "pd-none");
 
-  pd.setAttribute(
-    "aria-label",
-    has ? `${pdn} PD fingerprint centroids loaded`
-        : "No PD fingerprint centroids loaded"
-  );
+      // Accessibility label
+      pd.setAttribute(
+        "aria-label",
+        has
+          ? `${pdn} PD fingerprint centroids loaded`
+          : "No PD fingerprint centroids loaded"
+      );
 
-  window.__pdCentroids = pdn;
-}
+      window.__pdCentroids = pdn;
+    }
 
 
   }catch{
