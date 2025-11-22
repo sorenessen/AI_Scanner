@@ -14,12 +14,50 @@
     font-size:0.9em;
   }
 
-  :root{
-  --bg:#0f1220; --panel:#181c2f; --muted:#c4cbe3; --text:#f1f4ff; --accent:#7eb4ff;
-  --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a; --border:#2a3250; --panel-2:#13182b;
-  --scale:1.50;
-  --tip-bg: rgba(11,16,34,.92);
-  --tip-border: rgba(126,180,255,.25);
+ :root{
+  /* Base palette – slightly more neutral / professional dark */
+  --bg:      #0f1116;
+  --panel:   #171a23;
+  --panel-2: #12141b;
+  --border:  #252837;
+  --muted:   #a4abbf;
+  --text:    #f4f4f7;
+  --accent:  #4f86ff;
+  --good:    #38b26a;
+  --warn:    #f2c94c;
+  --bad:     #ef6a6a;
+  --scale:   1.50;
+
+  /* Tooltip + live drawer */
+  --tip-bg:    rgba(248, 251, 255, 0.96);
+  --tip-border:rgba(126, 180, 255, 0.45);
+  --tip-text:  #0f1630;
+  --live-h:    40vh;
+}
+
+/* Theme variants (optional) */
+:root[data-theme="dark-professional"] {
+  /* same as base – you can omit this if base is your default */
+}
+
+:root[data-theme="light-paper"] {
+  /* Warm, cream paper-like palette */
+  --bg:      #f6f2e9;    /* page background */
+  --panel:   #fffaf0;    /* cards */
+  --panel-2: #f1e5cf;    /* slightly deeper panel */
+  --border:  #d0c2a4;
+
+  --muted:   #756b5c;
+  --text:    #231b14;    /* dark brown instead of pure black */
+  --accent:  #2b63c6;
+
+  --good:    #2f8f5a;
+  --warn:    #b88a2e;
+  --bad:     #c14a4a;
+
+  --tip-bg:     #fffaf0;
+  --tip-border: rgba(43, 99, 198, 0.25);
+  --tip-text:   #231b14;
 }
 
 /* unified html/body + layout shell */
@@ -103,18 +141,51 @@ body{
   .right{text-align:right}
   label{color:var(--muted)}
   input[type="text"], input[type="number"], select, textarea{
-    width:100%;background:#101426;color:var(--text);border:1px solid var(--border);
-    border-radius:10px;padding:12px 14px;min-height:42px;font-size:1em;
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    min-height: 42px;
+    font-size: 1em;
   }
+
   textarea{min-height:360px;resize:vertical}
   .btn{background:var(--accent);border:none;color:#091120;padding:11px 16px;border-radius:10px;font-weight:700;cursor:pointer;min-height:42px}
-  .btn.secondary{background:#253055;color:var(--text)}
-  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+
+  .btn.secondary{
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn.ghost{
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+ 
   .btn:disabled{opacity:.6;cursor:not-allowed}
   .muted{color:var(--muted)}
   .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
-  .pill{padding:4px 10px;border-radius:999px;background:#1a2346;color:#cfe0ff;border:1px solid var(--border)}
-  .bar{height:22px;border:1px solid var(--border);border-radius:12px;background:#0c1122;position:relative}
+
+  .pill{
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .bar{
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel-2);
+    position: relative;
+  }
+  
   .bar>.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:12px}
   .fill.good{background:var(--good)} .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
   .kv{display:grid;grid-template-columns: 1fr auto;gap:8px 16px}
@@ -200,9 +271,20 @@ body{
     color:#eaf0ff;
   }
 
+  .progress{
+    height: 10px;
+    border-radius: 6px;
+    background: var(--panel-2);
+    overflow: hidden;
+  }
 
-  .progress{height:10px;border-radius:6px;background:#2a3240;overflow:hidden}
-  .progress>span{display:block;height:100%;width:0;background:#3b82f6;transition:width .25s}
+  .progress>span{
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width .25s;
+  }
 
 /* Optional: hide the hint on very small screens */
 @media (max-width: 700px) {
@@ -212,7 +294,14 @@ body{
 }
 
 
-  .scale-wrap{display:flex;align-items:center;gap:10px}
+ .scale-wrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
   input[type="range"]{accent-color:#7eb4ff}
 
   /* ---- HELP DOT + BALLOON ---- */
@@ -223,6 +312,33 @@ body{
     border:1.5px solid var(--border); border-radius:999px; color:#cfe0ff; background:#10162a;
     font-weight:800; line-height:1; user-select:none; cursor:help; overflow:visible;
   }
+
+  #explainWrap{
+  margin-top:.5rem;
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  background:var(--panel-2);
+  color:var(--text);
+}
+
+#explainHeader{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:.65rem .9rem;
+  background:var(--panel);
+  border-bottom:1px solid var(--border);
+}
+
+#explainToggleBtn{
+  all:unset;
+  cursor:pointer;
+  padding:.25rem .55rem;
+  border:1px solid var(--border);
+  border-radius:6px;
+  font-size:.9rem;
+  color:var(--text);
+}
+
   .help-dot::after{ content:"?"; font-size:.9em; transform:translateY(-1px); }
 
   /* balloon defaults (RIGHT side) */
@@ -278,12 +394,6 @@ body{
   button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #7eb4ff;outline-offset:2px}
 
   /* --- Light tooltip override (paste at END of <style>) --- */
-:root{
-  --tip-bg: rgba(248, 251, 255, 0.96);
-  --tip-border: rgba(126, 180, 255, 0.45);
-  --tip-text: #0f1630;
-  --live-h: 40vh;      /* default Live Verification height */
-}
 .help-dot > .tip{
   background: var(--tip-bg);
   color: var(--tip-text);
@@ -534,6 +644,11 @@ body{
     <div class="scale-wrap">
       <label class="muted" for="uiScale">UI scale</label>
       <input id="uiScale" type="range" min="120" max="220" value="150" />
+      
+      <select id="themeSelect" style="margin-left:8px;">
+        <option value="dark-professional">Dark</option>
+        <option value="light-paper">Light</option>
+      </select>
     </div>
   </div>
 
@@ -2250,9 +2365,24 @@ document.getElementById("btnFinalize")?.addEventListener("click", () => {
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+
     const btnStart    = document.getElementById('btnStartLive');
     const btnFinalize = document.getElementById('btnFinalize');
     const btnClose    = document.getElementById('btnCloseLive');
+    const root = document.documentElement;
+    const themeSelect = document.getElementById('themeSelect');
+
+    const savedTheme = localStorage.getItem('cc_theme') || 'dark-professional';
+    root.setAttribute('data-theme', savedTheme);
+    if (themeSelect) themeSelect.value = savedTheme;
+
+    if (themeSelect) {
+      themeSelect.addEventListener('change', (e) => {
+        const theme = e.target.value;
+        root.setAttribute('data-theme', theme);
+        localStorage.setItem('cc_theme', theme);
+      });
+    }
 
     if (btnStart) {
       btnStart.addEventListener('click', () => {
@@ -2273,6 +2403,10 @@ document.getElementById("btnFinalize")?.addEventListener("click", () => {
     if (typeof window.setLiveMascotState === 'function') {
       // if you ever want to call setLiveMascotState(true/false) from your main JS
       window.setLiveMascotState = setFunZoneActive;
+
+    // Initial theme from localStorage, if present
+    
+
     }
   });
 })();
