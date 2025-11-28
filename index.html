@@ -1219,14 +1219,14 @@ body{
   <!-- CAT + BUTTERFLY SCENE -->
   <div id="liveFunZone">
     <!-- CAT: sprite-based mascot -->
-    <div
+  <!--   <div
       class="cat"
       role="img"
       aria-label="CopyCat mascot"
-    ></div>
+    ></div> -->
 
     <!-- BUTTERFLY #1 (solo → then top of triangle) -->
-    <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
+   <!--  <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
       <g class="butterfly-body">
         <ellipse cx="30" cy="22" rx="11" ry="14" />
         <ellipse cx="50" cy="22" rx="11" ry="14" />
@@ -1236,10 +1236,10 @@ body{
         <path d="M40 22 C35 14 33 12 30 10" />
         <path d="M40 22 C45 14 47 12 50 10" />
       </g>
-    </svg>
+    </svg> -->
 
     <!-- BUTTERFLY #2 -->
-    <svg class="butterfly b2" viewBox="0 0 80 60" aria-hidden="true">
+   <!--  <svg class="butterfly b2" viewBox="0 0 80 60" aria-hidden="true">
       <g class="butterfly-body">
         <ellipse cx="30" cy="22" rx="11" ry="14" />
         <ellipse cx="50" cy="22" rx="11" ry="14" />
@@ -1249,10 +1249,10 @@ body{
         <path d="M40 22 C35 14 33 12 30 10" />
         <path d="M40 22 C45 14 47 12 50 10" />
       </g>
-    </svg>
+    </svg> -->
 
     <!-- BUTTERFLY #3 -->
-    <svg class="butterfly b3" viewBox="0 0 80 60" aria-hidden="true">
+   <!--  <svg class="butterfly b3" viewBox="0 0 80 60" aria-hidden="true">
       <g class="butterfly-body">
         <ellipse cx="30" cy="22" rx="11" ry="14" />
         <ellipse cx="50" cy="22" rx="11" ry="14" />
@@ -1262,10 +1262,10 @@ body{
         <path d="M40 22 C35 14 33 12 30 10" />
         <path d="M40 22 C45 14 47 12 50 10" />
       </g>
-    </svg>
+    </svg> -->
 
     <!-- BUTTERFLY #4 (swarm-only) -->
-    <svg class="butterfly b4" viewBox="0 0 80 60" aria-hidden="true">
+   <!--  <svg class="butterfly b4" viewBox="0 0 80 60" aria-hidden="true">
       <g class="butterfly-body">
         <ellipse cx="30" cy="22" rx="11" ry="14" />
         <ellipse cx="50" cy="22" rx="11" ry="14" />
@@ -1275,7 +1275,12 @@ body{
         <path d="M40 22 C35 14 33 12 30 10" />
         <path d="M40 22 C45 14 47 12 50 10" />
       </g>
-    </svg>
+    </svg> -->
+  <div class="muted" id="liveProgressLabel" style="margin-bottom:4px;">
+     Live sample progress
+  </div>
+   <div class="progress">
+      <span id="liveProgressWide" style="width:0%"></span>
   </div>
 </div>
 
@@ -2230,6 +2235,10 @@ function updateLiveHUD(){
   $("#liveProgress").style.width = pct + "%";
   const lenEl = $("#liveLen"); if (lenEl) lenEl.textContent = pct + "%";
 
+  // NEW: drive the big bar under Drift compare
+  const wide = document.getElementById("liveProgressWide");
+  if (wide) wide.style.width = pct + "%";
+
   if (lastScanMetrics && count >= 20){
     const sim = Math.round(100 * Math.max(0, Math.min(1, cosineSimilarity(simpleMetrics(typed), lastScanMetrics))));
     $("#liveRough").textContent = `~${sim}%`;
@@ -2237,6 +2246,8 @@ function updateLiveHUD(){
     $("#liveRough").textContent = "—";
   }
 }
+
+
 
 function startLive(){
   $("#liveResult").textContent = "";
