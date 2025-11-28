@@ -375,9 +375,45 @@ body{
     opacity:1; visibility:visible;
   }
 
+  /* When a right-edge dot has class="help-dot tip-l", open bubble to the LEFT */
+.tip-l.help-dot:hover > .tip,
+.tip-l.help-dot:focus-visible > .tip,
+.tip-l.help-dot[data-open="1"] > .tip{
+  transform: translate(-10px,-50%) scale(1);  /* flip to the left */
+}
+
+/* Arrow for left-opening variant */
+.tip-l.help-dot:hover::before,
+.tip-l.help-dot:focus-visible::before,
+.tip-l.help-dot[data-open="1"]::before{
+  transform: translate(-2px,-50%) rotate(-90deg);
+}
+
+
   /* top/bottom variants if you ever need them */
   .tip-t.help-dot > .tip{ inset:auto auto 100% 0; transform:translate(0,-10px); top:auto; left:0; }
   .tip-t.help-dot::before{ left:16px; top:auto; bottom:100%; transform:translateY(-2px) rotate(0deg); }
+  /* ---- LEFT-SIDE TOOLTIP VARIANT ---- */
+/* For help dots near the right edge: class="help-dot tip-l" */
+
+.tip-l.help-dot > .tip{
+  /* Position bubble to the LEFT of the dot */
+  inset: auto 100% auto auto;   /* right:100% */
+  left: auto;
+  right: 100%;
+  top: 50%;
+  transform: translate(-10px,-50%);
+}
+
+/* Little arrow also flips to point right -> left */
+.tip-l.help-dot::before{
+  left: auto;
+  right: 100%;
+  top: 50%;
+  bottom: auto;
+  transform: translate(-2px,-50%) rotate(-90deg);
+}
+
   .tip-b.help-dot > .tip{ inset:100% auto auto 0; transform:translate(0,10px); top:auto; left:0; }
   .tip-b.help-dot::before{ left:16px; top:100%; transform:translateY(2px) rotate(180deg); }
 
