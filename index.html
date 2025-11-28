@@ -60,6 +60,115 @@
   --tip-text:   #231b14;
 }
 
+/* --- LCARS (TNG-style) theme --- */
+:root[data-theme="lcars"] {
+  /* Background + panels */
+  --bg: #000000;          /* space black */
+  --panel: #050b18;       /* deep navy panel */
+  --panel-2: #050b18;
+  --border: #151b2b;
+
+  /* Text */
+  --text: #fdf7e3;        /* pale LCARS cream */
+  --muted: #b0a8a0;
+
+  /* Accents */
+  --accent:   #f2a94f;    /* amber/orange */
+  --accent-2: #f27b7b;    /* salmon */
+  --accent-3: #5bb5ff;    /* light blue */
+  --good: #7bd87a;
+  --warn: #ffdd5c;
+  --bad:  #ff6d6d;
+}
+
+/* LCARS look tweaks */
+:root[data-theme="lcars"] body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.03em;
+}
+
+/* Cards = flat panels with LCARS bar */
+:root[data-theme="lcars"] .card {
+  background: var(--panel);
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  position: relative;
+  overflow: hidden;
+}
+
+:root[data-theme="lcars"] .card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 10px;
+  width: 40%;
+  background: var(--accent);
+  border-bottom-right-radius: 999px;
+}
+
+/* Buttons → LCARS pads */
+:root[data-theme="lcars"] .btn {
+  background: var(--accent);
+  color: #120b05;
+  border-radius: 999px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  border: none;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.7);
+}
+
+:root[data-theme="lcars"] .btn.secondary {
+  background: var(--accent-2);
+  color: #1a0505;
+}
+
+:root[data-theme="lcars"] .btn.ghost {
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  border: 1px solid var(--accent-3);
+}
+
+/* Pills (mode badge etc.) */
+:root[data-theme="lcars"] .pill {
+  background: var(--accent-2);
+  border-radius: 999px;
+  border: none;
+  color: #1a0505;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.8em;
+}
+
+/* Progress bar strip */
+:root[data-theme="lcars"] .progress {
+  background: #3a405a;
+  border-radius: 0;
+}
+:root[data-theme="lcars"] .progress > span {
+  background: var(--accent-3);
+}
+
+/* Tabs */
+:root[data-theme="lcars"] .live-tabs {
+  border-radius: 999px;
+  border: none;
+  background: #15192b;
+}
+:root[data-theme="lcars"] .live-tab {
+  border-radius: 999px;
+  text-transform: uppercase;
+  font-size: 0.8em;
+}
+:root[data-theme="lcars"] .live-tab.active {
+  background: var(--accent);
+  color: #120b05;
+}
+
+
 /* unified html/body + layout shell */
 html, body {
   margin:0;
@@ -825,6 +934,7 @@ body{
       <select id="themeSelect" style="margin-left:8px;">
         <option value="dark-professional">Dark</option>
         <option value="light-paper">Light</option>
+        <option value="lcars">LCARS</option>
       </select>
     </div>
   </div>
@@ -2559,6 +2669,28 @@ document.getElementById("btnFinalize")?.addEventListener("click", () => {
     }
   });
 })();
+
+(function initTheme() {
+  const sel = document.getElementById("themeSelect");
+  if (!sel) return;
+
+  const THEME_KEY = "copycat_theme";
+  const allowed = new Set(["dark-professional", "light-paper", "lcars"]);
+
+  // Read saved theme or default to dark-professional
+  const stored = localStorage.getItem(THEME_KEY);
+  const initial = allowed.has(stored) ? stored : "dark-professional";
+
+  document.documentElement.dataset.theme = initial;
+  sel.value = initial;
+
+  sel.addEventListener("change", () => {
+    const v = allowed.has(sel.value) ? sel.value : "dark-professional";
+    document.documentElement.dataset.theme = v;
+    localStorage.setItem(THEME_KEY, v);
+  });
+})();
+
 
 
 
