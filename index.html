@@ -1685,121 +1685,65 @@ function renderDrift(raw) {
   `;
 }
 
-
 function renderLiveDrift(raw) {
   const box = document.getElementById("liveDriftBox");
   const content = document.getElementById("liveDriftContent");
   if (!box || !content) return;
 
-  const safeNum = (v, d = 3) => {
-    if (typeof v !== "number" || !Number.isFinite(v)) return "—";
-    return v.toFixed(d);
-  };
+  const safeNum = (v, d = 3) =>
+    (typeof v === "number" && Number.isFinite(v)) ? v.toFixed(d) : "—";
 
-  // No payload → show a friendly message but let tabs handle visibility
+  // No payload at all → generic message
   if (!raw) {
+    box.style.display = "block";
     content.innerHTML =
       `<div class="mono">Drift compare not available for this sample.</div>`;
     return;
   }
 
-  // Unwrap common shapes
-  const driftA = raw.a || raw.A || raw.scan || null;
-  const driftB = raw.b || raw.B || raw.live || null;
-  const cmp    = raw.compare || raw.c || null;
+  // Many backends will wrap the actual compare result
+  const cmp = raw.compare || raw.c || raw;
 
-  let similarity;
-  let score;
-  let risk;
-  let overlap;
-  let note = "";
+  // Only trust explicit fields from the backend
+  const sim = (typeof cmp.similarity === "number")
+    ? cmp.similarity
+    : (typeof cmp.sim === "number" ? cmp.sim : null);
 
-  const isRealNumber = v =>
-    typeof v === "number" && Number.isFinite(v);
+  const score = (typeof cmp.score === "number") ? cmp.score : null;
+  const risk  = (typeof cmp.risk  === "number") ? cmp.risk  : null;
 
-  // 1) Preferred: explicit compare block
-  if (cmp && typeof cmp === "object") {
-    if (isRealNumber(cmp.similarity ?? cmp.sim))
-      similarity = cmp.similarity ?? cmp.sim;
-    if (isRealNumber(cmp.score))
-      score = cmp.score;
-    if (isRealNumber(cmp.risk))
-      risk = cmp.risk;
-    if (isRealNumber(cmp.overlap ?? cmp.jaccard))
-      overlap = cmp.overlap ?? cmp.jaccard;
-  }
+  const overlap = (typeof cmp.overlap === "number")
+    ? cmp.overlap
+    : (typeof cmp.jaccard === "number" ? cmp.jaccard : null);
 
-  // 2) Fallback: flat fields
-  if (!isRealNumber(similarity) && isRealNumber(raw.similarity ?? raw.sim)) {
-    similarity = raw.similarity ?? raw.sim;
-  }
-  if (!isRealNumber(score) && isRealNumber(raw.score)) {
-    score = raw.score;
-  }
-  if (!isRealNumber(risk) && isRealNumber(raw.risk)) {
-    risk = raw.risk;
-  }
-  if (!isRealNumber(overlap) && isRealNumber(raw.overlap ?? raw.jaccard)) {
-    overlap = raw.overlap ?? raw.jaccard;
-  }
+  const haveAny = [sim, score, risk, overlap].some(
+    v => typeof v === "number" && Number.isFinite(v)
+  );
 
-  // 3) Last-resort: derive something from a/b
-  if ((!isRealNumber(similarity) || !isRealNumber(score) ||
-       !isRealNumber(risk)      || !isRealNumber(overlap)) &&
-      driftA && driftB) {
-
-    const sA = driftA.score;
-    const sB = driftB.score;
-    const rA = driftA.risk;
-    const rB = driftB.risk;
-    const saA = driftA.avg_adjacent_sim;
-    const saB = driftB.avg_adjacent_sim;
-
-    if (!isRealNumber(similarity) && isRealNumber(sA) && isRealNumber(sB)) {
-      const diff = Math.min(1, Math.abs(sA - sB));
-      similarity = 1 - diff;
-      note = "Derived from drift scores (no explicit similarity field).";
-    }
-
-    if (!isRealNumber(score) && isRealNumber(sA) && isRealNumber(sB)) {
-      score = (sA + sB) / 2;
-    }
-
-    if (!isRealNumber(risk) && isRealNumber(rA) && isRealNumber(rB)) {
-      risk = Math.max(rA, rB);
-    }
-
-    if (!isRealNumber(overlap) && isRealNumber(saA) && isRealNumber(saB)) {
-      overlap = (saA + saB) / 2;
-    }
-  }
-
-  const hasNumeric =
-    isRealNumber(similarity) ||
-    isRealNumber(score)      ||
-    isRealNumber(risk)       ||
-    isRealNumber(overlap);
-
-  if (!hasNumeric) {
-    content.innerHTML =
-      `<div>Drift compare payload not recognized by UI. Raw JSON:</div>` +
-      `<pre style="margin-top:6px; max-height:200px; overflow:auto; font-size:11px;">` +
-      `${JSON.stringify(raw, null, 2)}</pre>`;
+  // If the backend doesn’t provide actual compare metrics yet,
+  // don’t fabricate numbers – just explain that it’s not wired.
+  if (!haveAny) {
+    box.style.display = "block";
+    content.innerHTML = `
+      <div class="mono">
+        Drift compare is in prototype mode on this build, so numeric
+        similarity / risk scores are not available yet.
+      </div>
+    `;
     return;
   }
 
-  let html = `
-    <div>Similarity</div><div class="mono">${safeNum(similarity)}</div>
+  // Normal case: show what the backend really sent
+  box.style.display = "block";
+  content.innerHTML = `
+    <div>Similarity</div><div class="mono">${safeNum(sim)}</div>
     <div>Score (human-like)</div><div class="mono">${safeNum(score)}</div>
     <div>Risk</div><div class="mono">${safeNum(risk)}</div>
     <div>Overlap</div><div class="mono">${safeNum(overlap)}</div>
   `;
-  if (note) {
-    html += `<div>Notes</div><div class="mono">${note}</div>`;
-  }
-
-  content.innerHTML = html;
 }
+
+
 
 function initLiveTabs(){
   const tabs = document.querySelectorAll(".live-tab");
