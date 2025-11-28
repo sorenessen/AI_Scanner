@@ -5,37 +5,187 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI Text Scanner — CopyCat</title>
 <style>
-  :root{
-    --bg:#0f1220; --panel:#181c2f; --muted:#c4cbe3; --text:#f1f4ff; --accent:#7eb4ff;
-    --good:#45c176; --warn:#f2c94c; --bad:#ef6a6a; --border:#2a3250; --panel-2:#13182b;
-    --scale:1.50; --wrap-max:1800px;
-    --tip-bg: rgba(11,16,34,.92);
-    --tip-border: rgba(126,180,255,.25);
+
+  #demoPresetWrap{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    font-size:0.9em;
   }
-  html,body{ margin:0;height:100%;background:var(--bg);color:var(--text);
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
-    font-size:calc(16px * var(--scale)); line-height:1.55; }
-  .wrap{max-width:var(--wrap-max); width:98vw; margin:22px auto;}
-  .grid{display:grid;gap:18px}
-  .cols{grid-template-columns: 1.25fr 1fr}
+
+ :root{
+  /* Base palette – slightly more neutral / professional dark */
+  --bg:      #0f1116;
+  --panel:   #171a23;
+  --panel-2: #12141b;
+  --border:  #252837;
+  --muted:   #a4abbf;
+  --text:    #f4f4f7;
+  --accent:  #4f86ff;
+  --good:    #38b26a;
+  --warn:    #f2c94c;
+  --bad:     #ef6a6a;
+  --scale:   1.50;
+
+  /* Tooltip + live drawer */
+  --tip-bg:    rgba(248, 251, 255, 0.96);
+  --tip-border:rgba(126, 180, 255, 0.45);
+  --tip-text:  #0f1630;
+  --live-h:    40vh;
+}
+
+/* Theme variants (optional) */
+:root[data-theme="dark-professional"] {
+  /* same as base – you can omit this if base is your default */
+}
+
+:root[data-theme="light-paper"] {
+  /* Warm, cream paper-like palette */
+  --bg:      #f6f2e9;    /* page background */
+  --panel:   #fffaf0;    /* cards */
+  --panel-2: #f1e5cf;    /* slightly deeper panel */
+  --border:  #d0c2a4;
+
+  --muted:   #756b5c;
+  --text:    #231b14;    /* dark brown instead of pure black */
+  --accent:  #2b63c6;
+
+  --good:    #2f8f5a;
+  --warn:    #b88a2e;
+  --bad:     #c14a4a;
+
+  --tip-bg:     #fffaf0;
+  --tip-border: rgba(43, 99, 198, 0.25);
+  --tip-text:   #231b14;
+}
+
+/* unified html/body + layout shell */
+html, body {
+  margin:0;
+  height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+  font-size:calc(16px * var(--scale));
+  line-height:1.55;
+}
+
+/* main shell fills the window */
+body{
+  min-height:100vh;
+  display:flex;
+}
+
+/* outer container */
+.wrap{
+  flex:1;
+  width:98vw;
+  max-width:var(--wrap-max);
+  margin:22px auto;
+  padding:16px 16px 24px;
+  box-sizing:border-box;
+}
+
+
+#liveResizeHandle{
+  height:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:ns-resize;
+}
+#liveResizeHandle::before{
+  content:"";
+  width:46px;
+  height:4px;
+  border-radius:999px;
+  background:rgba(255,255,255,.25);
+}
+  
+.grid{display:grid;gap:18px}
+.cols{
+  grid-template-columns: minmax(0,1.25fr) minmax(0,1fr);
+  align-items:stretch;
+}
+.card{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:18px;
+  overflow:visible;
+  height:100%;          /* cards fill the column height */
+}
+
   @media (max-width:1100px){ .cols{grid-template-columns:1fr} }
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px; overflow:visible}
+
+    /* Live drawer layout polish */
+  #liveDrawer .split {
+    align-items: flex-start;
+  }
+
+  /* Give a bit of breathing room between left + right columns */
+  #liveDrawer .split > div:first-child {
+    padding-right: 8px;
+  }
+  #liveDrawer .split > div:last-child {
+    padding-left: 8px;
+  }
+
+  /* Slightly tighter spacing under the metrics row */
+  #liveResult {
+    margin-top: 8px;
+  }
+
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap; overflow:visible}
   .right{text-align:right}
   label{color:var(--muted)}
   input[type="text"], input[type="number"], select, textarea{
-    width:100%;background:#101426;color:var(--text);border:1px solid var(--border);
-    border-radius:10px;padding:12px 14px;min-height:42px;font-size:1em;
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    min-height: 42px;
+    font-size: 1em;
   }
+
   textarea{min-height:360px;resize:vertical}
   .btn{background:var(--accent);border:none;color:#091120;padding:11px 16px;border-radius:10px;font-weight:700;cursor:pointer;min-height:42px}
-  .btn.secondary{background:#253055;color:var(--text)}
-  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+
+  .btn.secondary{
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn.ghost{
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+ 
   .btn:disabled{opacity:.6;cursor:not-allowed}
   .muted{color:var(--muted)}
   .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
-  .pill{padding:4px 10px;border-radius:999px;background:#1a2346;color:#cfe0ff;border:1px solid var(--border)}
-  .bar{height:22px;border:1px solid var(--border);border-radius:12px;background:#0c1122;position:relative}
+
+  .pill{
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .bar{
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel-2);
+    position: relative;
+  }
+  
   .bar>.fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:12px}
   .fill.good{background:var(--good)} .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
   .kv{display:grid;grid-template-columns: 1fr auto;gap:8px 16px}
@@ -45,20 +195,113 @@
   .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
   .footer{margin-top:14px;color:var(--muted);font-size:.95em}
 
-  .drawer{position:fixed;left:0;right:0;bottom:0;background:var(--panel-2);
-    border-top:1px solid var(--border);transform:translateY(100%);transition:transform .25s ease;z-index:50}
-  .drawer.open{transform:translateY(0)}
-  .drawer-inner{max-width:var(--wrap-max); width:98vw; margin:0 auto; padding:14px 0}
-  .split{display:grid;grid-template-columns: 1fr 400px; gap:18px}
-  @media (max-width:1024px){ .split{grid-template-columns: 1fr} }
-  .progress{height:10px;border-radius:6px;background:#2a3240;overflow:hidden}
-  .progress>span{display:block;height:100%;width:0;background:#3b82f6;transition:width .25s}
+.drawer{
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:0;
+  background:var(--panel-2);
+  border-top:1px solid var(--border);
+  transform:translateY(100%);
+  transition:transform .25s ease;
+  z-index:50;
 
-  #btnLive{position:relative}
-  #btnLive::after{content:'opens drawer at bottom'; position:absolute; left:100%; top:50%;
-    transform:translate(10px,-50%); font-size:.9em; color:var(--muted); white-space:nowrap;}
+  /* NEW: fixed height & flex so inner content fits */
+  height:var(--live-h);
+  display:flex;
+  align-items:stretch;
+}
 
-  .scale-wrap{display:flex;align-items:center;gap:10px}
+.drawer.open{ transform:translateY(0); }
+
+.drawer-inner{
+  max-width:var(--wrap-max);
+  width:98vw;
+  margin:0 auto;
+  padding:10px 18px 18px;
+
+  /* NEW: let content scroll inside drawer instead of growing it */
+  max-height:100%;
+  overflow:auto;
+}
+
+
+    /* Live drawer layout */
+  .split{
+    display:grid;
+    grid-template-columns: minmax(0,1.4fr) minmax(0,1fr);
+    gap:18px;
+    align-items:flex-start;
+  }
+  @media (max-width:1024px){
+    .split{grid-template-columns: 1fr}
+  }
+
+  .live-left textarea{
+    min-height:140px;
+    max-height:220px;
+  }
+
+  .live-metrics-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    margin-bottom:6px;
+  }
+
+  .live-tabs{
+    display:inline-flex;
+    align-items:center;
+    border-radius:999px;
+    border:1px solid var(--border);
+    overflow:hidden;
+    font-size:.85em;
+    white-space:nowrap;
+  }
+  .live-tab{
+    background:transparent;
+    border:none;
+    color:var(--muted);
+    padding:4px 10px;
+    cursor:pointer;
+  }
+  .live-tab.active{
+    background:#1a2346;
+    color:#eaf0ff;
+  }
+
+  .progress{
+    height: 10px;
+    border-radius: 6px;
+    background: var(--panel-2);
+    overflow: hidden;
+  }
+
+  .progress>span{
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width .25s;
+  }
+
+/* Optional: hide the hint on very small screens */
+@media (max-width: 700px) {
+  #btnLive::after {
+    content: '';
+  }
+}
+
+
+ .scale-wrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
   input[type="range"]{accent-color:#7eb4ff}
 
   /* ---- HELP DOT + BALLOON ---- */
@@ -69,6 +312,33 @@
     border:1.5px solid var(--border); border-radius:999px; color:#cfe0ff; background:#10162a;
     font-weight:800; line-height:1; user-select:none; cursor:help; overflow:visible;
   }
+
+  #explainWrap{
+  margin-top:.5rem;
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  background:var(--panel-2);
+  color:var(--text);
+}
+
+#explainHeader{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:.65rem .9rem;
+  background:var(--panel);
+  border-bottom:1px solid var(--border);
+}
+
+#explainToggleBtn{
+  all:unset;
+  cursor:pointer;
+  padding:.25rem .55rem;
+  border:1px solid var(--border);
+  border-radius:6px;
+  font-size:.9rem;
+  color:var(--text);
+}
+
   .help-dot::after{ content:"?"; font-size:.9em; transform:translateY(-1px); }
 
   /* balloon defaults (RIGHT side) */
@@ -105,9 +375,45 @@
     opacity:1; visibility:visible;
   }
 
+  /* When a right-edge dot has class="help-dot tip-l", open bubble to the LEFT */
+.tip-l.help-dot:hover > .tip,
+.tip-l.help-dot:focus-visible > .tip,
+.tip-l.help-dot[data-open="1"] > .tip{
+  transform: translate(-10px,-50%) scale(1);  /* flip to the left */
+}
+
+/* Arrow for left-opening variant */
+.tip-l.help-dot:hover::before,
+.tip-l.help-dot:focus-visible::before,
+.tip-l.help-dot[data-open="1"]::before{
+  transform: translate(-2px,-50%) rotate(-90deg);
+}
+
+
   /* top/bottom variants if you ever need them */
   .tip-t.help-dot > .tip{ inset:auto auto 100% 0; transform:translate(0,-10px); top:auto; left:0; }
   .tip-t.help-dot::before{ left:16px; top:auto; bottom:100%; transform:translateY(-2px) rotate(0deg); }
+  /* ---- LEFT-SIDE TOOLTIP VARIANT ---- */
+/* For help dots near the right edge: class="help-dot tip-l" */
+
+.tip-l.help-dot > .tip{
+  /* Position bubble to the LEFT of the dot */
+  inset: auto 100% auto auto;   /* right:100% */
+  left: auto;
+  right: 100%;
+  top: 50%;
+  transform: translate(-10px,-50%);
+}
+
+/* Little arrow also flips to point right -> left */
+.tip-l.help-dot::before{
+  left: auto;
+  right: 100%;
+  top: 50%;
+  bottom: auto;
+  transform: translate(-2px,-50%) rotate(-90deg);
+}
+
   .tip-b.help-dot > .tip{ inset:100% auto auto 0; transform:translate(0,10px); top:auto; left:0; }
   .tip-b.help-dot::before{ left:16px; top:100%; transform:translateY(2px) rotate(180deg); }
 
@@ -124,11 +430,6 @@
   button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #7eb4ff;outline-offset:2px}
 
   /* --- Light tooltip override (paste at END of <style>) --- */
-:root{
-  --tip-bg: rgba(248, 251, 255, 0.96);
-  --tip-border: rgba(126, 180, 255, 0.45);
-  --tip-text: #0f1630;
-}
 .help-dot > .tip{
   background: var(--tip-bg);
   color: var(--tip-text);
@@ -158,7 +459,355 @@
   .explain-section b{ color:#fff; }
   .explain-list{ margin:.35rem 0 0 .9rem; }
   .explain-note{ opacity:.85; }
-  #pdBadge{ margin-left: 8px; }
+  /* Base PD badge shape */
+
+/* PD badge – base (dark theme) styling */
+#pdBadge{
+  margin-left: 8px;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: #163626; /* dark PD green for dark theme */
+  color: #e6ffe6;
+}
+
+
+/* DARK THEME LOOK (default) */
+#pdBadge.pd-ok {
+  background: #163626;
+  color: #cafad7;
+}
+#pdBadge.pd-none {
+  background: #2f2a12;
+  color: #f4e2c0;
+}
+
+
+  /* Live drawer right-side spacing */
+.split > div:last-child {
+  padding: 8px 12px 10px;
+}
+
+/* Give the tabs and sections some breathing room */
+#liveTabs {
+  margin-bottom: 8px;
+}
+
+#liveResult {
+  margin-top: 8px;
+}
+
+#liveDriftBox {
+  margin-top: 8px;
+}
+
+/* PD: 4 badge next to the title */
+:root[data-theme="light"] #pdBadge,
+:root[data-theme="light-paper"] #pdBadge {
+  background: var(--pill-bg);
+  color: #2b2116;
+  font-weight: 600;
+}
+
+
+/* ===== Live Verification Cat + Butterfly ===== */
+
+/* Give the drift card its own slightly lighter scene background */
+/* ===== Live Verification Cat + Butterfly ===== */
+
+/* Give the drift card its own slightly lighter scene background */
+#liveDriftBox {
+  background: #141b33;
+  position: relative;
+  overflow: hidden;
+}
+
+#liveFunZone {
+  position: relative;
+  width: 100%;
+  height: 220px;           /* was 140px – this fixes the “half cat” */
+  margin-top: 12px;
+  overflow: hidden;
+  pointer-events: none;
+  display: none;
+  opacity: 0;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 20% 0%, #263566 0, #141a33 40%, #0a0d1f 100%);
+  box-shadow: 0 0 18px rgba(0,0,0,0.75) inset;
+  transition: opacity 0.35s ease;
+}
+
+
+#liveFunZone.active {
+  display: block;
+  opacity: 1;
+}
+
+/* Base sprite positioning */
+#liveFunZone .cat,
+#liveFunZone .butterfly {
+  position: absolute;
+}
+
+/* ---------- CAT: sprite sheet from /static/cat-sprite.png ---------- */
+/* Assumes 4x4 grid of 16 frames, each 256x256.
+   If that’s different, we’ll tweak the JS frame size, not this CSS. */
+
+/* CAT: sprite sheet + horizontal prowl */
+#liveFunZone .cat {
+  bottom: -8px;                                /* sit on “floor” of taller zone */
+  left: 2%;
+  width: 256px;
+  height: 256px;
+  background-image: url("/static/cat-sprite.png");
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  transform-origin: 50% 100%;
+  z-index: 1;
+}
+
+/* Only animate when Live Fun Zone is active */
+#liveFunZone.active .cat {
+  animation: catProwl 10s ease-in-out infinite;
+}
+
+/* Move from left → mid-right → left while it runs its frames */
+@keyframes catProwl {
+  0% {
+    transform: translateX(0) scale(0.80);
+  }
+  20% {
+    transform: translateX(14vw) scale(0.80);
+  }
+  40% {
+    transform: translateX(26vw) scale(0.80);
+  }
+  60% {
+    transform: translateX(32vw) scale(0.80);
+  }
+  80% {
+    transform: translateX(16vw) scale(0.80);
+  }
+  100% {
+    transform: translateX(0) scale(0.80);
+  }
+}
+
+
+/* “Butt wiggle / grooming / panic” body motion – sprite frames are layered on top */
+@keyframes catAct {
+  0%   { transform: translateX(0) translateY(0)   scale(0.7) rotate(0deg); }
+  10%  { transform: translateX(-4px) translateY(3px)  scale(0.7,0.74) rotate(-3deg); }
+  20%  { transform: translateX(0)   translateY(0)   scale(0.7,0.7)  rotate(2deg); }
+  30%  { transform: translateX(3px) translateY(4px)  scale(0.68,0.76) rotate(-4deg); }
+  40%  { transform: translateX(0)   translateY(2px)  scale(0.69,0.73) rotate(4deg); }
+  55%  { transform: translateX(2px) translateY(-4px) scale(0.72)      rotate(0deg); }
+  70%  { transform: translateX(6px) translateY(-2px) scale(0.71)      rotate(-2deg); }
+  85%  { transform: translateX(2px) translateY(0)    scale(0.7)       rotate(1deg); }
+  100% { transform: translateX(0)   translateY(0)    scale(0.7)       rotate(0deg); }
+}
+
+/* ---------- Butterflies (CSS/SVG for now; sprite file later if you want) ---------- */
+
+#liveFunZone .butterfly {
+  width: 90px;
+  height: 60px;
+  bottom: 60px;
+  transform-origin: 50% 50%;
+  z-index: 2;  /* above cat */
+}
+
+/* wings: color-cycle + glow */
+#liveFunZone .butterfly-body ellipse {
+  fill: #2d7ff9;  /* start blue */
+  stroke: #cbe1ff;
+  stroke-width: 1.3;
+  filter:
+    drop-shadow(0 0 4px rgba(45,127,249,0.9))
+    drop-shadow(0 0 8px rgba(45,127,249,0.7));
+  transform-origin: 40px 30px;
+  animation: wingFlap 0.4s ease-in-out infinite,
+             butterflyColor 6s linear infinite;
+}
+
+/* butterfly body + antennae */
+#liveFunZone .butterfly-body rect {
+  fill: #101b34;
+}
+
+#liveFunZone .butterfly-body path {
+  fill: none;
+  stroke: #101b34;
+  stroke-width: 1.4;
+}
+
+/* Position + animation assignment for each butterfly */
+#liveFunZone .butterfly.b1 { left: 18vw; animation: butterflySolo 14s linear infinite; }
+#liveFunZone .butterfly.b2 { left: 20vw; animation: butterflyPair 14s linear infinite; }
+#liveFunZone .butterfly.b3 { left: 23vw; animation: butterflyPair 14s linear infinite; }
+#liveFunZone .butterfly.b4 { left: 26vw; animation: butterflySwarm 14s linear infinite; }
+
+/* Butterfly color: blue → pink → orange → blue */
+@keyframes butterflyColor {
+  0%, 100% { fill: #2d7ff9; stroke: #cbe1ff; }
+  33%      { fill: #ff6fbf; stroke: #ffd1ea; }
+  66%      { fill: #ffae42; stroke: #ffe0a3; }
+}
+
+/* b1: solo, then top of triangle swarm */
+@keyframes butterflySolo {
+  0%   { transform: translate(2vw, 0px)  scale(1)   rotate(0deg);   opacity: 1;   }
+  16%  { transform: translate(12vw,-10px) scale(1.03) rotate(-10deg);             }
+  32%  { transform: translate(24vw,-6px)  scale(1.07) rotate(8deg);               }
+  45%  { transform: translate(40vw,-34px) scale(0.96) rotate(18deg); opacity:.85; }
+  55%  { transform: translate(56vw,-78px) scale(0.85) rotate(28deg); opacity:0;   }
+  78%  { transform: translate(56vw,-26px) scale(0.9)  rotate(-10deg);opacity:0;   }
+  88%  { transform: translate(30vw,-24px) scale(1)   rotate(6deg);   opacity:1;   }
+  96%  { transform: translate(14vw,-22px) scale(1.02) rotate(-4deg);              }
+  100% { transform: translate(8vw,-20px)  scale(1)   rotate(0deg);  opacity:1;    }
+}
+
+/* b2 / b3: chased pair, then bottom corners of triangle */
+@keyframes butterflyPair {
+  0%,34% { transform: translate(10vw,-10px) scale(1) rotate(0deg); opacity:0;  }
+  40%    { transform: translate(16vw,-10px) scale(1.04) rotate(-8deg);opacity:1;}
+  55%    { transform: translate(28vw,-16px) scale(1.07) rotate(10deg);         }
+  65%    { transform: translate(44vw,-42px) scale(0.96) rotate(20deg);opacity:.85;}
+  78%    { transform: translate(60vw,-76px) scale(0.86) rotate(28deg);opacity:0; }
+  88%    { transform: translate(26vw,-4px)  scale(1)    rotate(4deg); opacity:1;  }
+  96%    { transform: translate(10vw,-4px)  scale(1.02) rotate(-4deg);           }
+  100%   { transform: translate(4vw,-4px)   scale(1)    rotate(0deg); opacity:1;  }
+}
+
+/* b4: back point of triangle only */
+@keyframes butterflySwarm {
+  0%,71% { transform: translate(60vw,-14px) scale(1) rotate(0deg); opacity:0; }
+  80%    { transform: translate(36vw,-14px) scale(1) rotate(-4deg);opacity:1; }
+  94%    { transform: translate(18vw,-14px) scale(1.02) rotate(4deg);         }
+  100%   { transform: translate(8vw,-14px)  scale(1) rotate(0deg);  opacity:1; }
+}
+
+/* wings flapping */
+@keyframes wingFlap {
+  0%   { transform: scaleY(1);    }
+  50%  { transform: scaleY(0.82); }
+  100% { transform: scaleY(1);    }
+}
+
+/* === Light theme polish (CopyCat) =============================== */
+/* Make both data-theme="light" and "light-paper" use the same palette */
+
+:root[data-theme="light"],
+:root[data-theme="light-paper"] {
+  /* Warm cream palette */
+  --bg:       #f4ecdd;
+  --panel:    #f2e4ce;
+  --panel-2:  #ecdec8;
+  --text:     #23160c;
+  --muted:    #6f5a43;
+  --accent:   #3154a0;
+  --border:   #cfbda1;
+
+  /* Result + badge surfaces */
+  --bar-bg:   #f1dfb6;   /* probability bar background */
+  --pill-bg:  #f3d59b;   /* generic pill / badge background */
+
+  /* Tooltip colors on cream */
+  --tip-bg:   rgba(255, 252, 244, 0.98);
+  --tip-border: rgba(180, 140, 70, 0.5);
+  --tip-text: #2b2116;
+}
+
+/* Probability bar in "Result" */
+:root[data-theme="light"] .bar,
+:root[data-theme="light-paper"] .bar {
+  background: var(--bar-bg);
+}
+
+/* All generic pills / badges (top-left status, mode badge, etc.) */
+:root[data-theme="light"] .pill,
+:root[data-theme="light-paper"] .pill {
+  background: var(--pill-bg);
+  color: #2b2116;
+  border-color: rgba(0,0,0,0.14);
+}
+
+/* PD: 4 badge next to the title */
+:root[data-theme="light"] #pdBadge,
+:root[data-theme="light-paper"] #pdBadge {
+  background: var(--pill-bg);
+  color: #2b2116;
+  font-weight: 600;
+}
+
+/* Verdict pill keeps its dynamic background; just force readable text */
+:root[data-theme="light"] #verdictPill,
+:root[data-theme="light-paper"] #verdictPill {
+  color: #ffffff;
+}
+
+/* Primary buttons – professional blue on cream */
+:root[data-theme="light"] .btn,
+:root[data-theme="light-paper"] .btn {
+  background: var(--accent);
+  color: #fdfbf5;
+}
+
+/* Secondary / ghost buttons – softer in light mode */
+:root[data-theme="light"] .btn.secondary,
+:root[data-theme="light-paper"] .btn.secondary,
+:root[data-theme="light"] .btn.ghost,
+:root[data-theme="light-paper"] .btn.ghost {
+  background: #f0e0c4;
+  color: #2b2116;
+  border-color: var(--border);
+}
+
+/* Tiny top-row indicators */
+:root[data-theme="light"] #version,
+:root[data-theme="light-paper"] #version,
+:root[data-theme="light"] #activeModeBadge,
+:root[data-theme="light-paper"] #activeModeBadge {
+  color: var(--text);
+}
+
+/* Consistency Check / drift panel – no more navy slab in light mode */
+:root[data-theme="light"] #liveDriftBox,
+:root[data-theme="light-paper"] #liveDriftBox {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* Style Match / Consistency Check toggle pills */
+:root[data-theme="light"] .live-tabs,
+:root[data-theme="light-paper"] .live-tabs {
+  background: #f0e0c4;
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .live-tab,
+:root[data-theme="light-paper"] .live-tab {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .live-tab.active,
+:root[data-theme="light-paper"] .live-tab.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* Tooltip bubble text on cream */
+:root[data-theme="light"] .help-dot > .tip,
+:root[data-theme="light-paper"] .help-dot > .tip {
+  color: #2b2116;
+}
+
+
+
+
 </style>
 </head>
 <body>
@@ -172,6 +821,11 @@
     <div class="scale-wrap">
       <label class="muted" for="uiScale">UI scale</label>
       <input id="uiScale" type="range" min="120" max="220" value="150" />
+      
+      <select id="themeSelect" style="margin-left:8px;">
+        <option value="dark-professional">Dark</option>
+        <option value="light-paper">Light</option>
+      </select>
     </div>
   </div>
 
@@ -179,14 +833,24 @@
     <!-- Left -->
     <section class="card" aria-label="AI Text Scanner">
       <div class="row" style="justify-content:space-between">
-        <h2 style="margin:0">AI Text Scanner</h2>
+        <h1 style="margin:0">CopyCat: AI Content Auditor</h1>
         <span class="muted" id="ensemBadge"></span>
       </div>
 
       <div class="row">
+        <!-- Demo button + preset dropdown -->
         <div class="help-wrap">
-          <button id="btnDemo" class="btn secondary">Load Demo Samples</button>
-          <span class="help-dot" tabindex="0"><span class="tip">Load a few example passages that demonstrate the detector’s outputs.</span></span>
+          <div class="row" style="gap:8px; align-items:center; flex-wrap:nowrap;">
+            <button id="btnDemo" class="btn secondary">Load Demo</button>
+            <select id="demoPreset" class="mono" style="min-width:190px; max-width:230px;">
+              <!-- options will be filled by JS -->
+            </select>
+          </div>
+          <span class="help-dot" tabindex="0">
+            <span class="tip">
+              Load a curated example passage. Choose a type (news, story, essay, code) or pick “random”.
+            </span>
+          </span>
         </div>
 
         <div class="help-wrap">
@@ -199,6 +863,27 @@
           <span class="help-dot" tabindex="0"><span class="tip">Open the Live Verification drawer to type a short sample for comparison.</span></span>
         </div>
       </div>
+
+      <!-- Demo Mode Toggle + Presets -->
+      <div class="row" style="align-items:flex-start; margin-bottom:10px; gap:12px;">
+        <label class="mono" style="font-size:0.9em; display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="demoToggle">
+          Demo mode (use preset curated samples)
+        </label>
+
+        <div id="demoPresetWrap" class="muted">
+          <span style="font-size:0.85em;">Preset:</span>
+          <select id="demoPreset">
+            <option value="random">(random curated sample)</option>
+            <option value="news">News / op-ed</option>
+            <option value="story">Story / narrative</option>
+            <option value="essay">Student-style essay</option>
+            <option value="code">Short code snippet</option>
+          </select>
+        </div>
+      </div>
+
+
 
       <label for="text">Text to scan</label>
       <textarea id="text" placeholder="Paste or type text to analyze…"></textarea>
@@ -462,6 +1147,9 @@
 <!-- Live Verification Drawer -->
 <div id="liveDrawer" class="drawer" aria-hidden="true" role="dialog" aria-label="Live Verification drawer">
   <div class="drawer-inner">
+    <!-- NEW: resize handle -->
+  <div id="liveResizeHandle" aria-hidden="true"></div>
+  <!-- …rest of drawer… -->
     <div class="row" style="justify-content:space-between;align-items:center;padding:0 6px 8px">
       <h3 style="margin:0">Live Verification (CopyCat)</h3>
       <button id="btnCloseLive" class="btn ghost">Close</button>
@@ -471,9 +1159,9 @@
       Paste text above and run a scan first. Then start a live sample to compare your typing style.
     </div>
 
-    <div class="split" style="padding:0 6px 14px">
+        <div class="split" style="padding:0 6px 14px">
       <!-- LEFT column -->
-      <div>
+      <div class="live-left">
         <textarea id="liveInput" placeholder="Type here for 60–120 words…" rows="7"
                   style="width:100%; resize:vertical; font-family:system-ui, sans-serif;" disabled
                   aria-label="Live typing area"></textarea>
@@ -499,28 +1187,138 @@
       </div>
 
       <!-- RIGHT column -->
-      <div>
-        <div class="row" style="gap:18px; margin-bottom:8px;">
-          <div>Time: <span id="liveTimer">—</span></div>
-          <div>Tokens: <span id="liveTokens">0</span> <small class="muted">(words)</small></div>
-          <div>Len: <span id="liveLen">0%</span> <small class="muted">(of 120 target)</small></div>
-          <div>Match: <span id="liveRough">—</span> <small class="muted">(quick)</small></div>
-        </div>
-        <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
-        <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
+      <div class="live-right">
+        <div class="card" style="padding:10px;">
+          <div class="live-metrics-header">
+            <div class="row" style="gap:18px; margin-bottom:4px;">
+              <div>Time: <span id="liveTimer">—</span></div>
+              <div>Tokens: <span id="liveTokens">0</span> <small class="muted">(words)</small></div>
+              <div>Len: <span id="liveLen">0%</span> <small class="muted">(of 120 target)</small></div>
+              <div>Match: <span id="liveRough">—</span> <small class="muted">(quick)</small></div>
+            </div>
 
-        <!-- NEW: drift compare card (scan vs live sample) -->
-        <div id="liveDriftBox" class="card" style="margin-top:10px; padding:10px; display:none">
-          <div class="muted">Drift compare (scan vs live sample)</div>
-          <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
-        </div>
-      </div>
+            <div class="live-tabs" role="tablist" aria-label="Live view">
+              <button type="button" class="live-tab active" data-tab="summary" role="tab" aria-selected="true">
+                Style Match
+              </button>
+              <button type="button" class="live-tab" data-tab="drift" role="tab" aria-selected="false">
+                Consistency Check
+              </button>
+            </div>
+          </div>
 
-    </div>
+      <div class="progress"><span id="liveProgress" style="width:0%"></span></div>
+
+      <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
+
+<!-- Drift compare lives inside the same card now -->
+<<div id="liveDriftBox" style="margin-top:10px; display:none">
+  <div class="muted">Drift compare (scan vs live sample)</div>
+  <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
+
+  <!-- CAT + BUTTERFLY SCENE -->
+  <div id="liveFunZone">
+    <!-- CAT: sprite-based mascot -->
+    <div
+      class="cat"
+      role="img"
+      aria-label="CopyCat mascot"
+    ></div>
+
+    <!-- BUTTERFLY #1 (solo → then top of triangle) -->
+    <svg class="butterfly b1" viewBox="0 0 80 60" aria-hidden="true">
+      <g class="butterfly-body">
+        <ellipse cx="30" cy="22" rx="11" ry="14" />
+        <ellipse cx="50" cy="22" rx="11" ry="14" />
+        <ellipse cx="28" cy="38" rx="9" ry="12" />
+        <ellipse cx="52" cy="38" rx="9" ry="12" />
+        <rect x="38" y="22" width="4" height="20" rx="2" />
+        <path d="M40 22 C35 14 33 12 30 10" />
+        <path d="M40 22 C45 14 47 12 50 10" />
+      </g>
+    </svg>
+
+    <!-- BUTTERFLY #2 -->
+    <svg class="butterfly b2" viewBox="0 0 80 60" aria-hidden="true">
+      <g class="butterfly-body">
+        <ellipse cx="30" cy="22" rx="11" ry="14" />
+        <ellipse cx="50" cy="22" rx="11" ry="14" />
+        <ellipse cx="28" cy="38" rx="9" ry="12" />
+        <ellipse cx="52" cy="38" rx="9" ry="12" />
+        <rect x="38" y="22" width="4" height="20" rx="2" />
+        <path d="M40 22 C35 14 33 12 30 10" />
+        <path d="M40 22 C45 14 47 12 50 10" />
+      </g>
+    </svg>
+
+    <!-- BUTTERFLY #3 -->
+    <svg class="butterfly b3" viewBox="0 0 80 60" aria-hidden="true">
+      <g class="butterfly-body">
+        <ellipse cx="30" cy="22" rx="11" ry="14" />
+        <ellipse cx="50" cy="22" rx="11" ry="14" />
+        <ellipse cx="28" cy="38" rx="9" ry="12" />
+        <ellipse cx="52" cy="38" rx="9" ry="12" />
+        <rect x="38" y="22" width="4" height="20" rx="2" />
+        <path d="M40 22 C35 14 33 12 30 10" />
+        <path d="M40 22 C45 14 47 12 50 10" />
+      </g>
+    </svg>
+
+    <!-- BUTTERFLY #4 (swarm-only) -->
+    <svg class="butterfly b4" viewBox="0 0 80 60" aria-hidden="true">
+      <g class="butterfly-body">
+        <ellipse cx="30" cy="22" rx="11" ry="14" />
+        <ellipse cx="50" cy="22" rx="11" ry="14" />
+        <ellipse cx="28" cy="38" rx="9" ry="12" />
+        <ellipse cx="52" cy="38" rx="9" ry="12" />
+        <rect x="38" y="22" width="4" height="20" rx="2" />
+        <path d="M40 22 C35 14 33 12 30 10" />
+        <path d="M40 22 C45 14 47 12 50 10" />
+      </g>
+    </svg>
   </div>
 </div>
 
+
 <script>
+
+// --- Demo Mode Sample Texts ---
+const DEMO_SAMPLES = {
+  "news": `Breaking: A new AI-driven policing system has sparked debate...`,
+  "story": `Once the lantern flickered out, Mara realized she wasn't alone...`,
+  "essay": `The socioeconomic impact of automation continues to reshape...`,
+  "code": `def analyze_text(t):\n    return {"len": len(t)}`,
+};
+
+// --- Demo presets ---
+const DEMO_PRESET_LABELS = {
+  random: "(random curated sample)",
+  news:   "News / op-ed",
+  story:  "Story / narrative",
+  essay:  "Student-style essay",
+  code:   "Short code snippet",
+};
+
+let currentDemoPreset = "random";
+
+function initDemoPresetSelect() {
+  const sel = document.getElementById("demoPreset");
+  if (!sel) return;
+
+  // Build options from the label map
+  sel.innerHTML = Object.entries(DEMO_PRESET_LABELS)
+    .map(([value, label]) => `<option value="${value}">${label}</option>`)
+    .join("");
+
+  sel.value = currentDemoPreset;
+
+  sel.addEventListener("change", (e) => {
+    const v = String(e.target.value || "").trim();
+    currentDemoPreset = DEMO_PRESET_LABELS[v] ? v : "random";
+  });
+}
+
+
 /* -------- v0.3.5 -------- */
 window.__pdCentroids = 0;
 /* ---------- helpers ---------- */
@@ -593,6 +1391,60 @@ const openLive = ()=>{ drawer.classList.add("open"); drawer.setAttribute("aria-h
 const closeLive = ()=>{ drawer.classList.remove("open"); drawer.setAttribute("aria-hidden","true"); };
 $("#btnLive").addEventListener("click", openLive);
 $("#btnCloseLive").addEventListener("click", closeLive);
+
+/* ---- Live drawer resize ---- */
+(function initLiveResize(){
+  const handle = $("#liveResizeHandle");
+  if (!handle) return;
+
+  let dragging = false;
+
+  // clamp + apply height (in px)
+  function setLiveHeight(px){
+    const min = 160;
+    const max = Math.max(260, window.innerHeight * 0.85);
+    const clamped = Math.min(max, Math.max(min, px));
+    document.documentElement.style.setProperty("--live-h", clamped + "px");
+  }
+
+  function onMove(e){
+    if (!dragging) return;
+    const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+    const h = window.innerHeight - clientY;   // distance from cursor to bottom
+    setLiveHeight(h);
+  }
+
+  function stopDrag(){
+    if (!dragging) return;
+    dragging = false;
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", stopDrag);
+    document.removeEventListener("touchmove", onMove);
+    document.removeEventListener("touchend", stopDrag);
+    document.removeEventListener("touchcancel", stopDrag);
+  }
+
+  function startDrag(e){
+    dragging = true;
+    e.preventDefault();
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", stopDrag);
+    document.addEventListener("touchmove", onMove, { passive:false });
+    document.addEventListener("touchend", stopDrag);
+    document.addEventListener("touchcancel", stopDrag);
+  }
+
+  handle.addEventListener("mousedown", startDrag);
+  handle.addEventListener("touchstart", startDrag, { passive:false });
+
+  // keep height sensible when the window resizes
+  window.addEventListener("resize", ()=>{
+    const h = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue("--live-h")) || (window.innerHeight * 0.4);
+    setLiveHeight(h);
+  });
+})();
+
 
 /* UI writers */
 function setProbFill(p){
@@ -838,13 +1690,11 @@ function renderLiveDrift(raw) {
     if (typeof v !== "number" || !Number.isFinite(v)) return "—";
     return v.toFixed(d);
   };
-  const isRealNumber = v =>
-    typeof v === "number" && Number.isFinite(v);
 
-  // No payload → hide card
+  // No payload → show a friendly message but let tabs handle visibility
   if (!raw) {
-    box.style.display = "none";
-    content.innerHTML = "";
+    content.innerHTML =
+      `<div class="mono">Drift compare not available for this sample.</div>`;
     return;
   }
 
@@ -859,6 +1709,9 @@ function renderLiveDrift(raw) {
   let overlap;
   let note = "";
 
+  const isRealNumber = v =>
+    typeof v === "number" && Number.isFinite(v);
+
   // 1) Preferred: explicit compare block
   if (cmp && typeof cmp === "object") {
     if (isRealNumber(cmp.similarity ?? cmp.sim))
@@ -871,7 +1724,7 @@ function renderLiveDrift(raw) {
       overlap = cmp.overlap ?? cmp.jaccard;
   }
 
-  // 2) Fallback: flat fields at the top level
+  // 2) Fallback: flat fields
   if (!isRealNumber(similarity) && isRealNumber(raw.similarity ?? raw.sim)) {
     similarity = raw.similarity ?? raw.sim;
   }
@@ -885,7 +1738,7 @@ function renderLiveDrift(raw) {
     overlap = raw.overlap ?? raw.jaccard;
   }
 
-  // 3) Last-resort: derive something from a/b drift stats
+  // 3) Last-resort: derive something from a/b
   if ((!isRealNumber(similarity) || !isRealNumber(score) ||
        !isRealNumber(risk)      || !isRealNumber(overlap)) &&
       driftA && driftB) {
@@ -897,24 +1750,20 @@ function renderLiveDrift(raw) {
     const saA = driftA.avg_adjacent_sim;
     const saB = driftB.avg_adjacent_sim;
 
-    // crude similarity derived from score distance
     if (!isRealNumber(similarity) && isRealNumber(sA) && isRealNumber(sB)) {
       const diff = Math.min(1, Math.abs(sA - sB));
-      similarity = 1 - diff; // 1 = identical, 0 = maximally far
+      similarity = 1 - diff;
       note = "Derived from drift scores (no explicit similarity field).";
     }
 
-    // average “human-like” score
     if (!isRealNumber(score) && isRealNumber(sA) && isRealNumber(sB)) {
       score = (sA + sB) / 2;
     }
 
-    // more conservative risk (take the worst of the two)
     if (!isRealNumber(risk) && isRealNumber(rA) && isRealNumber(rB)) {
       risk = Math.max(rA, rB);
     }
 
-    // overlap: average adjacent similarity
     if (!isRealNumber(overlap) && isRealNumber(saA) && isRealNumber(saB)) {
       overlap = (saA + saB) / 2;
     }
@@ -926,13 +1775,11 @@ function renderLiveDrift(raw) {
     isRealNumber(risk)       ||
     isRealNumber(overlap);
 
-  // Still nothing meaningful? Show raw JSON as a last-resort debug.
   if (!hasNumeric) {
     content.innerHTML =
       `<div>Drift compare payload not recognized by UI. Raw JSON:</div>` +
       `<pre style="margin-top:6px; max-height:200px; overflow:auto; font-size:11px;">` +
       `${JSON.stringify(raw, null, 2)}</pre>`;
-    box.style.display = "block";
     return;
   }
 
@@ -947,8 +1794,37 @@ function renderLiveDrift(raw) {
   }
 
   content.innerHTML = html;
-  box.style.display = "block";
 }
+
+function initLiveTabs(){
+  const tabs = document.querySelectorAll(".live-tab");
+  if (!tabs.length) return;
+
+  const liveResult = document.getElementById("liveResult");
+  const driftBox   = document.getElementById("liveDriftBox");
+
+  function activate(name){
+    tabs.forEach(t => {
+      const isActive = (t.dataset.tab === name);
+      t.classList.toggle("active", isActive);
+      t.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+
+    if (liveResult) liveResult.style.display = (name === "summary") ? "block" : "none";
+    if (driftBox)   driftBox.style.display   = (name === "drift")    ? "block" : "none";
+  }
+
+  tabs.forEach(t => {
+    t.addEventListener("click", () => {
+      const tabName = t.dataset.tab || "summary";
+      activate(tabName);
+    });
+  });
+
+  // default view
+  activate("summary");
+}
+
 
 
 function renderLlmFingerprint(result) {
@@ -1100,24 +1976,73 @@ function renderLiveCompare(userM, refM){
 
 /* ---------- Scan ---------- */
 async function runScan(){
-  const text = $("#text").value.trim();
-  if (!text) { $("#err").style.display="block"; $("#err").textContent="Please enter some text."; return; }
+  const demoOn = $("#demoToggle").checked;
+
+  // Whatever is in the textarea right now
+  let text = $("#text").value.trim();
+  const hadUserText = text.length > 0;
+
+  // If demo is on AND user hasn’t typed anything,
+  // pull from the selected preset instead of random.
+  if (demoOn && !hadUserText) {
+    const presetSel  = $("#demoPreset");
+    const presetKey  = presetSel ? presetSel.value : "random";
+
+    if (presetKey === "random") {
+      // Old behavior: random curated sample
+      const keys = Object.keys(DEMO_SAMPLES);
+      const pick = keys[Math.floor(Math.random() * keys.length)];
+      text = DEMO_SAMPLES[pick];
+    } else if (DEMO_SAMPLES[presetKey]) {
+      // Use the requested preset
+      text = DEMO_SAMPLES[presetKey];
+    } else {
+      // Safety fallback: still pick something valid
+      const keys = Object.keys(DEMO_SAMPLES);
+      const pick = keys[Math.floor(Math.random() * keys.length)];
+      text = DEMO_SAMPLES[pick];
+    }
+
+    // Reflect the chosen text in the textarea so it’s obvious
+    $("#text").value = text;
+  }
+
+  // If *still* no text, bail with error message
+  if (!text) {
+    $("#err").style.display = "block";
+    $("#err").textContent   = "Please enter some text.";
+    return;
+  }
+
   lastScanText = text;
-  $("#err").style.display="none";
-  $("#btnScan").disabled = true;
-  $("#scanStatus").textContent = "Scanning…";
+  $("#err").style.display = "none";
+  $("#btnScan").disabled  = true;
+
+  // Status text: distinguish demo vs normal
+  $("#scanStatus").textContent =
+    (demoOn && !hadUserText) ? "Scanning demo sample…" : "Scanning…";
 
   try {
-    const body = { text, tag: $("#tag").value.trim() || null, mode: $("#mode").value || null };
-    const r = await api("/scan", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
+    const body = {
+      text,
+      tag:  $("#tag").value.trim() || null,
+      mode: $("#mode").value || null,
+      demo_mode: demoOn || false   // nice to have for backend / logs
+    };
 
-    didScan = true;
+    const r = await api("/scan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    didScan       = true;
     lastScanResult = r;
 
     renderExplain(r.explain, r);
     renderFingerprint(r);
 
-    // v0.3.7 — Drift diagnostics UI
+    // Drift diagnostics
     try {
       const drift = await driftAnalyze(text);
       renderDrift(drift);
@@ -1126,7 +2051,7 @@ async function runScan(){
       renderDrift(null);
     }
 
-    // v0.3.8 — LLM fingerprint UI (uses scan JSON only; no extra round trip)
+    // LLM fingerprint card
     try {
       renderLlmFingerprint(r);
     } catch (e) {
@@ -1135,7 +2060,6 @@ async function runScan(){
     }
 
     const rawBox = document.getElementById("rawDump");
-
     if (rawBox) rawBox.textContent = JSON.stringify(r, null, 2);
     document.getElementById("rawJsonBox")?.removeAttribute("open");
 
@@ -1144,14 +2068,20 @@ async function runScan(){
     setVerdict(r.verdict || "—");
 
     const NS = r.nonsense_signals || {};
-    const top10Pct  = Number.isFinite(NS.top10)  ? Math.round(NS.top10*100)  : (r.bins ? Math.round((r.bins[10]  / Math.max(1,r.total))*100) : null);
-    const top100Pct = Number.isFinite(NS.top100) ? Math.round(NS.top100*100) : (r.bins ? Math.round((r.bins[100] / Math.max(1,r.total))*100) : null);
+    const top10Pct  = Number.isFinite(NS.top10)
+      ? Math.round(NS.top10*100)
+      : (r.bins ? Math.round((r.bins[10]  / Math.max(1,r.total))*100) : null);
+    const top100Pct = Number.isFinite(NS.top100)
+      ? Math.round(NS.top100*100)
+      : (r.bins ? Math.round((r.bins[100] / Math.max(1,r.total))*100) : null);
 
-    $("#top10").textContent  = top10Pct  ?? "—";
-    $("#top100").textContent = top100Pct ?? "—";
-    $("#ppl").textContent    = (NS.ppl ?? r.ppl ?? 0).toFixed(2);
-    $("#burst").textContent  = (NS.burst ?? r.burstiness ?? 0).toFixed(3);
-    $("#category").textContent  = r.category ? `${r.category} (${Math.round((r.category_conf||0)*100)}%)` : "—";
+    $("#top10").textContent   = top10Pct  ?? "—";
+    $("#top100").textContent  = top100Pct ?? "—";
+    $("#ppl").textContent     = (NS.ppl ?? r.ppl ?? 0).toFixed(2);
+    $("#burst").textContent   = (NS.burst ?? r.burstiness ?? 0).toFixed(3);
+    $("#category").textContent = r.category
+      ? `${r.category} (${Math.round((r.category_conf||0)*100)}%)`
+      : "—";
     $("#modelName").textContent = r.model_name || "—";
     $("#modeEcho").textContent  = r.mode || "—";
     $("#pdj").textContent       = (r.pd_overlap_j ?? 0).toFixed(3);
@@ -1161,7 +2091,7 @@ async function runScan(){
     fillTokenTable(r.per_token || []);
 
     const S = r.stylometry || r.style || r.metrics?.stylometry || r.stats?.stylometry || {};
-    const N = r.nonsense_signals || r.nonsense || r.metrics?.nonsense || r.stats?.nonsense || {};
+    const N2 = r.nonsense_signals || r.nonsense || r.metrics?.nonsense || r.stats?.nonsense || {};
 
     setTxt("#sty_func",  pickNum(S.func_ratio, S.function_word_ratio, S.funcWordsRatio), 3);
     setTxt("#sty_hapax", pickNum(S.hapax_ratio, S.hapax, S.hapaxRatio), 3);
@@ -1171,28 +2101,28 @@ async function runScan(){
     setTxt("#sty_mlpsv", pickNum(S.mlps_var, S.delta_logp_var, S.dlogp_var, S.deltaLogpVar), 4);
     setTxt("#sty_pent",  pickNum(S.punct_entropy, S.punctuation_entropy, S.punctEntropy), 3);
 
-    setTxt("#ns_rhyme", pickNum(N.rhyme_density, N.rhyme, N.rhymeDensity), 3);
-    setTxt("#ns_meter", pickNum(N.meter_cv, N.meter, N.meterCV), 3);
-    setTxt("#ns_inv",   pickNum(N.invented_ratio, N.invented, N.inventedRatio), 3);
-    setTxt("#ns_lex",   pickNum(N.lex_hits, N.lexHits), 0);
-    setTxt("#ns_sem",   pickNum(N.semantic_disc, N.semantic_discontinuity, N.semanticDisc), 3);
+    setTxt("#ns_rhyme", pickNum(N2.rhyme_density, N2.rhyme, N2.rhymeDensity), 3);
+    setTxt("#ns_meter", pickNum(N2.meter_cv, N2.meter, N2.meterCV), 3);
+    setTxt("#ns_inv",   pickNum(N2.invented_ratio, N2.invented, N2.inventedRatio), 3);
+    setTxt("#ns_lex",   pickNum(N2.lex_hits, N2.lexHits), 0);
+    setTxt("#ns_sem",   pickNum(N2.semantic_disc, N2.semantic_discontinuity, N2.semanticDisc), 3);
 
     lastScanMetrics = {
-      func_ratio: Number(S.func_ratio ?? S.function_word_ratio ?? 0),
-      hapax_ratio: Number(S.hapax_ratio ?? S.hapax ?? 0),
-      sent_mean:   Number(S.sent_mean ?? S.sentence_mean ?? 0),
-      sent_var:    Number(S.sent_var  ?? S.sentence_var  ?? 0),
+      func_ratio:    Number(S.func_ratio ?? S.function_word_ratio ?? 0),
+      hapax_ratio:   Number(S.hapax_ratio ?? S.hapax ?? 0),
+      sent_mean:     Number(S.sent_mean ?? S.sentence_mean ?? 0),
+      sent_var:      Number(S.sent_var  ?? S.sentence_var  ?? 0),
       punct_entropy: Number(S.punct_entropy ?? S.punctuation_entropy ?? 0),
     };
 
     $("#btnStartLive").disabled = false;
-    $("#liveInput").disabled = false;
+    $("#liveInput").disabled    = false;
     setFinalizeEnabled(true);
     setExportEnabled(false);
     setMsg("exportStatus","");
   } catch (e) {
     $("#err").style.display = "block";
-    $("#err").textContent = "Scan failed: " + e.message;
+    $("#err").textContent   = "Scan failed: " + e.message;
   } finally {
     $("#btnScan").disabled = false;
     $("#scanStatus").textContent = "";
@@ -1202,15 +2132,34 @@ async function runScan(){
 /* Demos */
 async function loadDemos(){
   $("#btnDemo").disabled = true;
-  try{
-    const list = await api("/demo");
-    if(!Array.isArray(list) || list.length === 0){ $("#text").value = "Demo unavailable."; return; }
-    const lines = [];
-    list.forEach((d,i)=>{ lines.push(`// ${d.label} — expect: ${d.expect}`); lines.push(d.text); if(i<list.length-1) lines.push(""); });
-    $("#text").value = lines.join("\n");
-  }catch(e){ $("#text").value = "Failed to load demo samples: "+e.message; }
-  finally{ $("#btnDemo").disabled = false; }
+  try {
+    const preset = currentDemoPreset;
+    let text = "";
+
+    if (preset === "random") {
+      const keys = Object.keys(DEMO_SAMPLES);
+      if (!keys.length) {
+        $("#text").value = "No demo samples configured.";
+        return;
+      }
+      const pick = keys[Math.floor(Math.random() * keys.length)];
+      text = DEMO_SAMPLES[pick];
+    } else {
+      text = DEMO_SAMPLES[preset] || "";
+      if (!text) {
+        $("#text").value = `Demo preset "${preset}" not available.`;
+        return;
+      }
+    }
+
+    $("#text").value = text;
+  } catch (e) {
+    $("#text").value = "Failed to load demo sample: " + e.message;
+  } finally {
+    $("#btnDemo").disabled = false;
+  }
 }
+
 
 /* Live typing */
 let liveStartTs = null, liveTimerId = null, liveComputingTimer = null;
@@ -1385,16 +2334,33 @@ async function loadVersion(){
     const v = await api("/version");
     $("#version").textContent = `v${v.version || "0.3.8"} • ${v.model} • ${v.device} ${v.dtype} • ensemble=${v.ensemble?"on":"off"}`;
     $("#ensemBadge").textContent = v.ensemble ? "Ensemble: on" : "Ensemble: off";
-    const pdn = Number(v.fingerprint_centroids ?? 0);
-    const pd  = $("#pdBadge");
+   const pdn = Number(v.fingerprint_centroids ?? 0);
+   const pd  = $("#pdBadge");
     if (pd) {
       const has = pdn > 0;
+
+      // Text
       pd.textContent = has ? `PD: ${pdn}` : "PD: none";
-      pd.style.background = has ? "#163626" : "#2f2a12";
-      pd.style.borderColor = "var(--border)";
-      pd.setAttribute("aria-label", has ? `${pdn} PD fingerprint centroids loaded` : "No PD fingerprint centroids loaded");
+
+      // Remove any old inline styles so CSS can take over
+      pd.removeAttribute("style");
+
+      // Toggle dark-theme state classes
+      pd.classList.remove("pd-ok", "pd-none");
+      pd.classList.add(has ? "pd-ok" : "pd-none");
+
+      // Accessibility label
+      pd.setAttribute(
+        "aria-label",
+        has
+          ? `${pdn} PD fingerprint centroids loaded`
+          : "No PD fingerprint centroids loaded"
+      );
+
       window.__pdCentroids = pdn;
     }
+
+
   }catch{
     $("#version").textContent = "v0.3.5";
   }
@@ -1460,10 +2426,12 @@ $("#btnClear").addEventListener("click", ()=>{
   const driftContent = document.getElementById("driftContent");
   if (driftBox) driftBox.style.display = "none";
   if (driftContent) driftContent.innerHTML = "";
-  const liveDriftBox = document.getElementById("liveDriftBox");
-  const liveDriftContent = document.getElementById("liveDriftContent");
-  if (liveDriftBox) liveDriftBox.style.display = "none";
+    const liveDriftContent = document.getElementById("liveDriftContent");
   if (liveDriftContent) liveDriftContent.innerHTML = "";
+
+  // reset tabs back to Summary
+  initLiveTabs();
+
 
 });
 
@@ -1477,9 +2445,168 @@ $("#btnDownload").addEventListener("click", downloadExportTxt);
 (async function init(){
   await loadVersion();
   await loadConfig();
+  initDemoPresetSelect();
+  initLiveTabs();
   setFinalizeEnabled(false);
   setExportEnabled(false);
 })();
+
+// Handle Live Verification UI (drift box + cat/butterfly)
+let liveTimer = null;
+
+function setLiveVerificationUI(on) {
+  const funZone  = document.getElementById("liveFunZone");
+  const driftBox = document.getElementById("liveDriftBox");
+
+  if (funZone) {
+    funZone.classList.toggle("active", on);
+  }
+
+  if (driftBox) {
+    driftBox.style.display = on ? "block" : "none";
+  }
+}
+
+// Start live verification + 90s timeout
+function startLiveVerification() {
+  // turn it on
+  setLiveVerificationUI(true);
+
+  // reset any old timer
+  if (liveTimer) {
+    clearTimeout(liveTimer);
+    liveTimer = null;
+  }
+
+  // hard stop after 90s
+  liveTimer = setTimeout(() => {
+    setLiveVerificationUI(false);
+    liveTimer = null;
+  }, 90_000); // 90 seconds
+}
+
+// Stop live verification manually (Close/Finalize)
+function stopLiveVerification() {
+  setLiveVerificationUI(false);
+  if (liveTimer) {
+    clearTimeout(liveTimer);
+    liveTimer = null;
+  }
+}
+
+// Wire up buttons (change IDs if yours differ)
+document.getElementById("btnStartLive")?.addEventListener("click", () => {
+  startLiveVerification();
+});
+
+document.getElementById("btnCloseLive")?.addEventListener("click", () => {
+  stopLiveVerification();
+});
+
+document.getElementById("btnFinalize")?.addEventListener("click", () => {
+  stopLiveVerification();
+});
+
+(function () {
+  const CAT_FRAME_W = 256;      // one frame width  (px)
+  const CAT_FRAME_H = 256;      // one frame height (px)
+  const CAT_COLS    = 4;        // 4 frames per row
+  const CAT_TOTAL   = 16;       // 4x4 grid
+
+  let catFrame = 0;
+  let catTimer = null;
+
+  function setCatFrame(el, frameIndex) {
+    const col = frameIndex % CAT_COLS;
+    const row = Math.floor(frameIndex / CAT_COLS);
+    const x = -col * CAT_FRAME_W;
+    const y = -row * CAT_FRAME_H;
+    el.style.backgroundPosition = `${x}px ${y}px`;
+  }
+
+  function startCatSprite() {
+    const cat = document.querySelector('#liveFunZone .cat');
+    if (!cat) return;
+    if (catTimer) return; // already running
+
+    // Ensure we start at frame 0
+    catFrame = 0;
+    setCatFrame(cat, catFrame);
+
+    catTimer = window.setInterval(() => {
+      catFrame = (catFrame + 1) % CAT_TOTAL;
+      setCatFrame(cat, catFrame);
+    }, 1000 / 12); // 12 fps
+  }
+
+  function stopCatSprite() {
+    if (catTimer) {
+      window.clearInterval(catTimer);
+      catTimer = null;
+    }
+  }
+
+  function setFunZoneActive(on) {
+    const zone = document.getElementById('liveFunZone');
+    if (!zone) return;
+    if (on) {
+      zone.classList.add('active');
+      startCatSprite();
+    } else {
+      zone.classList.remove('active');
+      stopCatSprite();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+
+    const btnStart    = document.getElementById('btnStartLive');
+    const btnFinalize = document.getElementById('btnFinalize');
+    const btnClose    = document.getElementById('btnCloseLive');
+    const root = document.documentElement;
+    const themeSelect = document.getElementById('themeSelect');
+
+    const savedTheme = localStorage.getItem('cc_theme') || 'dark-professional';
+    root.setAttribute('data-theme', savedTheme);
+    if (themeSelect) themeSelect.value = savedTheme;
+
+    if (themeSelect) {
+      themeSelect.addEventListener('change', (e) => {
+        const theme = e.target.value;
+        root.setAttribute('data-theme', theme);
+        localStorage.setItem('cc_theme', theme);
+      });
+    }
+
+    if (btnStart) {
+      btnStart.addEventListener('click', () => {
+        // We assume your existing code still does the real timer;
+        // we only worry about visuals here.
+        setFunZoneActive(true);
+      });
+    }
+
+    function endLive() {
+      setFunZoneActive(false);
+    }
+
+    if (btnFinalize) btnFinalize.addEventListener('click', endLive);
+    if (btnClose)    btnClose.addEventListener('click', endLive);
+
+    // Optional: if you expose a global hook for live status, wire it too
+    if (typeof window.setLiveMascotState === 'function') {
+      // if you ever want to call setLiveMascotState(true/false) from your main JS
+      window.setLiveMascotState = setFunZoneActive;
+
+    // Initial theme from localStorage, if present
+    
+
+    }
+  });
+})();
+
+
+
 </script>
 </body>
 </html>

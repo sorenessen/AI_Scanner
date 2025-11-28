@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, JSONResponse
 from fastapi import UploadFile, File, Query
+from fastapi.staticfiles import StaticFiles
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -157,6 +158,8 @@ app.add_middleware(
     allow_origins=["*"], allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"]
 )
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # -------------------- Model (safe load) --------------------
 tokenizer = None
