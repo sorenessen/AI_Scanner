@@ -1428,6 +1428,58 @@ body{
   stroke: var(--accent, var(--accent));
 }
 
+/* Frame the donut between explanation (left) and metrics (right) */
+#resultSummaryRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) auto minmax(0, 1.3fr);
+  align-items: center;
+  gap: 32px;
+  margin-top: 12px;
+  margin-bottom: 26px;
+}
+
+/* center column: donut stays centered, same size */
+#resultSummaryRow .result-summary-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* make sure donut row centers inside this layout */
+#resultSummaryRow .prob-donut-row {
+  justify-content: center;
+}
+
+/* left text hugs donut */
+#resultSummaryRow .result-summary-left {
+  font-size: 0.95em;
+  line-height: 1.4;
+}
+#resultSummaryRow .result-summary-left .muted {
+  max-width: 34rem;
+  text-align: right;
+}
+
+/* right column uses your existing kv grid but a bit tighter */
+.kv-compact {
+  row-gap: 4px;
+  font-size: 0.9em;
+}
+
+/* responsive: stack on small screens, donut first */
+@media (max-width: 1100px) {
+  #resultSummaryRow {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  #resultSummaryRow .result-summary-left .muted {
+    text-align: left;
+  }
+  #resultSummaryRow .result-summary-center {
+    order: -1; /* donut on top on narrow screens */
+  }
+}
+
 
 
 
@@ -1570,47 +1622,60 @@ body{
           <span id="verdictPill" class="pill">—</span>
         </div>
       
-      <div class="kv" style="margin-top:8px">
-  <div>Calibrated probability (AI likelihood)</div>
-  <div id="probPct" class="right mono">—</div>
+      
+              <!-- REPLACE FROM HERE -->
+      <div id="resultSummaryRow">
+        <!-- LEFT: label + short explanation -->
+        <div class="result-summary-col result-summary-left">
+          <div class="muted">Calibrated probability (AI likelihood)</div>
+          <div id="explainShort" class="muted" style="margin-top:6px">
+            —
+          </div>
+        </div>
 
-  <!-- Donut gauge row (replaces the old horizontal bar) -->
-  <div class="prob-donut-row">
-    <div class="prob-donut" aria-hidden="true">
-      <svg viewBox="0 0 40 40">
-        <defs>
-          <!-- green → yellow → red, no brown -->
-          <linearGradient id="probGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%"   stop-color="#30d158" />
-            <stop offset="50%"  stop-color="#ffd92f" />
-            <stop offset="100%" stop-color="#ff4b4b" />
-          </linearGradient>
-        </defs>
+        <!-- CENTER: donut gauge (unchanged markup inside) -->
+        <div class="result-summary-col result-summary-center">
+          <div class="prob-donut-row">
+            <div class="prob-donut" aria-hidden="true">
+              <svg viewBox="0 0 40 40">
+                <defs>
+                  <!-- use whatever color/gradient you settled on -->
+                  <linearGradient id="probGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%"   stop-color="#f2a94f" />
+                    <stop offset="100%" stop-color="#f2a94f" />
+                  </linearGradient>
+                </defs>
 
-        <!-- background ring -->
-        <circle class="donut-bg"  cx="20" cy="20" r="16"></circle>
-        <!-- value ring -->
-        <circle class="donut-val" cx="20" cy="20" r="16"></circle>
-      </svg>
+                <!-- background ring -->
+                <circle class="donut-bg"  cx="20" cy="20" r="16"></circle>
+                <!-- value ring -->
+                <circle class="donut-val" cx="20" cy="20" r="16"></circle>
+              </svg>
 
-      <!-- center label -->
-      <div class="prob-donut-center" id="probPctCenter">—</div>
-    </div>
-  </div>
+              <!-- center label (same ID you’re updating from JS) -->
+              <div class="prob-donut-center" id="probPctCenter">—</div>
+            </div>
+          </div>
+        </div>
 
-  <div>Explanation</div><div id="explainShort" class="right muted">—</div>
-  <div>Top-10 tokens</div><div id="top10" class="right mono">—</div>
-  <div>Top-100 tokens</div><div id="top100" class="right mono">—</div>
-  <div>Perplexity</div><div id="ppl" class="right mono">—</div>
-  <div>Burstiness</div><div id="burst" class="right mono">—</div>
-  <div>Category</div><div id="category" class="right mono">—</div>
-  <div>Model</div><div id="modelName" class="right mono">—</div>
-  <div>LLM fingerprint</div><div id="fpLabel" class="right mono">—</div>
-  <div>Fingerprint band</div><div id="fpBand" class="right mono">—</div>
-  <div>Mode</div><div id="modeEcho" class="right mono">—</div>
-  <div>PD overlap J</div><div id="pdj" class="right mono">—</div>
-  <div>Tag</div><div id="tagEcho" class="right mono">—</div>
-</div>
+        <!-- RIGHT: numeric metrics in your kv grid -->
+        <div class="result-summary-col result-summary-right">
+          <div class="kv kv-compact">
+            <div>Top-10 tokens</div><div id="top10" class="right mono">—</div>
+            <div>Top-100 tokens</div><div id="top100" class="right mono">—</div>
+            <div>Perplexity</div><div id="ppl" class="right mono">—</div>
+            <div>Burstiness</div><div id="burst" class="right mono">—</div>
+            <div>Category</div><div id="category" class="right mono">—</div>
+            <div>Model</div><div id="modelName" class="right mono">—</div>
+            <div>LLM fingerprint</div><div id="fpLabel" class="right mono">—</div>
+            <div>Fingerprint band</div><div id="fpBand" class="right mono">—</div>
+            <div>Mode</div><div id="modeEcho" class="right mono">—</div>
+            <div>PD overlap J</div><div id="pdj" class="right mono">—</div>
+            <div>Tag</div><div id="tagEcho" class="right mono">—</div>
+          </div>
+        </div>
+      </div>
+      <!-- ...TO HERE, INSTEAD OF THE OLD <div class="kv" ...> BLOCK -->
 
 
         <div class="grid" style="grid-template-columns: 1fr 1fr; gap:18px; margin-top:14px">
