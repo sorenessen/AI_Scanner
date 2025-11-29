@@ -1480,6 +1480,54 @@ body{
   }
 }
 
+/* === LCARS right-panel tabs (under Runtime Settings) ================ */
+
+.lcars-panel {
+  margin-top: 18px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  /* keep it inside the card, full width of the card content */
+}
+
+.lcars-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.lcars-tab {
+  border: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.lcars-tab-active {
+  background: var(--accent);
+  color: #120b05;
+}
+
+.lcars-tab-content {
+  /* just normal flow inside the card */
+}
+
+.tab-section {
+  display: none;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.tab-section-active {
+  display: block;
+}
 
 
 
@@ -1752,10 +1800,17 @@ body{
       </div>
 
       <div id="err" class="footer" style="color:#ff9f9f;display:none"></div>
+
+      <!-- NEW: LCARS side panel sitting at the bottom of the right card -->
+
+
+
+ 
+
     </section>
 
     <!-- Right -->
-    <section class="card" aria-label="Runtime Settings">
+   <section class="card" aria-label="Runtime Settings">
       <div class="row" style="justify-content:space-between">
         <h2 style="margin:0">Runtime Settings</h2>
         <span class="pill" id="activeModeBadge">Mode: —</span>
@@ -1855,6 +1910,73 @@ body{
       </div>
 
       <div class="footer">PD fingerprints: place JSONs in <span class="mono">./pd_fingerprints/</span> on the server.</div>
+      <div id="lcarsPanel" class="lcars-panel">
+  <div class="lcars-tabs">
+    <button
+      type="button"
+      class="lcars-tab lcars-tab-active"
+      data-tab="transparency"
+    >
+      Transparency
+    </button>
+    <button type="button" class="lcars-tab" data-tab="tutor">Writing Tutor</button>
+    <button type="button" class="lcars-tab" data-tab="style">Style Match</button>
+    <button type="button" class="lcars-tab" data-tab="tips">Tips</button>
+    <button type="button" class="lcars-tab" data-tab="history">History</button>
+    <button type="button" class="lcars-tab" data-tab="safety">Safety</button>
+    <button type="button" class="lcars-tab" data-tab="mission">Mission Log</button>
+  </div>
+
+  <div class="lcars-tab-content">
+    <div id="tab-transparency"
+         class="tab-section tab-section-active">
+      <p class="muted">
+        Breakdown of signals will show here.
+        Example: “Burstiness high, function-word ratio human-like,
+        model fingerprint: other 5%+.”
+      </p>
+    </div>
+
+    <div id="tab-tutor" class="tab-section">
+      <p class="muted">
+        Human Writing Tutor suggestions for clarity, flow, and variation.
+      </p>
+    </div>
+
+    <div id="tab-style" class="tab-section">
+      <p class="muted">
+        Style similarity to models / human baselines.
+      </p>
+    </div>
+
+    <div id="tab-tips" class="tab-section">
+      <p class="muted">
+        Tips: how to sound more authentic, less “MTL-95”-bot-like.
+      </p>
+    </div>
+
+    <div id="tab-history" class="tab-section">
+      <p class="muted">
+        Scan history / comparisons between drafts.
+      </p>
+    </div>
+
+    <div id="tab-safety" class="tab-section">
+      <p class="muted">
+        Safety: toxicity / sentiment / bias diagnostics (future hook).
+      </p>
+    </div>
+
+    <div id="tab-mission" class="tab-section">
+      <p class="muted">
+        LCARS Mission Log: stardate, detector status, warp signature,
+        style fingerprint, etc.
+      </p>
+    </div>
+  </div>
+</div>
+
+
     </section>
   </div>
 </div>
@@ -3370,6 +3492,28 @@ function initSmartTooltips() {
   });
 })();
 
+document.addEventListener('DOMContentLoaded', () => {
+  const panel = document.getElementById('lcarsPanel');
+  if (!panel) return;
+
+  const tabs = panel.querySelectorAll('.lcars-tab');
+  const sections = panel.querySelectorAll('.tab-section');
+
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      const targetId = `tab-${target}`;
+
+      // activate this tab
+      tabs.forEach(b => b.classList.toggle('lcars-tab-active', b === btn));
+
+      // show matching section
+      sections.forEach(sec =>
+        sec.classList.toggle('tab-section-active', sec.id === targetId)
+      );
+    });
+  });
+});
 
 
 
