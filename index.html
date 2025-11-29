@@ -1529,6 +1529,65 @@ body{
   display: block;
 }
 
+/* ===== LCARS panel: tab layout + animated transitions ===== */
+
+.lcars-panel {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.9em;
+}
+
+/* Tab strip */
+.lcars-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lcars-tab {
+  border: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #15192b;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.lcars-tab-active {
+  background: var(--accent);
+  color: #120b05;
+}
+
+/* Content area with animated sections */
+.lcars-tab-content {
+  position: relative;
+  margin-top: 10px;
+  min-height: 54px;        /* keeps the panel from collapsing on quick switches */
+}
+
+/* Base state: hidden, slightly shifted down */
+.tab-section {
+  position: absolute;
+  inset: 0 auto auto 0;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease-out,
+    transform 0.18s ease-out;
+}
+
+/* Active section: visible + in place */
+.tab-section-active {
+  position: relative;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
 
 
 </style>
@@ -3064,27 +3123,34 @@ function updateLiveHUD(){
   }
 }
 
-
-
 function startLive(){
   $("#liveResult").textContent = "";
   $("#btnStartLive").disabled = true;
   setFinalizeEnabled(true);
   $("#liveProgress").style.width = "0%";
-  const lenEl = $("#liveLen"); if (lenEl) lenEl.textContent = "0%";
+  const lenEl = $("#liveLen"); if (lenEl) len.textContent = "0%";
   $("#liveRough").textContent = "—";
   liveStartTs = Date.now();
   liveTimerId = setInterval(() => { tickTimer(); updateLiveHUD(); }, 500);
+
+  // NEW: kick on cat + butterflies when live starts (if module loaded)
+  if (window.setFunZoneActive) window.setFunZoneActive(true);
 }
+
 function stopLive(autoFinalize=false){
   clearInterval(liveTimerId); liveTimerId = null; liveStartTs = null;
   $("#btnStartLive").disabled = false;
   setFinalizeEnabled(true);
+
+  // NEW: always turn off fun zone when live stops
+  if (window.setFunZoneActive) window.setFunZoneActive(false);
+
   if (autoFinalize){
     clearTimeout(liveComputingTimer);
     liveComputingTimer = setTimeout(() => finalizeCompute(), 600);
   }
 }
+
 
 /* ----- Export (plain text summary) ----- */
 function buildExportText(scan, userM, refM, simPct){
@@ -3280,67 +3346,11 @@ $("#btnDownload").addEventListener("click", downloadExportTxt);
   initSmartTooltips();
 })();
 
-// Handle Live Verification UI (drift box + cat/butterfly)
-let liveTimer = null;
-
-function setLiveVerificationUI(on) {
-  const funZone  = document.getElementById("liveFunZone");
-  const driftBox = document.getElementById("liveDriftBox");
-
-  if (funZone) {
-    funZone.classList.toggle("active", on);
-  }
-
-  if (driftBox) {
-    driftBox.style.display = on ? "block" : "none";
-  }
-}
-
-// Start live verification + 90s timeout
-function startLiveVerification() {
-  // turn it on
-  setLiveVerificationUI(true);
-
-  // reset any old timer
-  if (liveTimer) {
-    clearTimeout(liveTimer);
-    liveTimer = null;
-  }
-
-  // hard stop after 90s
-  liveTimer = setTimeout(() => {
-    setLiveVerificationUI(false);
-    liveTimer = null;
-  }, 90_000); // 90 seconds
-}
-
-// Stop live verification manually (Close/Finalize)
-function stopLiveVerification() {
-  setLiveVerificationUI(false);
-  if (liveTimer) {
-    clearTimeout(liveTimer);
-    liveTimer = null;
-  }
-}
-
-// Wire up buttons (change IDs if yours differ)
-document.getElementById("btnStartLive")?.addEventListener("click", () => {
-  startLiveVerification();
-});
-
-document.getElementById("btnCloseLive")?.addEventListener("click", () => {
-  stopLiveVerification();
-});
-
-document.getElementById("btnFinalize")?.addEventListener("click", () => {
-  stopLiveVerification();
-});
-
 (function () {
-  const CAT_FRAME_W = 256;      // one frame width  (px)
-  const CAT_FRAME_H = 256;      // one frame height (px)
-  const CAT_COLS    = 4;        // 4 frames per row
-  const CAT_TOTAL   = 16;       // 4x4 grid
+  const CAT_FRAME_W = 256;
+  const CAT_FRAME_H = 256;
+  const CAT_COLS    = 4;
+  const CAT_TOTAL   = 16;
 
   let catFrame = 0;
   let catTimer = null;
@@ -3356,16 +3366,15 @@ document.getElementById("btnFinalize")?.addEventListener("click", () => {
   function startCatSprite() {
     const cat = document.querySelector('#liveFunZone .cat');
     if (!cat) return;
-    if (catTimer) return; // already running
+    if (catTimer) return;
 
-    // Ensure we start at frame 0
     catFrame = 0;
     setCatFrame(cat, catFrame);
 
     catTimer = window.setInterval(() => {
       catFrame = (catFrame + 1) % CAT_TOTAL;
       setCatFrame(cat, catFrame);
-    }, 1000 / 12); // 12 fps
+    }, 1000 / 12);
   }
 
   function stopCatSprite() {
@@ -3378,6 +3387,7 @@ document.getElementById("btnFinalize")?.addEventListener("click", () => {
   function setFunZoneActive(on) {
     const zone = document.getElementById('liveFunZone');
     if (!zone) return;
+
     if (on) {
       zone.classList.add('active');
       startCatSprite();
@@ -3387,53 +3397,11 @@ document.getElementById("btnFinalize")?.addEventListener("click", () => {
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-
-    const btnStart    = document.getElementById('btnStartLive');
-    const btnFinalize = document.getElementById('btnFinalize');
-    const btnClose    = document.getElementById('btnCloseLive');
-    const root = document.documentElement;
-    // TODO: REMOVE THIS CODE AFTER FURTHER TESTING
-    // const themeSelect = document.getElementById('themeSelect');
-
-    // const savedTheme = localStorage.getItem('cc_theme') || 'dark-professional';
-    // root.setAttribute('data-theme', savedTheme);
-    // if (themeSelect) themeSelect.value = savedTheme;
-
-    // if (themeSelect) {
-    //   themeSelect.addEventListener('change', (e) => {
-    //     const theme = e.target.value;
-    //     root.setAttribute('data-theme', theme);
-    //     localStorage.setItem('cc_theme', theme);
-    //   });
-    // }
-
-    if (btnStart) {
-      btnStart.addEventListener('click', () => {
-        // We assume your existing code still does the real timer;
-        // we only worry about visuals here.
-        setFunZoneActive(true);
-      });
-    }
-
-    function endLive() {
-      setFunZoneActive(false);
-    }
-
-    if (btnFinalize) btnFinalize.addEventListener('click', endLive);
-    if (btnClose)    btnClose.addEventListener('click', endLive);
-
-    // Optional: if you expose a global hook for live status, wire it too
-    if (typeof window.setLiveMascotState === 'function') {
-      // if you ever want to call setLiveMascotState(true/false) from your main JS
-      window.setLiveMascotState = setFunZoneActive;
-
-    // Initial theme from localStorage, if present
-    
-
-    }
-  });
+  // Expose to the rest of the app (startLive / stopLive use this)
+  window.setFunZoneActive = setFunZoneActive;
 })();
+
+  
 
 function initSmartTooltips() {
   const dots = document.querySelectorAll(".help-dot");
