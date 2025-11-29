@@ -817,6 +817,132 @@ body{
   background: var(--bar-bg);
 }
 
+/* === Donut probability gauge ==================================== */
+/* Row with main donut(s) under "Calibrated probability" */
+.prob-donut-row{
+  display:flex;
+  align-items:center;
+  gap:20px;
+  margin-top:8px;
+  margin-bottom:4px;    /* keep content pulled up */
+  flex-wrap:wrap;
+}
+
+/* Center the hero donut in the Result card */
+#result .prob-donut-row {
+  justify-content: center;
+  margin: 10px 0 6px;
+}
+
+
+.prob-donut{
+  position:relative;
+  flex:0 0 110px;
+  width:110px;
+  height:110px;
+}
+
+/* rotate so 0% starts at top, grows clockwise */
+.prob-donut svg{
+  width:100%;
+  height:100%;
+  transform:rotate(-90deg);
+}
+
+/* background ring – subtle */
+.prob-donut .donut-bg{
+  fill:none;
+  stroke:rgba(255,255,255,0.12);
+  stroke-width:6;
+}
+
+/* value ring – green → yellow → red gradient (from <defs> in SVG) */
+.prob-donut .donut-val{
+  fill:none;
+  stroke:url(#probGradient);
+  stroke-width:7;
+  stroke-linecap: butt;
+  stroke-dasharray:100 100;    /* JS will override with real circumference */
+  stroke-dashoffset:100;
+  transition:stroke-dashoffset .35s ease;
+}
+
+/* % label in the middle */
+.prob-donut-center{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:1rem;
+  font-weight:700;
+}
+
+
+/* In the main Result card, use donuts only (no horizontal bar) */
+/*#result .bar{
+  display:none;
+}*/
+
+/* In the Result card, keep the bar for layout, but make it invisible */
+#result .bar{
+  height: 0;
+  margin-top: 2px;
+  border: none;
+  background: transparent;
+  overflow: hidden;
+}
+
+
+/* rotate so 0% starts at top, grows clockwise */
+.prob-donut svg{
+  width:100%;
+  height:100%;
+  transform:rotate(-90deg);
+}
+
+/* background ring – uses theme-ish color */
+.prob-donut .donut-bg{
+  fill:none;
+  stroke:rgba(255,255,255,0.12);      /* dark theme */
+  stroke-width:4;
+}
+
+/* value ring – gradient from green → yellow → red */
+.prob-donut .donut-val{
+  fill:none;
+  stroke:url(#probGradient);
+  stroke-width:5;
+  stroke-linecap:round;
+  /* JS will set real dash values; these are safe defaults */
+  stroke-dasharray:100 100;
+  stroke-dashoffset:100;
+  transition:stroke-dashoffset .35s ease;
+}
+
+/* center label */
+.prob-donut-center{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:.9rem;
+  font-weight:600;
+}
+
+/* Light theme tweak so the background ring is softer on cream */
+:root[data-theme="light"],
+:root[data-theme="light-paper"] {
+  --prob-donut-bg: rgba(0,0,0,0.15);
+}
+
+:root[data-theme="light"] .prob-donut .donut-bg,
+:root[data-theme="light-paper"] .prob-donut .donut-bg{
+  stroke: var(--prob-donut-bg, rgba(0,0,0,0.15));
+}
+
+
 /* All generic pills / badges (top-left status, mode badge, etc.) */
 :root[data-theme="light"] .pill,
 :root[data-theme="light-paper"] .pill {
@@ -1255,6 +1381,54 @@ body{
   pointer-events: none;
 }
 
+/* --- RESULT CARD: hide old horizontal bar completely --- */
+#result .bar,
+#result .bar > .fill {
+  display: none !important;
+}
+
+/* === HERO DONUT – bigger, clean, actually circular === */
+#result .prob-donut {
+  flex: 0 0 220px;
+  width: 220px;
+  height: 220px;
+}
+
+#result .prob-donut svg {
+  shape-rendering: geometricPrecision; /* smoother circle edges */
+}
+
+#result .prob-donut-center {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* Same thickness for track + arc, but thin enough to fit in 40x40 viewBox */
+#result .prob-donut .donut-bg,
+#result .prob-donut .donut-val {
+  stroke-width: 8px;
+}
+
+/* Round ends now that we’re not clipping against the box */
+#result .prob-donut .donut-val {
+  stroke-linecap: butt;
+}
+
+/* small-screen safety */
+@media (max-width: 900px) {
+  #result .prob-donut {
+    flex: 0 0 180px;
+    width: 180px;
+    height: 180px;
+  }
+}
+
+/* Result donut: solid LCARS color instead of gradient */
+#result .prob-donut .donut-val {
+  stroke: var(--accent, var(--accent));
+}
+
+
 
 
 </style>
@@ -1395,23 +1569,49 @@ body{
           <h3 style="margin:0">Result</h3>
           <span id="verdictPill" class="pill">—</span>
         </div>
-        <div class="kv" style="margin-top:8px">
-          <div>Calibrated probability (AI likelihood)</div><div id="probPct" class="right mono">—</div>
-          <div style="grid-column:1 / -1"><div class="bar"><div class="fill" id="probFill"></div></div></div>
+      
+      <div class="kv" style="margin-top:8px">
+  <div>Calibrated probability (AI likelihood)</div>
+  <div id="probPct" class="right mono">—</div>
 
-          <div>Explanation</div><div id="explainShort" class="right muted">—</div>
-          <div>Top-10 tokens</div><div id="top10" class="right mono">—</div>
-          <div>Top-100 tokens</div><div id="top100" class="right mono">—</div>
-          <div>Perplexity</div><div id="ppl" class="right mono">—</div>
-          <div>Burstiness</div><div id="burst" class="right mono">—</div>
-          <div>Category</div><div id="category" class="right mono">—</div>
-          <div>Model</div><div id="modelName" class="right mono">—</div>
-          <div>LLM fingerprint</div><div id="fpLabel" class="right mono">—</div>
-          <div>Fingerprint band</div><div id="fpBand" class="right mono">—</div>
-          <div>Mode</div><div id="modeEcho" class="right mono">—</div>
-          <div>PD overlap J</div><div id="pdj" class="right mono">—</div>
-          <div>Tag</div><div id="tagEcho" class="right mono">—</div>
-        </div>
+  <!-- Donut gauge row (replaces the old horizontal bar) -->
+  <div class="prob-donut-row">
+    <div class="prob-donut" aria-hidden="true">
+      <svg viewBox="0 0 40 40">
+        <defs>
+          <!-- green → yellow → red, no brown -->
+          <linearGradient id="probGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%"   stop-color="#30d158" />
+            <stop offset="50%"  stop-color="#ffd92f" />
+            <stop offset="100%" stop-color="#ff4b4b" />
+          </linearGradient>
+        </defs>
+
+        <!-- background ring -->
+        <circle class="donut-bg"  cx="20" cy="20" r="16"></circle>
+        <!-- value ring -->
+        <circle class="donut-val" cx="20" cy="20" r="16"></circle>
+      </svg>
+
+      <!-- center label -->
+      <div class="prob-donut-center" id="probPctCenter">—</div>
+    </div>
+  </div>
+
+  <div>Explanation</div><div id="explainShort" class="right muted">—</div>
+  <div>Top-10 tokens</div><div id="top10" class="right mono">—</div>
+  <div>Top-100 tokens</div><div id="top100" class="right mono">—</div>
+  <div>Perplexity</div><div id="ppl" class="right mono">—</div>
+  <div>Burstiness</div><div id="burst" class="right mono">—</div>
+  <div>Category</div><div id="category" class="right mono">—</div>
+  <div>Model</div><div id="modelName" class="right mono">—</div>
+  <div>LLM fingerprint</div><div id="fpLabel" class="right mono">—</div>
+  <div>Fingerprint band</div><div id="fpBand" class="right mono">—</div>
+  <div>Mode</div><div id="modeEcho" class="right mono">—</div>
+  <div>PD overlap J</div><div id="pdj" class="right mono">—</div>
+  <div>Tag</div><div id="tagEcho" class="right mono">—</div>
+</div>
+
 
         <div class="grid" style="grid-template-columns: 1fr 1fr; gap:18px; margin-top:14px">
           <div class="card" style="padding:12px">
@@ -1903,12 +2103,43 @@ $("#btnCloseLive").addEventListener("click", closeLive);
 
 /* UI writers */
 function setProbFill(p){
-  const pct = Math.round((p||0)*100);
-  $("#probPct").textContent = pct + "%";
-  const f = $("#probFill"); f.style.width = pct + "%";
-  f.classList.remove("good","warn","bad");
-  f.classList.add(p>=0.65?"bad":(p>=0.35?"warn":"good"));
+  const pct   = Math.round((p || 0) * 100);
+  const label = pct + "%";
+
+  // Text in the Result row
+  const pctEl = $("#probPct");
+  if (pctEl) pctEl.textContent = label;
+
+  // Text in the center of the donut
+  const centerEl = $("#probPctCenter");
+  if (centerEl) centerEl.textContent = label;
+
+  // Donut stroke
+  const donut = document.querySelector(".prob-donut .donut-val");
+  if (donut){
+    const clamped = Math.max(0, Math.min(1, p || 0));
+    const radius = 16;                           // matches SVG r
+    const circumference = 2 * Math.PI * radius;  // ~100.53
+
+    donut.style.strokeDasharray  = `${circumference} ${circumference}`;
+    donut.style.strokeDashoffset = `${circumference * (1 - clamped)}`;
+  }
+
+
+
+  // Fallback: if bar still exists anywhere, keep it in sync
+  const f = $("#probFill");
+  if (f){
+    f.style.width = pct + "%";
+    f.classList.remove("good","warn","bad");
+    f.classList.add(
+      p >= 0.65 ? "bad" :
+      p >= 0.35 ? "warn" :
+                  "good"
+    );
+  }
 }
+
 function setVerdict(v){
   const pill = $("#verdictPill");
   pill.textContent = v || "—";
