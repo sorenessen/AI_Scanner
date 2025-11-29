@@ -1589,6 +1589,185 @@ body{
   pointer-events: auto;
 }
 
+/* === LCARS button micro-animations (CSS-only) === */
+:root[data-theme="lcars"] .btn {
+  position: relative;
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.12s ease-out,
+    background-color 0.18s ease-out,
+    opacity 0.12s ease-out;
+}
+
+/* hover = pad “lifts” very slightly */
+:root[data-theme="lcars"] .btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.8),
+    0 8px 16px rgba(0,0,0,0.6);
+}
+
+/* focus ring that matches the LCARS palette */
+:root[data-theme="lcars"] .btn:focus-visible {
+  outline: 2px solid #5bb5ff;
+  outline-offset: 2px;
+}
+
+/* press = pad “sinks” in a bit */
+:root[data-theme="lcars"] .btn:not(:disabled):active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.9),
+    0 3px 8px rgba(0,0,0,0.7);
+}
+
+/* disabled = slightly dimmed, no hover */
+:root[data-theme="lcars"] .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* === LCARS button micro-animations === */
+:root[data-theme="lcars"] .btn {
+  position: relative;
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.12s ease-out,
+    background-color 0.15s ease-out,
+    opacity 0.12s ease-out;
+}
+
+/* HOVER: pad “lifts” + slight glow */
+:root[data-theme="lcars"] .btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.8),
+    0 6px 14px rgba(0,0,0,0.55);
+  filter: brightness(1.05); /* tiny highlight */
+}
+
+/* PRESSED: pad “sinks” */
+:root[data-theme="lcars"] .btn:not(:disabled):active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.9),
+    0 3px 8px rgba(0,0,0,0.7);
+}
+
+/* Focus ring so keyboard nav still feels good */
+:root[data-theme="lcars"] .btn:focus-visible {
+  outline: 2px solid #5bb5ff;
+  outline-offset: 2px;
+}
+
+/* Disabled: no hover/press */
+:root[data-theme="lcars"] .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  filter: none;
+}
+
+/* === LCARS INTERACTION EFFECTS (buttons + tabs) === */
+:root[data-theme="lcars"] .btn,
+:root[data-theme="lcars"] .lcars-tab,
+:root[data-theme="lcars"] .live-tab {
+  position: relative;
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.12s ease-out,
+    background-color 0.15s ease-out,
+    filter 0.15s ease-out;
+}
+
+/* HOVER: lift + brighten */
+:root[data-theme="lcars"] .btn:not(:disabled):hover,
+:root[data-theme="lcars"] .lcars-tab:not(:disabled):hover,
+:root[data-theme="lcars"] .live-tab:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.9),
+    0 8px 18px rgba(0,0,0,0.65);
+  filter: brightness(1.08);
+}
+
+/* ACTIVE: pressed down */
+:root[data-theme="lcars"] .btn:not(:disabled):active,
+:root[data-theme="lcars"] .lcars-tab:not(:disabled):active,
+:root[data-theme="lcars"] .live-tab:not(:disabled):active {
+  transform: translateY(2px) scale(0.97);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.9),
+    0 3px 8px rgba(0,0,0,0.8);
+  filter: brightness(0.96);
+}
+
+/* FOCUS RING */
+:root[data-theme="lcars"] .btn:focus-visible,
+:root[data-theme="lcars"] .lcars-tab:focus-visible,
+:root[data-theme="lcars"] .live-tab:focus-visible {
+  outline: 2px solid #5bb5ff;
+  outline-offset: 2px;
+}
+
+/* DISABLED: dead flat */
+:root[data-theme="lcars"] .btn:disabled,
+:root[data-theme="lcars"] .lcars-tab:disabled,
+:root[data-theme="lcars"] .live-tab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  filter: none;
+}
+
+/* === LCARS SUPER-GLOW INTERACTIONS === */
+:root[data-theme="lcars"] .btn,
+:root[data-theme="lcars"] .lcars-tab,
+:root[data-theme="lcars"] .live-tab {
+  position: relative;
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.15s ease-out,
+    filter 0.15s ease-out,
+    background-color 0.15s ease-out;
+}
+
+/* HOVER: strong LCARS glow + raised plate */
+:root[data-theme="lcars"] .btn:not(:disabled):hover,
+:root[data-theme="lcars"] .lcars-tab:not(:disabled):hover,
+:root[data-theme="lcars"] .live-tab:not(:disabled):hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 6px rgba(255, 204, 112, 0.9),    /* LCARS amber outer glow */
+    0 0 20px rgba(255, 155, 50, 0.75),   /* second glow layer */
+    0 10px 20px rgba(0, 0, 0, 0.65);     /* shadow behind */
+  filter: brightness(1.20) saturate(1.2);
+}
+
+/* ACTIVE: pressed with inner glow */
+:root[data-theme="lcars"] .btn:not(:disabled):active,
+:root[data-theme="lcars"] .lcars-tab:not(:disabled):active,
+:root[data-theme="lcars"] .live-tab:not(:disabled):active {
+  transform: translateY(2px) scale(0.96);
+  box-shadow:
+    0 0 4px rgba(255, 204, 112, 0.8),
+    0 0 10px rgba(255, 155, 50, 0.6),
+    inset 0 0 12px rgba(255, 175, 75, 0.75); /* LCARS inner glow */
+  filter: brightness(0.95);
+}
+
+/* Focused (keyboard nav): distinct blue LCARS ring */
+:root[data-theme="lcars"] .btn:focus-visible,
+:root[data-theme="lcars"] .lcars-tab:focus-visible,
+:root[data-theme="lcars"] .live-tab:focus-visible {
+  outline: 2px solid #5bb5ff;
+  outline-offset: 3px;
+}
+
+
 
 </style>
 </head>
