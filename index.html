@@ -2514,6 +2514,7 @@ $("#btnDownload").addEventListener("click", downloadExportTxt);
   initLiveTabs();
   setFinalizeEnabled(false);
   setExportEnabled(false);
+  initSmartTooltips();
 })();
 
 // Handle Live Verification UI (drift box + cat/butterfly)
@@ -2669,6 +2670,42 @@ document.getElementById("btnFinalize")?.addEventListener("click", () => {
     }
   });
 })();
+
+function initSmartTooltips() {
+  const dots = document.querySelectorAll(".help-dot");
+
+  function adjustPlacement(dot) {
+    if (!dot) return;
+
+    // Reset any previous override
+    dot.classList.remove("tip-l");
+
+    const tip = dot.querySelector(".tip");
+    if (!tip) return;
+
+    const rect = dot.getBoundingClientRect();
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+
+    const tipWidth = tip.offsetWidth || 260;  // fallback
+
+    const rightSpace = vw - rect.right;
+
+    // If not enough room on the right, flip this one to the left
+    if (rightSpace < tipWidth + 16) {
+      dot.classList.add("tip-l");
+    }
+  }
+
+  dots.forEach(dot => {
+    dot.addEventListener("mouseenter", () => adjustPlacement(dot));
+    dot.addEventListener("focus",      () => adjustPlacement(dot));
+  });
+
+  window.addEventListener("resize", () => {
+    dots.forEach(adjustPlacement);
+  });
+}
+
 
 (function initTheme() {
   const sel = document.getElementById("themeSelect");
