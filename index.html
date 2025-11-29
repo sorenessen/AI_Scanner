@@ -40,26 +40,6 @@
   /* same as base – you can omit this if base is your default */
 }
 
-:root[data-theme="light-paper"] {
-  /* Warm, cream paper-like palette */
-  --bg:      #f6f2e9;    /* page background */
-  --panel:   #fffaf0;    /* cards */
-  --panel-2: #f1e5cf;    /* slightly deeper panel */
-  --border:  #d0c2a4;
-
-  --muted:   #756b5c;
-  --text:    #231b14;    /* dark brown instead of pure black */
-  --accent:  #2b63c6;
-
-  --good:    #2f8f5a;
-  --warn:    #b88a2e;
-  --bad:     #c14a4a;
-
-  --tip-bg:     #fffaf0;
-  --tip-border: rgba(43, 99, 198, 0.25);
-  --tip-text:   #231b14;
-}
-
 /* --- LCARS (TNG-style) theme --- */
 :root[data-theme="lcars"] {
   /* Background + panels */
@@ -983,7 +963,7 @@ body{
 
         <div id="demoPresetWrap" class="muted">
           <span style="font-size:0.85em;">Preset:</span>
-          <select id="demoPreset">
+          <select id="demoPresetSecondary">
             <option value="random">(random curated sample)</option>
             <option value="news">News / op-ed</option>
             <option value="story">Story / narrative</option>
@@ -1322,7 +1302,7 @@ body{
       <div id="liveResult" style="margin-top:10px;" aria-live="polite"></div>
 
 <!-- Drift compare lives inside the same card now -->
-<<div id="liveDriftBox" style="margin-top:10px; display:none">
+<div id="liveDriftBox" style="margin-top:10px; display:none">
   <div class="muted">Drift compare (scan vs live sample)</div>
   <div id="liveDriftContent" class="kv" style="margin-top:6px"></div>
 
@@ -2630,19 +2610,20 @@ document.getElementById("btnFinalize")?.addEventListener("click", () => {
     const btnFinalize = document.getElementById('btnFinalize');
     const btnClose    = document.getElementById('btnCloseLive');
     const root = document.documentElement;
-    const themeSelect = document.getElementById('themeSelect');
+    // TODO: REMOVE THIS CODE AFTER FURTHER TESTING
+    // const themeSelect = document.getElementById('themeSelect');
 
-    const savedTheme = localStorage.getItem('cc_theme') || 'dark-professional';
-    root.setAttribute('data-theme', savedTheme);
-    if (themeSelect) themeSelect.value = savedTheme;
+    // const savedTheme = localStorage.getItem('cc_theme') || 'dark-professional';
+    // root.setAttribute('data-theme', savedTheme);
+    // if (themeSelect) themeSelect.value = savedTheme;
 
-    if (themeSelect) {
-      themeSelect.addEventListener('change', (e) => {
-        const theme = e.target.value;
-        root.setAttribute('data-theme', theme);
-        localStorage.setItem('cc_theme', theme);
-      });
-    }
+    // if (themeSelect) {
+    //   themeSelect.addEventListener('change', (e) => {
+    //     const theme = e.target.value;
+    //     root.setAttribute('data-theme', theme);
+    //     localStorage.setItem('cc_theme', theme);
+    //   });
+    // }
 
     if (btnStart) {
       btnStart.addEventListener('click', () => {
