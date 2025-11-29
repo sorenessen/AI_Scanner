@@ -3099,43 +3099,88 @@ function tickTimer(){
   if (s >= 90) { $("#liveRough").textContent = "Computing…"; stopLive(true); }
 }
 
-function updateLiveHUD(){
-  const typed = $("#liveInput").value;
+function updateLiveHUD() {
+  const liveInputEl = $("#liveInput");
+  if (!liveInputEl) return;
+
+  const typed  = liveInputEl.value;
   const tokens = tokenizeWords(typed);
-  const words  = tokens.filter(t=>/^[a-z’']+$/i.test(t));
+  const words  = tokens.filter(t => /^[a-z’']+$/i.test(t));
   const count  = words.length;
 
-  $("#liveTokens").textContent = String(count);
+  const tokensEl = $("#liveTokens");
+  if (tokensEl) {
+    tokensEl.textContent = String(count);
+  }
 
-  const pct = Math.min(100, Math.round((count/120)*100));
-  $("#liveProgress").style.width = pct + "%";
-  const lenEl = $("#liveLen"); if (lenEl) lenEl.textContent = pct + "%";
+  const pct = Math.min(100, Math.round((count / 120) * 100));
 
-  // NEW: drive the big bar under Drift compare
+  // Narrow progress bar (inside the header strip)
+  const bar = $("#liveProgress");
+  if (bar) {
+    bar.style.width = pct + "%";
+  }
+
+  // LEN: xx% label
+  const lenEl = $("#liveLen");
+  if (lenEl) {
+    lenEl.textContent = pct + "%";
+  }
+
+  // Wide progress bar under the compare section, if present
   const wide = document.getElementById("liveProgressWide");
-  if (wide) wide.style.width = pct + "%";
+  if (wide) {
+    wide.style.width = pct + "%";
+  }
 
-  if (lastScanMetrics && count >= 20){
-    const sim = Math.round(100 * Math.max(0, Math.min(1, cosineSimilarity(simpleMetrics(typed), lastScanMetrics))));
-    $("#liveRough").textContent = `~${sim}%`;
+  if (lastScanMetrics && count >= 20) {
+    const sim = Math.round(
+      100 *
+        Math.max(
+          0,
+          Math.min(1, cosineSimilarity(simpleMetrics(typed), lastScanMetrics))
+        )
+    );
+    const roughEl = $("#liveRough");
+    if (roughEl) {
+      roughEl.textContent = `~${sim}%`;
+    }
   } else {
-    $("#liveRough").textContent = "—";
+    const roughEl = $("#liveRough");
+    if (roughEl) {
+      roughEl.textContent = "—";
+    }
   }
 }
 
-function startLive(){
+function startLive() {
   $("#liveResult").textContent = "";
   $("#btnStartLive").disabled = true;
   setFinalizeEnabled(true);
-  $("#liveProgress").style.width = "0%";
-  const lenEl = $("#liveLen"); if (lenEl) len.textContent = "0%";
-  $("#liveRough").textContent = "—";
-  liveStartTs = Date.now();
-  liveTimerId = setInterval(() => { tickTimer(); updateLiveHUD(); }, 500);
 
-  // NEW: kick on cat + butterflies when live starts (if module loaded)
-  if (window.setFunZoneActive) window.setFunZoneActive(true);
+  // Safely reset the progress bar
+  const bar = $("#liveProgress");
+  if (bar) {
+    bar.style.width = "0%";
+  }
+
+  // Safely reset the “LEN: 0%” label
+  const lenEl = $("#liveLen");
+  if (lenEl) {
+    lenEl.textContent = "0%";
+  }
+
+  $("#liveRough").textContent = "—";
+
+  liveStartTs = Date.now();
+
+  // Kick the HUD every 500ms (timer + word count + quick match)
+  liveTimerId = setInterval(() => {
+    tickTimer();
+    updateLiveHUD();
+  }, 500);
 }
+
 
 function stopLive(autoFinalize=false){
   clearInterval(liveTimerId); liveTimerId = null; liveStartTs = null;
@@ -3315,6 +3360,7 @@ $("#btnClear").addEventListener("click", ()=>{
   lastExportText = "";
   setMsg("exportStatus","");
 
+
   // v0.3.7 — reset drift UI
   const driftBox = document.getElementById("driftBox");
   const driftContent = document.getElementById("driftContent");
@@ -3335,6 +3381,13 @@ $("#btnStartLive").addEventListener("click", startLive);
 $("#btnFinalize").addEventListener("click", finalizeCompute);
 $("#btnExport").addEventListener("click", copyExport);
 $("#btnDownload").addEventListener("click", downloadExportTxt);
+
+// Keep HUD updated as you type in Live Verification
+const liveInputEl = document.getElementById("liveInput");
+if (liveInputEl) {
+  liveInputEl.addEventListener("input", updateLiveHUD);
+}
+
 
 (async function init(){
   await loadVersion();
