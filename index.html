@@ -56,6 +56,7 @@
   --accent:   #f2a94f;    /* amber/orange */
   --accent-2: #f27b7b;    /* salmon */
   --accent-3: #5bb5ff;    /* light blue */
+  --accent-4: #a88cf2;    /* LCARS lilac / purple */
   --good: #7bd87a;
   --warn: #ffdd5c;
   --bad:  #ff6d6d;
@@ -894,6 +895,365 @@ body{
   color: #2b2116;
 }
 
+/* =========================================================
+   LCARS POLISH — SAFE VERSION
+   (Only styling; no layout changes)
+   ========================================================= */
+
+/* Top bar → LCARS header strip look */
+:root[data-theme="lcars"] .topbar {
+  padding: 4px 10px 10px;
+  border-radius: 999px;
+  background: #050b18;
+  border: 1px solid #252c42;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.7);
+}
+
+:root[data-theme="lcars"] .topbar strong {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.78em;
+}
+
+:root[data-theme="lcars"] #version {
+  font-size: 0.72em;
+  opacity: 0.85;
+}
+
+/* LCARS color pills in topbar (PD + mode badge) */
+:root[data-theme="lcars"] #pdBadge {
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.75);
+  background: #163626;
+  color: #f1ffe8;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+:root[data-theme="lcars"] #activeModeBadge {
+  border-radius: 999px;
+  border: none;
+  background: #f27b7b;
+  color: #180707;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Theme select + scale slider → console pads */
+:root[data-theme="lcars"] #themeSelect,
+:root[data-theme="lcars"] #uiScale {
+  border-radius: 999px;
+  border: 1px solid #252c42;
+  background: #15192b;
+  color: #fdf7e3;
+}
+
+/* Main cards keep their layout, just get LCARS trims */
+:root[data-theme="lcars"] .card {
+  box-shadow: 0 10px 26px rgba(0,0,0,0.65);
+}
+
+/* Header strips on nested result cards */
+:root[data-theme="lcars"] #result .card::before {
+  height: 7px;
+  width: 42%;
+  background: #5bb5ff;
+}
+
+/* Live drawer → LCARS console styling without size changes */
+:root[data-theme="lcars"] #liveDrawer {
+  background: #050814;
+  border-top: 2px solid #f2a94f;
+  box-shadow: 0 -10px 24px rgba(0,0,0,0.9);
+}
+
+:root[data-theme="lcars"] #liveResizeHandle::before {
+  background: #f2a94f;
+  opacity: 0.85;
+}
+
+:root[data-theme="lcars"] #liveDrawer .card::before {
+  height: 6px;
+  width: 60%;
+  background: linear-gradient(to right, #f2a94f, #5bb5ff);
+}
+
+/* Live metrics row: LCARS label vibe */
+:root[data-theme="lcars"] .live-metrics-header .row > div {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+/* Help dots → console touchpoints */
+:root[data-theme="lcars"] .help-dot {
+  background: #050b18;
+  border-color: #f2a94f;
+  color: #f2a94f;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+/* Tooltip bubble tuned for LCARS */
+:root[data-theme="lcars"] .help-dot > .tip {
+  background: rgba(10,15,32,0.98);
+  color: #fdf7e3;
+  border-color: rgba(242,169,79,0.55);
+}
+
+/* Table headers + footer as LCARS UI text */
+:root[data-theme="lcars"] table th {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.78em;
+}
+
+:root[data-theme="lcars"] .footer {
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  opacity: 0.85;
+}
+
+/* Optional: subtle scrollbar styling (no layout impact) */
+:root[data-theme="lcars"] *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+:root[data-theme="lcars"] *::-webkit-scrollbar-track {
+  background: #050814;
+}
+:root[data-theme="lcars"] *::-webkit-scrollbar-thumb {
+  background: #f2a94f;
+  border-radius: 999px;
+}
+
+/* =========================================================
+   LCARS DECOR v2 – rails, chips, console slabs
+   (Pure decoration – no layout changes)
+   ========================================================= */
+
+:root[data-theme="lcars"] .wrap {
+  position: relative;
+  z-index: 1;
+  /* keep main UI inside the rails */
+  padding-left: 110px;
+  padding-right: 110px;
+}
+
+/* --------- BACKGROUND “SPACE” GRADIENT ---------- */
+:root[data-theme="lcars"] body {
+  background:
+    radial-gradient(circle at 12% 0%,   #202648 0, transparent 40%),
+    radial-gradient(circle at 88% 100%, #323a6a 0, transparent 40%),
+    linear-gradient(to bottom, #02030a 0, #02030a 38%, #060814 100%);
+}
+
+/* --------- LEFT / RIGHT RAILS (SNAKING BARS) ---------- */
+
+:root[data-theme="lcars"] .wrap::before,
+:root[data-theme="lcars"] .wrap::after {
+  content: "";
+  position: fixed;
+  top: 18px;
+  bottom: 24px;
+  width: 90px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* LEFT rail: stacked colors + notch like your ref */
+:root[data-theme="lcars"] .wrap::before {
+  left: 0;
+  border-radius: 0 40px 40px 0;
+  background:
+    /* notch cut-out */
+    linear-gradient(to bottom,
+      transparent 0,
+      transparent 17%,
+      #000 17%,
+      #000 25%,
+      transparent 25%,
+      transparent 100%
+    ),
+    /* LCARS color stack */
+    linear-gradient(to bottom,
+      #f2a94f 0,
+      #f2a94f 30%,
+      #f27b7b 30%,
+      #f27b7b 63%,
+      #a88cf2 63%,
+      #a88cf2 100%
+    );
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 0 22px rgba(0,0,0,0.9);
+}
+
+/* RIGHT rail: mirrored stack */
+:root[data-theme="lcars"] .wrap::after {
+  right: 0;
+  border-radius: 40px 0 0 40px;
+  background:
+    linear-gradient(to bottom,
+      transparent 0,
+      transparent 12%,
+      #000 12%,
+      #000 20%,
+      transparent 20%,
+      transparent 100%
+    ),
+    linear-gradient(to bottom,
+      #a88cf2 0,
+      #a88cf2 28%,
+      #f2a94f 28%,
+      #f2a94f 60%,
+      #f27b7b 60%,
+      #f27b7b 100%
+    );
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 0 22px rgba(0,0,0,0.9);
+}
+
+/* --------- TOP CONSOLE SLAB (behind header) ---------- */
+
+:root[data-theme="lcars"] body::before {
+  content: "";
+  position: fixed;
+  left: 110px;
+  right: 110px;
+  top: 22px;
+  height: 64px;
+  border-radius: 36px 36px 18px 18px;
+  background:
+    linear-gradient(to right,
+      #f2a94f 0,
+      #f2a94f 26%,
+      #f27b7b 26%,
+      #f27b7b 55%,
+      #a88cf2 55%,
+      #a88cf2 100%
+    );
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 14px 30px rgba(0,0,0,0.85);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* --------- BOTTOM STATUS BAND ---------- */
+
+:root[data-theme="lcars"] body::after {
+  content: "";
+  position: fixed;
+  left: 90px;
+  right: 90px;
+  bottom: 12px;
+  height: 24px;
+  border-radius: 18px 18px 8px 8px;
+  background: linear-gradient(to right,
+    #f2a94f 0,
+    #f2a94f 50%,
+    #f27b7b 50%,
+    #f27b7b 75%,
+    #5bb5ff 75%,
+    #5bb5ff 100%
+  );
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 -8px 18px rgba(0,0,0,0.8);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* --------- SIDE “CHIP” STACK (like vertical buttons) ---------- */
+
+:root[data-theme="lcars"] .lcars-chips,
+:root[data-theme="lcars"] .lcars-chips::before,
+:root[data-theme="lcars"] .lcars-chips::after {
+  pointer-events: none;
+}
+
+/* We fake the chip column with a fixed, invisible element */
+:root[data-theme="lcars"] .wrap::marker { /* noop to keep CSS valid in some editors */ }
+
+/* actual chips – attach to .wrap via another pseudo */
+:root[data-theme="lcars"] .wrap > *:first-child::before {
+  content: "";
+  position: fixed;
+  left: 78px;
+  top: 45%;
+  width: 18px;
+  height: 180px;
+  transform: translateY(-50%);
+  background:
+    linear-gradient(to bottom,
+      #f27b7b 0,
+      #f27b7b 18%,
+      transparent 18%,
+      transparent 26%,
+      #a88cf2 26%,
+      #a88cf2 44%,
+      transparent 44%,
+      transparent 52%,
+      #f2a94f 52%,
+      #f2a94f 70%,
+      transparent 70%,
+      transparent 78%,
+      #5bb5ff 78%,
+      #5bb5ff 100%
+    );
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 0 10px rgba(0,0,0,0.8);
+  z-index: 0;
+}
+
+/* --------- TOPBAR STATUS LINE TWEAK ---------- */
+
+:root[data-theme="lcars"] .topbar {
+  position: relative;
+}
+
+:root[data-theme="lcars"] .topbar::after {
+  content: "";
+  position: absolute;
+  left: 96px;
+  right: 96px;
+  bottom: -8px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #f27b7b, #f2a94f, #5bb5ff);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+
+/* Subtle LCARS space-dock backdrop */
+:root[data-theme="lcars"] body {
+  background:
+    radial-gradient(circle at 15% 0%,  #1a2340 0, transparent 45%),
+    radial-gradient(circle at 85% 100%, #2b3256 0, transparent 45%),
+    linear-gradient(to bottom, #02030a 0, #02030a 40%, #050814 100%);
+}
+
+/* Little “status bar” line under the topbar (no layout change) */
+:root[data-theme="lcars"] .topbar::after {
+  content: "";
+  position: absolute;
+  left: 90px;
+  right: 90px;
+  bottom: -6px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #f27b7b, #f2a94f, #5bb5ff);
+  opacity: 0.85;
+  pointer-events: none;
+}
 
 
 
@@ -1812,16 +2172,21 @@ function renderLiveDrift(raw) {
 
   // If the backend doesn’t provide actual compare metrics yet,
   // don’t fabricate numbers – just explain that it’s not wired.
-  if (!haveAny) {
+    if (!haveAny) {
     box.style.display = "block";
     content.innerHTML = `
       <div class="mono">
-        Drift compare is in prototype mode on this build, so numeric
-        similarity / risk scores are not available yet.
+        Drift compare is not fully wired on this build:
+        the backend isn’t sending numeric similarity / risk metrics yet.
+        <br><br>
+        TODO (next release): implement /drift/compare in the backend
+        and return similarity / overlap / risk fields so this panel
+        can show real numbers.
       </div>
     `;
     return;
   }
+
 
   // Normal case: show what the backend really sent
   box.style.display = "block";
