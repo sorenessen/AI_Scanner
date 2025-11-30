@@ -3044,338 +3044,261 @@ function renderLiveCompare(userM, refM){
  * LCARS SIDE PANEL: fill tabs after a scan
  * ============================ */
 function updateLcarsPanel(result, driftPayload) {
-  if (!result) return;
+  const panel = document.getElementById('lcarsPanel');
+  if (!panel || !result) return;
 
-  // Try to find the explain + teacher report
+  const tTransparency = document.getElementById('tab-transparency');
+  const tTutor       = document.getElementById('tab-tutor');
+  const tStyle       = document.getElementById('tab-style');
+  const tTips        = document.getElementById('tab-tips');
+  const tHistory     = document.getElementById('tab-history');
+  const tSafety      = document.getElementById('tab-safety');
+  const tMission     = document.getElementById('tab-mission');
+
+  // ---- Core scan facts ----
+  const verdict = result.verdict || "—";
+  const probRaw = (typeof result.calibrated_prob === "number") ? result.calibrated_prob : 0;
+  const probPct = Math.round(probRaw * 100);
+
+  const category = result.category || "—";
+  const catConf  = (typeof result.category_conf === "number")
+    ? Math.round(result.category_conf * 100) + "%"
+    : "—";
+
+  const mode   = result.mode || result.runtime_mode || "Balanced";
+  const model  = result.model_name || "—";
+  const tag    = (result.tag || "").trim() || "—";
+
+  const pdJ    = (typeof result.pd_overlap_j === "number")
+    ? result.pd_overlap_j.toFixed(3)
+    : "—";
+
+  // ---- Explain / stylometry / teacher report ----
   const explain = result.explain || {};
   const teacher = explain.teacher_report || {};
+  const styl    = result.stylometry
+               || result.style
+               || result.metrics?.stylometry
+               || {};
 
-  // Numeric bits we already compute elsewhere
-  const prob = Number(result.calibrated_prob ?? 0);
-  const probPct = Math.round(prob * 100);
-  const band = explain.band || result.category || "—";
-  const aiPctText =
-    typeof explain.ai_likelihood_pct === "string"
-      ? explain.ai_likelihood_pct
-      : (typeof explain.ai_likelihood_pct === "number"
-          ? `${Math.round(explain.ai_likelihood_pct)}%`
-          : `${probPct}%`);
+  // ---- Drift payload (from /drift/analyze) ----
+  const drift = driftPayload && (driftPayload.semantic_drift || driftPayload);
+  const driftParas = drift?.paragraphs ?? driftPayload?.paragraphs ?? null;
+  const driftRisk  = (typeof drift?.risk === "number") ? drift.risk.toFixed(3) : "—";
+  const driftScore = (typeof drift?.score === "number") ? drift.score.toFixed(3) : "—";
+  const driftAvg   = (typeof drift?.avg_adjacent_sim === "number")
+    ? drift.avg_adjacent_sim.toFixed(3)
+    : "—";
 
-  const NS = result.nonsense_signals || result.metrics?.nonsense || {};
-  const S  = result.stylometry
-          || result.style
-          || result.metrics?.stylometry
-          || {};
+  // ---- Safety payload (if you add it later server-side) ----
+  const safety   = result.safety || result.content_safety || {};
+  const tox      = (typeof safety.toxicity === "number")
+    ? (safety.toxicity * 100).toFixed(1) + "%"
+    : "—";
+  const sentiment = safety.sentiment || safety.overall || "—";
+  const bias      = safety.bias || "—";
 
-  const top10Pct = Number.isFinite(NS.top10)
-    ? Math.round(NS.top10 * 100)
-    : (result.bins
-        ? Math.round((result.bins[10]  / Math.max(1, result.total)) * 100)
-        : null);
-
-  const top100Pct = Number.isFinite(NS.top100)
-    ? Math.round(NS.top100 * 100)
-    : (result.bins
-        ? Math.round((result.bins[100] / Math.max(1, result.total)) * 100)
-        : null);
-
-  const ppl    = NS.ppl   ?? result.ppl        ?? null;
-  const burst  = NS.burst ?? result.burstiness ?? null;
-  const pdj    = result.pd_overlap_j ?? null;
-
-  // helper to make bullet lists safely
-  const asList = (v) => Array.isArray(v) ? v.filter(Boolean) : [];
-  const mkListHTML = (arr) => {
-    const items = asList(arr);
-    if (!items.length) return `<p class="muted">—</p>`;
-    return `<ul>${items.map(s => `<li>${s}</li>`).join("")}</ul>`;
-  };
-
-  /* --- TAB A: Transparency --- */
-  const tEl = document.getElementById("tab-transparency");
-  if (tEl) {
-    tEl.innerHTML = `
-      <div class="kv" style="margin-bottom:10px">
+  // ========== Transparency tab ==========
+  if (tTransparency) {
+    tTransparency.innerHTML = `
+      <div class="kv">
         <div>Verdict</div>
-        <div class="mono right">${result.verdict || "—"}</div>
+        <div class="mono">${verdict} (${probPct}%)</div>
 
-        <div>Calibrated probability</div>
-        <div class="mono right">${aiPctText}</div>
+        <div>Category</div>
+        <div class="mono">
+          ${category}
+          ${catConf !== "—" ? ` (${catConf})` : ""}
+        </div>
 
-        <div>Band / category</div>
-        <div class="mono right">${band}</div>
+        <div>Runtime mode</div>
+        <div class="mono">${mode}</div>
 
-        <div>Top-10 tokens</div>
-        <div class="mono right">${top10Pct ?? "—"}%</div>
-
-        <div>Top-100 tokens</div>
-        <div class="mono right">${top100Pct ?? "—"}%</div>
-
-        <div>Perplexity</div>
-        <div class="mono right">${ppl != null ? ppl.toFixed(2) : "—"}</div>
-
-        <div>Burstiness</div>
-        <div class="mono right">${burst != null ? burst.toFixed(3) : "—"}</div>
+        <div>Model</div>
+        <div class="mono">${model}</div>
 
         <div>PD overlap J</div>
-        <div class="mono right">${pdj != null ? pdj.toFixed(3) : "—"}</div>
+        <div class="mono">${pdJ}</div>
       </div>
 
-      <div class="explain-section">
-        <b>Why we scored it this way</b>
-        ${mkListHTML(explain.why)}
-      </div>
-
-      <div class="explain-section">
-        <b>Key signals</b>
-        <p class="muted">
-          ${explain.headline || "Summary signals for this decision."}
-        </p>
-      </div>
-    `;
-  }
-
-  /* --- TAB B: Human Writing Tutor --- */
-  const tutorEl = document.getElementById("tab-tutor");
-  if (tutorEl) {
-    tutorEl.innerHTML = `
-      <div class="explain-section">
-        <b>Suggestions to strengthen this sample</b>
-        ${mkListHTML(explain.what_to_fix)}
-      </div>
-
-      <div class="explain-section">
-        <b>Teacher-style mini report</b>
-        <p class="muted">
-          ${
-            teacher && (teacher.nearest_style || teacher.drift_score || teacher.pd_overlap_j)
-              ? [
-                  teacher.nearest_style
-                    ? `Closest style: <span class="mono">${teacher.nearest_style}</span>`
-                    : "",
-                  typeof teacher.drift_score === "number"
-                    ? `Drift score: <span class="mono">${teacher.drift_score.toFixed(3)}</span>`
-                    : "",
-                  typeof teacher.pd_overlap_j === "number"
-                    ? `PD overlap J: <span class="mono">${teacher.pd_overlap_j.toFixed(3)}</span>`
-                    : ""
-                ].filter(Boolean).join(" • ")
-              : "Short guidance based on stylometry and overlap signals."
-          }
-        </p>
-      </div>
-
-      <div class="explain-section">
-        <b>Style / clarity notes</b>
-        ${mkListHTML(explain.notes)}
-      </div>
-    `;
-  }
-
-  /* --- TAB C: Style Match --- */
-  const styleEl = document.getElementById("tab-style");
-  if (styleEl) {
-    const fp = result.llm_fingerprint || result.fingerprint || result.fp || null;
-    const family = fp?.nearest || fp?.family || fp?.nearest_family || "—";
-    const conf   = typeof fp?.confidence === "number"
-      ? (fp.confidence * 100).toFixed(1) + "%"
-      : "—";
-
-    const styleMetrics = [
-      ["Function word ratio", S.func_ratio ?? S.function_word_ratio],
-      ["Hapax ratio", S.hapax_ratio ?? S.hapax],
-      ["Sentence mean length", S.sent_mean ?? S.sentence_mean],
-      ["Sentence length var.", S.sent_var ?? S.sentence_var],
-      ["Δ log-prob mean (mlps)", S.mlps ?? S.delta_logp_mean],
-      ["Δ log-prob var", S.mlps_var ?? S.delta_logp_var],
-      ["Punctuation entropy", S.punct_entropy ?? S.punctuation_entropy]
-    ];
-
-    styleEl.innerHTML = `
-      <p class="muted" style="margin-bottom:8px;">
-        How your writing lines up with known human / model styles.
-      </p>
-
-      <div class="kv" style="margin-bottom:10px">
-        <div>Primary model</div>
-        <div class="mono right">${result.model_name || "—"}</div>
-
-        <div>Nearest style family</div>
-        <div class="mono right">${family}</div>
-
-        <div>Fingerprint confidence</div>
-        <div class="mono right">${conf}</div>
-      </div>
-
-      <div class="explain-section">
-        <b>Stylometry snapshot</b>
-        <div class="kv">
-          ${styleMetrics.map(([label, v]) => `
-            <div>${label}</div>
-            <div class="mono right">${(typeof v === "number" && Number.isFinite(v)) ? v.toFixed(3) : "—"}</div>
-          `).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  /* --- TAB D: Human Writing Tips --- */
-  const tipsEl = document.getElementById("tab-tips");
-  if (tipsEl) {
-    const tipsList = asList(explain.what_to_fix).length
-      ? explain.what_to_fix
-      : [
-          "Break up long, uniform sentences with occasional shorter ones.",
-          "Vary your openings; avoid every sentence starting the same way.",
-          "Swap a few generic modifiers for more specific, concrete details.",
-          "Watch for repeated phrases or stock AI-sounding patterns."
-        ];
-
-    tipsEl.innerHTML = `
-      <div class="explain-section">
-        <b>To sound more human and confident</b>
-        ${mkListHTML(tipsList)}
-      </div>
-
-      <p class="muted explain-note">
-        These suggestions are based on stylometry (how the text is written),
-        not the topic or your opinions.
+      <p class="explain-note" style="margin-top:8px;">
+        This panel shows <b>why</b> the detector picked this verdict:
+        calibrated probability, category, mode, and PD overlap with
+        public–domain baselines.
       </p>
     `;
   }
 
-  /* --- TAB E: History (simple in-session scan log) --- */
-  const histEl = document.getElementById("tab-history");
-  if (histEl) {
-    const entry = {
-      ts: new Date().toLocaleString(),
-      verdict: result.verdict || "—",
-      probPct,
-      band,
-      category: result.category || "—",
-      mode: result.mode || "—",
-      tag: result.tag || result.request_tag || "—"
-    };
+  // ========== Human Writing Tutor tab ==========
+  if (tTutor) {
+    const grade = teacher.readability_grade ?? teacher.grade_level ?? null;
+    const tone  = teacher.tone || teacher.style || null;
+    const issues = Array.isArray(explain.what_to_fix)
+      ? explain.what_to_fix.slice(0, 3)
+      : [];
 
-    window.__copycatHistory = window.__copycatHistory || [];
-    window.__copycatHistory.unshift(entry);
-    if (window.__copycatHistory.length > 8) {
-      window.__copycatHistory.pop();
-    }
+    tTutor.innerHTML = `
+      <div class="kv">
+        <div>Reading level</div>
+        <div class="mono">${grade != null ? grade : "—"}</div>
 
-    const rows = window.__copycatHistory.map(h => `
-      <tr>
-        <td class="mono">${h.ts}</td>
-        <td class="mono">${h.verdict}</td>
-        <td class="mono">${h.probPct}%</td>
-        <td class="mono">${h.band}</td>
-        <td class="mono">${h.mode}</td>
-        <td class="mono">${h.tag}</td>
-      </tr>
-    `).join("");
+        <div>Tone / style</div>
+        <div class="mono">${tone || "—"}</div>
 
-    histEl.innerHTML = `
-      <p class="muted" style="margin-bottom:6px;">
-        Recent scans in this browser session.
-      </p>
+        <div>Closest style</div>
+        <div class="mono">${teacher.nearest_style || "—"}</div>
+      </div>
+
       ${
-        rows
-          ? `<table>
-               <thead>
-                 <tr>
-                   <th>When</th>
-                   <th>Verdict</th>
-                   <th>Prob.</th>
-                   <th>Band</th>
-                   <th>Mode</th>
-                   <th>Tag</th>
-                 </tr>
-               </thead>
-               <tbody>${rows}</tbody>
-             </table>`
-          : `<p class="muted">No scans yet.</p>`
+        issues.length
+          ? `
+            <div class="explain-section" style="margin-top:8px;">
+              <b>Things to polish:</b>
+              <ul class="explain-list">
+                ${issues.map(s => `<li>${s}</li>`).join("")}
+              </ul>
+            </div>
+          `
+          : `<p class="muted" style="margin-top:8px;">
+               No specific rewrite tips from this scan — the text is already fairly clean.
+             </p>`
       }
     `;
   }
 
-  /* --- TAB F: Safety (placeholder for now) --- */
-  const safetyEl = document.getElementById("tab-safety");
-  if (safetyEl) {
-    // If you later add toxicity / sentiment fields, wire them here.
-    const toxicity = result.toxicity ?? result.safety?.toxicity ?? null;
-    const sentiment = result.sentiment ?? result.safety?.sentiment ?? null;
+  // ========== Style Match tab (full stylometry, not Live HUD) ==========
+  if (tStyle) {
+    const f  = styl.func_ratio ?? styl.function_word_ratio;
+    const h  = styl.hapax_ratio ?? styl.hapax;
+    const sm = styl.sent_mean;
+    const sv = styl.sent_var;
 
-    if (toxicity == null && sentiment == null && !result.safety) {
-      safetyEl.innerHTML = `
-        <p class="muted">
-          Content safety diagnostics (toxicity, sentiment, bias) are not
-          wired on this build yet.
-        </p>
-        <p class="muted">
-          Future versions can show safety scores here for teachers and
-          reviewers.
-        </p>
-      `;
-    } else {
-      safetyEl.innerHTML = `
-        <div class="kv">
-          <div>Toxicity</div>
-          <div class="mono right">
-            ${toxicity != null ? toxicity.toFixed(3) : "—"}
-          </div>
+    tStyle.innerHTML = `
+      <div class="kv">
+        <div>Function words</div>
+        <div class="mono">${(typeof f === "number") ? f.toFixed(3) : "—"}</div>
 
-          <div>Sentiment</div>
-          <div class="mono right">
-            ${sentiment != null ? sentiment.toFixed(3) : "—"}
-          </div>
+        <div>Lexical variety (hapax)</div>
+        <div class="mono">${(typeof h === "number") ? h.toFixed(3) : "—"}</div>
 
-          <div>Extra safety fields</div>
-          <div class="mono right">
-            ${
-              result.safety
-                ? Object.keys(result.safety).join(", ")
-                : "—"
-            }
-          </div>
-        </div>
-      `;
-    }
+        <div>Sentence length (avg)</div>
+        <div class="mono">${(typeof sm === "number") ? sm.toFixed(2) : "—"}</div>
+
+        <div>Sentence length (var)</div>
+        <div class="mono">${(typeof sv === "number") ? sv.toFixed(2) : "—"}</div>
+      </div>
+
+      <p class="explain-note" style="margin-top:8px;">
+        These are the <b>slow, full</b> style metrics from the main scan.
+        The Live panel uses a <i>quick</i> match; numbers don’t need to be identical.
+      </p>
+    `;
   }
 
-  /* --- TAB G: LCARS Mission Log --- */
-  const missionEl = document.getElementById("tab-mission");
-  if (missionEl) {
-    const versionTxt =
-      document.getElementById("version")?.textContent || "—";
-    const theme = document.documentElement.dataset.theme || "dark-professional";
+  // ========== Tips tab ==========
+  if (tTips) {
+    const tips  = Array.isArray(explain.what_to_fix) ? explain.what_to_fix : [];
+    const notes = Array.isArray(explain.notes) ? explain.notes : [];
 
-    const drift = driftPayload?.semantic_drift || driftPayload || null;
-    const driftSummary = drift && typeof drift.score === "number"
-      ? `Drift score ${drift.score.toFixed(3)}, risk ${drift.risk != null ? drift.risk.toFixed(3) : "—"}`
-      : "Semantic drift: not available.";
+    tTips.innerHTML = `
+      ${
+        tips.length
+          ? `
+            <div class="explain-section">
+              <b>Suggested changes:</b>
+              <ul class="explain-list">
+                ${tips.map(t => `<li>${t}</li>`).join("")}
+              </ul>
+            </div>
+          `
+          : `<p class="muted">
+               No concrete rewrite suggestions from this scan.
+             </p>`
+      }
+      ${
+        notes.length
+          ? `<p class="explain-note" style="margin-top:6px;">${notes.join(" ")}</p>`
+          : ""
+      }
+    `;
+  }
 
-    missionEl.innerHTML = `
-      <p class="mono">
-        Stardate ${new Date().toISOString()}
-      </p>
+  // ========== History tab (single-scan “log” for now) ==========
+  if (tHistory) {
+    const ts = new Date().toLocaleString();
+    tHistory.innerHTML = `
       <p class="muted">
-        Detector status: <span class="mono">${result.verdict || "—"}</span>
-        @ ${probPct}% calibrated probability (${band}).
+        Last scan: <span class="mono">${ts}</span><br>
+        Verdict: <span class="mono">${verdict} (${probPct}%)</span><br>
+        Mode: <span class="mono">${mode}</span> •
+        Model: <span class="mono">${model}</span><br>
+        Tag: <span class="mono">${tag}</span>
       </p>
-      <p class="muted">
-        Runtime profile: <span class="mono">${versionTxt}</span><br/>
-        Active theme: <span class="mono">${theme}</span><br/>
-        Mode: <span class="mono">${result.mode || "—"}</span>
+      <p class="explain-note">
+        Future versions will keep multiple scans here so you can
+        compare drafts over time.
       </p>
-      <p class="muted">
-        ${driftSummary}
+    `;
+  }
+
+  // ========== Safety tab ==========
+  if (tSafety) {
+    tSafety.innerHTML = `
+      <div class="kv">
+        <div>Toxicity</div>
+        <div class="mono">${tox}</div>
+
+        <div>Sentiment</div>
+        <div class="mono">${sentiment}</div>
+
+        <div>Bias flags</div>
+        <div class="mono">${bias}</div>
+
+        <div>Drift risk</div>
+        <div class="mono">${driftRisk}</div>
+
+        <div>Drift score (human-like)</div>
+        <div class="mono">${driftScore}</div>
+
+        <div>Paragraphs analyzed</div>
+        <div class="mono">${driftParas != null ? driftParas : "—"}</div>
+      </div>
+
+      <p class="explain-note" style="margin-top:8px;">
+        Safety diagnostics are advisory. They highlight potential issues
+        but do not replace human review.
       </p>
-      <p class="muted">
-        Log tag: <span class="mono">${result.tag || result.request_tag || "—"}</span>
+    `;
+  }
+
+  // ========== Mission Log tab (LCARS-flavored) ==========
+  if (tMission) {
+    const now = new Date();
+    const stardate =
+      (now.getFullYear() - 2000) * 1000 +
+      (now.getMonth() + 1) * 10 +
+      now.getDate();
+
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+
+    tMission.innerHTML = `
+      <p class="muted mono">
+        Stardate ${stardate}.${hh}${mm}<br>
+        Warp core online: ${model}<br>
+        Detection mode:   ${mode}<br>
+        Primary verdict:  ${verdict} (${probPct}%)<br>
+        PD overlap J:     ${pdJ}<br>
+        Drift risk:       ${driftRisk}
+      </p>
+      <p class="explain-note">
+        LCARS mission log summarizes the last detection pass like a
+        starship system check.
       </p>
     `;
   }
 }
+
 
 
 /* ---------- Scan ---------- */
@@ -3447,9 +3370,10 @@ renderExplain(r.explain, r);
 renderFingerprint(r);
 
 // Drift diagnostics
-let drift = null;
+let driftForPanel = null;
 try {
-  drift = await driftAnalyze(text);
+  const drift = await driftAnalyze(text);
+  driftForPanel = drift;        // <— this is the one we pass to LCARS
   renderDrift(drift);
 } catch (e) {
   console.warn("Drift diagnostics failed:", e);
@@ -3466,7 +3390,7 @@ try {
 
 // NEW: feed data into LCARS side panel tabs
 try {
-  updateLcarsPanel(r, drift);
+  updateLcarsPanel(r, driftForPanel);
 } catch (e) {
   console.warn("LCARS panel update failed:", e);
 }
