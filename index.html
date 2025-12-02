@@ -75,7 +75,7 @@
   border: none;
   box-shadow: none;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 :root[data-theme="lcars"] .card::before {
@@ -1774,6 +1774,190 @@ body{
   }
 }*/
 
+/* =========================================================
+   LCARS side panel – layout, spacing, micro-animations
+   ========================================================= */
+
+.lcars-panel {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.92em;
+}
+
+.lcars-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.lcars-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(7, 10, 22, 0.9);
+  color: var(--muted);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.08s ease,
+    opacity 0.18s ease;
+}
+
+.lcars-tab-icon {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.lcars-tab-label {
+  position: relative;
+  top: 0.5px;
+}
+
+.lcars-tab-active {
+  background: var(--accent);
+  color: #120b05;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 0 18px rgba(242, 169, 79, 0.55);
+}
+
+.lcars-tab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65);
+  opacity: 0.98;
+}
+
+.lcars-tab:focus-visible {
+  outline: 2px solid var(--accent-3, #5bb5ff);
+  outline-offset: 2px;
+}
+
+.lcars-tab-content {
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 10px 12px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65) inset;
+}
+
+/* Sections fade in instead of snapping */
+.tab-section {
+  display: none;
+  animation: lcarsTabFade 0.18s ease-out;
+}
+
+.tab-section-active {
+  display: block;
+}
+
+.lcars-section-title {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.lcars-kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 4px 10px;
+}
+
+.lcars-kv > div:first-child {
+  opacity: 0.85;
+}
+
+.lcars-kv .mono {
+  text-align: right;
+}
+
+.lcars-subtext {
+  margin-top: 6px;
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+.lcars-pill-inline {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.55);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.lcars-pill-inline.good {
+  background: #163626;
+  color: #cafad7;
+}
+
+.lcars-pill-inline.warn {
+  background: #2f2a12;
+  color: #f4e2c0;
+}
+
+.lcars-pill-inline.bad {
+  background: #3a1b1b;
+  color: #ffd4d4;
+}
+
+.lcars-empty {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.lcars-history-list {
+  margin: 4px 0 0;
+  padding-left: 1.1rem;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.lcars-history-list li {
+  margin-bottom: 2px;
+  font-size: 0.85em;
+}
+
+/* Tiny scrollbars inside LCARS panel only */
+.lcars-history-list::-webkit-scrollbar {
+  width: 6px;
+}
+.lcars-history-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--accent-4, #a88cf2);
+}
+
+@keyframes lcarsTabFade {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Verdict pill text: always white for readability */
+#verdictPill {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
 
 </style>
 </head>
@@ -2200,9 +2384,20 @@ body{
     </div>
 
     <div id="tab-history" class="tab-section">
-      <p class="muted">
-        Scan history / comparisons between drafts.
+      <h4 class="lcars-section-title">History</h4>
+
+      <p class="lcars-subtext">
+        History is a running log of recent scans so you can see how your style
+        behaves across drafts. It’s useful for students tracking revision effort,
+        teachers reviewing genuine improvement, and writers monitoring their own
+        voice over time. Each entry captures the verdict, key style signals, and
+        drift behavior at the moment you scanned, turning your revisions into a
+        visible trail instead of a black box.
       </p>
+
+      <ul id="lcarsHistoryList" class="lcars-history-list">
+        <!-- JS will populate this -->
+      </ul>
     </div>
 
     <div id="tab-safety" class="tab-section">
@@ -2408,6 +2603,8 @@ function initDemoPresetSelect() {
 /* -------- v0.3.5 -------- */
 window.__pdCentroids = 0;
 /* ---------- helpers ---------- */
+const LCARS_HISTORY_KEY = "copycat_scan_history_v1";
+
 const $ = s => document.querySelector(s);
 const api = (p,opts={}) => fetch(p,opts).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.json(); });
 const setMsg = (id,txt)=>{ const el=$( '#'+id ); if(el) el.textContent = txt; };
@@ -3043,76 +3240,58 @@ function renderLiveCompare(userM, refM){
 /* ============================
  * LCARS SIDE PANEL: fill tabs after a scan
  * ============================ */
-function updateLcarsPanel(result, driftPayload) {
-  const panel = document.getElementById('lcarsPanel');
-  if (!panel || !result) return;
 
-  const tTransparency = document.getElementById('tab-transparency');
-  const tTutor       = document.getElementById('tab-tutor');
-  const tStyle       = document.getElementById('tab-style');
-  const tTips        = document.getElementById('tab-tips');
-  const tHistory     = document.getElementById('tab-history');
-  const tSafety      = document.getElementById('tab-safety');
-  const tMission     = document.getElementById('tab-mission');
+function updateLcarsPanel(result, driftRaw) {
+  if (!result) return;
 
-  // ---- Core scan facts ----
+  const prob = Number(result.calibrated_prob ?? result.prob ?? 0);
+  const probPct = Math.round(prob * 100);
   const verdict = result.verdict || "—";
-  const probRaw = (typeof result.calibrated_prob === "number") ? result.calibrated_prob : 0;
-  const probPct = Math.round(probRaw * 100);
-
+  const mode    = result.mode || "Balanced";
   const category = result.category || "—";
-  const catConf  = (typeof result.category_conf === "number")
-    ? Math.round(result.category_conf * 100) + "%"
-    : "—";
-
-  const mode   = result.mode || result.runtime_mode || "Balanced";
-  const model  = result.model_name || "—";
-  const tag    = (result.tag || "").trim() || "—";
-
-  const pdJ    = (typeof result.pd_overlap_j === "number")
+  const model   = result.model_name || "—";
+  const tag     = (result.tag || result.input_tag || "").trim() || "—";
+  const pdJ     = (typeof result.pd_overlap_j === "number")
     ? result.pd_overlap_j.toFixed(3)
     : "—";
 
-  // ---- Explain / stylometry / teacher report ----
-  const explain = result.explain || {};
-  const teacher = explain.teacher_report || {};
-  const styl    = result.stylometry
-               || result.style
-               || result.metrics?.stylometry
-               || {};
-
-  // ---- Drift payload (from /drift/analyze) ----
-  const drift = driftPayload && (driftPayload.semantic_drift || driftPayload);
-  const driftParas = drift?.paragraphs ?? driftPayload?.paragraphs ?? null;
-  const driftRisk  = (typeof drift?.risk === "number") ? drift.risk.toFixed(3) : "—";
-  const driftScore = (typeof drift?.score === "number") ? drift.score.toFixed(3) : "—";
-  const driftAvg   = (typeof drift?.avg_adjacent_sim === "number")
-    ? drift.avg_adjacent_sim.toFixed(3)
+  // Normalize drift payload shape
+  const drift = driftRaw && (driftRaw.semantic_drift || driftRaw);
+  const driftParas = drift ? (drift.paragraphs ?? "—") : "—";
+  const driftRisk  = drift && typeof drift.risk === "number"
+    ? drift.risk.toFixed(3)
+    : "—";
+  const driftScore = drift && typeof drift.score === "number"
+    ? drift.score.toFixed(3)
     : "—";
 
-  // ---- Safety payload (if you add it later server-side) ----
-  const safety   = result.safety || result.content_safety || {};
-  const tox      = (typeof safety.toxicity === "number")
-    ? (safety.toxicity * 100).toFixed(1) + "%"
-    : "—";
-  const sentiment = safety.sentiment || safety.overall || "—";
-  const bias      = safety.bias || "—";
-
-  // ========== Transparency tab ==========
-  if (tTransparency) {
-    tTransparency.innerHTML = `
-      <div class="kv">
+  /* ----------------- Transparency tab ------------------- */
+  const tabTransparency = document.getElementById("tab-transparency");
+  if (tabTransparency) {
+    tabTransparency.innerHTML = `
+      <h3 class="lcars-section-title">Overall verdict</h3>
+      <div class="lcars-kv">
         <div>Verdict</div>
-        <div class="mono">${verdict} (${probPct}%)</div>
-
-        <div>Category</div>
         <div class="mono">
-          ${category}
-          ${catConf !== "—" ? ` (${catConf})` : ""}
+          <span class="lcars-pill-inline ${
+            verdict.toLowerCase().includes("human") ? "good" :
+            verdict.toLowerCase().includes("inconclusive") ? "warn" : "bad"
+          }">
+            ${verdict}
+          </span>
         </div>
 
-        <div>Runtime mode</div>
+        <div>Calibrated probability</div>
+        <div class="mono">${probPct}%</div>
+
+        <div>Category</div>
+        <div class="mono">${category}</div>
+
+        <div>Mode</div>
         <div class="mono">${mode}</div>
+
+        <div>Tag</div>
+        <div class="mono">${tag}</div>
 
         <div>Model</div>
         <div class="mono">${model}</div>
@@ -3120,181 +3299,231 @@ function updateLcarsPanel(result, driftPayload) {
         <div>PD overlap J</div>
         <div class="mono">${pdJ}</div>
       </div>
-
-      <p class="explain-note" style="margin-top:8px;">
-        This panel shows <b>why</b> the detector picked this verdict:
-        calibrated probability, category, mode, and PD overlap with
-        public–domain baselines.
+      <p class="lcars-subtext">
+        CopyCat exposes the same signals our engine uses internally &mdash; the subtle
+        fingerprints that shape a text&rsquo;s behavior more than its meaning. We surface
+        pacing rhythm, token variety, repetition curves, and model-style drift so you
+        can see what a quick skim or gradebook can&rsquo;t. None of these signals alone
+        decide anything; they only form a behavioral profile. Think of this tab as
+        the forensic readout: the raw style telemetry that informs the overall
+        assessment &mdash; openly, honestly, and without any hidden scoring.
       </p>
     `;
   }
 
-  // ========== Human Writing Tutor tab ==========
-  if (tTutor) {
-    const grade = teacher.readability_grade ?? teacher.grade_level ?? null;
-    const tone  = teacher.tone || teacher.style || null;
-    const issues = Array.isArray(explain.what_to_fix)
-      ? explain.what_to_fix.slice(0, 3)
-      : [];
+  /* ----------------- Writing Tutor tab ------------------- */
+  const tabTutor = document.getElementById("tab-tutor");
+  if (tabTutor) {
+    const explain = result.explain || {};
+    const whyList  = Array.isArray(explain.why) ? explain.why.filter(Boolean) : [];
+    const fixList  = Array.isArray(explain.what_to_fix) ? explain.what_to_fix.filter(Boolean) : [];
+    const notes    = Array.isArray(explain.notes) ? explain.notes.join(" ") : (explain.notes || "");
 
-    tTutor.innerHTML = `
-      <div class="kv">
-        <div>Reading level</div>
-        <div class="mono">${grade != null ? grade : "—"}</div>
+    const whyHtml = whyList.length
+      ? `<b>Why we think this:</b><ul class="explain-list">${whyList.map(s => `<li>${s}</li>`).join("")}</ul>`
+      : `<span class="lcars-empty">No detailed rationale available for this scan.</span>`;
 
-        <div>Tone / style</div>
-        <div class="mono">${tone || "—"}</div>
+    const fixHtml = fixList.length
+      ? `<b>How to strengthen human signal:</b><ul class="explain-list">${fixList.map(s => `<li>${s}</li>`).join("")}</ul>`
+      : `<span class="lcars-empty">No specific suggestions returned for this scan.</span>`;
 
-        <div>Closest style</div>
-        <div class="mono">${teacher.nearest_style || "—"}</div>
+    const notesHtml = notes
+      ? `<b>Notes:</b> ${notes}`
+      : `<span class="lcars-empty">No additional notes.</span>`;
+
+    tabTutor.innerHTML = `
+      <h3 class="lcars-section-title">Human writing tutor</h3>
+      <div class="explain-section">${whyHtml}</div>
+      <div class="explain-section">${fixHtml}</div>
+      <div class="explain-section explain-note">${notesHtml}</div>
+      <p class="lcars-subtext">
+        This panel offers gentle, real-world polish rooted in <em>your</em> sample&rsquo;s
+        style. These suggestions never try to &ldquo;beat detectors&rdquo; or disguise your work;
+        they strengthen clarity, pacing, sentence variation, and your personal voice.
+        CopyCat treats you like an author, not a suspect &mdash; we highlight ways to
+        reinforce your authentic style, reduce accidental monotony, and sharpen
+        narrative flow, especially when you&rsquo;re writing fast under a deadline.
+      </p>
+        <ul class="lcars-history-list">
+  <li>Stabilize your tone from intro to conclusion.</li>
+  <li>Blend short and long sentences so the rhythm feels lived-in.</li>
+  <li>Use concrete nouns and verbs that sound like you, not a template.</li>
+</ul>
+
+    `;
+  }
+
+  /* ----------------- Style Match tab --------------------- */
+  const tabStyle = document.getElementById("tab-style");
+  if (tabStyle) {
+    const S = result.stylometry
+      || result.style
+      || result.metrics?.stylometry
+      || result.stats?.stylometry
+      || {};
+
+    const safe = (v, d = 3) =>
+      (typeof v === "number" && Number.isFinite(v)) ? v.toFixed(d) : "—";
+
+    const funcRatio  = safe(S.func_ratio ?? S.function_word_ratio);
+    const hapaxRatio = safe(S.hapax_ratio ?? S.hapax);
+    const sentMean   = safe(S.sent_mean ?? S.sentence_mean, 2);
+    const sentVar    = safe(S.sent_var ?? S.sentence_var, 2);
+    const pent       = safe(S.punct_entropy ?? S.punctuation_entropy);
+
+    tabStyle.innerHTML = `
+      <h3 class="lcars-section-title">Style match (scan)</h3>
+      <div class="lcars-kv">
+        <div>Function-word ratio</div><div class="mono">${funcRatio}</div>
+        <div>Hapax ratio</div><div class="mono">${hapaxRatio}</div>
+        <div>Sentence mean length</div><div class="mono">${sentMean}</div>
+        <div>Sentence variance</div><div class="mono">${sentVar}</div>
+        <div>Punctuation entropy</div><div class="mono">${pent}</div>
       </div>
+      <p class="lcars-subtext">
+        Style Match shows how your stylistic fingerprint compares with common
+        human-writing baselines and with known model families. A high match score
+        doesn&rsquo;t automatically mean &ldquo;AI-written,&rdquo; and a low score doesn&rsquo;t grant
+        a free pass. It simply reflects shared characteristics: rhythm, token
+        preferences, repetition patterns, and structural habits. Use this tab to
+        understand which parts of your style stand out as uniquely yours, and which
+        resemble well-known stylistic families on both the human and model side.
+      </p>
 
-      ${
-        issues.length
-          ? `
-            <div class="explain-section" style="margin-top:8px;">
-              <b>Things to polish:</b>
-              <ul class="explain-list">
-                ${issues.map(s => `<li>${s}</li>`).join("")}
-              </ul>
-            </div>
-          `
-          : `<p class="muted" style="margin-top:8px;">
-               No specific rewrite tips from this scan — the text is already fairly clean.
-             </p>`
-      }
     `;
   }
 
-  // ========== Style Match tab (full stylometry, not Live HUD) ==========
-  if (tStyle) {
-    const f  = styl.func_ratio ?? styl.function_word_ratio;
-    const h  = styl.hapax_ratio ?? styl.hapax;
-    const sm = styl.sent_mean;
-    const sv = styl.sent_var;
+  /* ----------------- Tips tab ---------------------------- */
+  const tabTips = document.getElementById("tab-tips");
+  if (tabTips) {
+    const explain = result.explain || {};
+    const fixList  = Array.isArray(explain.what_to_fix) ? explain.what_to_fix.filter(Boolean) : [];
 
-    tStyle.innerHTML = `
-      <div class="kv">
-        <div>Function words</div>
-        <div class="mono">${(typeof f === "number") ? f.toFixed(3) : "—"}</div>
+    const bullets = fixList.length
+      ? fixList
+      : [
+          "Add a few personal details or concrete examples to strengthen human signal.",
+          "Vary sentence length and rhythm to avoid overly uniform structure.",
+          "Rephrase any obviously template-like phrases into your natural voice."
+        ];
 
-        <div>Lexical variety (hapax)</div>
-        <div class="mono">${(typeof h === "number") ? h.toFixed(3) : "—"}</div>
+    tabTips.innerHTML = `
+      <h3 class="lcars-section-title">Tips to sound more like you</h3>
+      <ul class="explain-list">
+        ${bullets.map(s => `<li>${s}</li>`).join("")}
+      </ul>
+      <p class="lcars-subtext">
+        Tips are small, low-friction adjustments that keep your writing anchored to
+        a strong personal signature, especially in longer assignments or multi-part
+        projects. CopyCat focuses on writer empowerment, not trickery: we nudge you
+        toward clearer pacing, varied sentence openings, and a steady narrative tone
+        so your work reads more like <em>you</em>, not like a generic template or a
+        flattened model voice. Treat this tab as practical coaching, not a
+        checklist to &ldquo;pass&rdquo; a detector.
+      </p>
 
-        <div>Sentence length (avg)</div>
-        <div class="mono">${(typeof sm === "number") ? sm.toFixed(2) : "—"}</div>
+    `;
+  }
 
-        <div>Sentence length (var)</div>
-        <div class="mono">${(typeof sv === "number") ? sv.toFixed(2) : "—"}</div>
+  /* ----------------- Safety tab -------------------------- */
+  const tabSafety = document.getElementById("tab-safety");
+  if (tabSafety) {
+    tabSafety.innerHTML = `
+      <h3 class="lcars-section-title">Safety diagnostics (advisory)</h3>
+      <div class="lcars-kv">
+        <div>Toxicity</div><div class="mono">— (not yet implemented)</div>
+        <div>Sentiment</div><div class="mono">— (not yet implemented)</div>
+        <div>Bias flags</div><div class="mono">— (not yet implemented)</div>
+        <div>Drift risk</div><div class="mono">${driftRisk}</div>
+        <div>Drift score (human-like)</div><div class="mono">${driftScore}</div>
+        <div>Paragraphs analyzed</div><div class="mono">${driftParas}</div>
       </div>
-
-      <p class="explain-note" style="margin-top:8px;">
-        These are the <b>slow, full</b> style metrics from the main scan.
-        The Live panel uses a <i>quick</i> match; numbers don’t need to be identical.
+      <p class="lcars-subtext muted">
+        Safety diagnostics highlight potential issues but do not replace
+        human review or institutional policy.
       </p>
+      <ul class="lcars-history-list">
+        <li>Keep your thesis and closing paragraph in the same emotional register.</li>
+        <li>Vary how you start sentences to avoid mechanical repetition.</li>
+        <li>Reserve complex wording for ideas that actually need it.</li>
+      </ul>
+
     `;
   }
 
-  // ========== Tips tab ==========
-  if (tTips) {
-    const tips  = Array.isArray(explain.what_to_fix) ? explain.what_to_fix : [];
-    const notes = Array.isArray(explain.notes) ? explain.notes : [];
+  /* ----------------- Mission Log + History --------------- */
+  const now = new Date();
+  const tsShort = now.toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "2-digit",
+    hour: "2-digit", minute: "2-digit"
+  });
 
-    tTips.innerHTML = `
-      ${
-        tips.length
-          ? `
-            <div class="explain-section">
-              <b>Suggested changes:</b>
-              <ul class="explain-list">
-                ${tips.map(t => `<li>${t}</li>`).join("")}
-              </ul>
-            </div>
-          `
-          : `<p class="muted">
-               No concrete rewrite suggestions from this scan.
-             </p>`
-      }
-      ${
-        notes.length
-          ? `<p class="explain-note" style="margin-top:6px;">${notes.join(" ")}</p>`
-          : ""
-      }
-    `;
+  // Persist history in localStorage
+  let history = [];
+  try {
+    history = JSON.parse(localStorage.getItem(LCARS_HISTORY_KEY) || "[]");
+    if (!Array.isArray(history)) history = [];
+  } catch {
+    history = [];
   }
 
-  // ========== History tab (single-scan “log” for now) ==========
-  if (tHistory) {
-    const ts = new Date().toLocaleString();
-    tHistory.innerHTML = `
-      <p class="muted">
-        Last scan: <span class="mono">${ts}</span><br>
-        Verdict: <span class="mono">${verdict} (${probPct}%)</span><br>
-        Mode: <span class="mono">${mode}</span> •
-        Model: <span class="mono">${model}</span><br>
-        Tag: <span class="mono">${tag}</span>
-      </p>
-      <p class="explain-note">
-        Future versions will keep multiple scans here so you can
-        compare drafts over time.
-      </p>
-    `;
+  history.unshift({
+    ts: tsShort,
+    verdict,
+    probPct,
+    mode,
+    tag
+  });
+
+  history = history.slice(0, 20);
+  try {
+    localStorage.setItem(LCARS_HISTORY_KEY, JSON.stringify(history));
+  } catch (e) {
+    console.warn("Failed to store LCARS history:", e);
   }
 
-  // ========== Safety tab ==========
-  if (tSafety) {
-    tSafety.innerHTML = `
-      <div class="kv">
-        <div>Toxicity</div>
-        <div class="mono">${tox}</div>
-
-        <div>Sentiment</div>
-        <div class="mono">${sentiment}</div>
-
-        <div>Bias flags</div>
-        <div class="mono">${bias}</div>
-
-        <div>Drift risk</div>
-        <div class="mono">${driftRisk}</div>
-
-        <div>Drift score (human-like)</div>
-        <div class="mono">${driftScore}</div>
-
-        <div>Paragraphs analyzed</div>
-        <div class="mono">${driftParas != null ? driftParas : "—"}</div>
-      </div>
-
-      <p class="explain-note" style="margin-top:8px;">
-        Safety diagnostics are advisory. They highlight potential issues
-        but do not replace human review.
-      </p>
-    `;
+  const tabHistory = document.getElementById("tab-history");
+  if (tabHistory) {
+    if (!history.length) {
+      tabHistory.innerHTML = `
+        <h3 class="lcars-section-title">Recent scans</h3>
+        <p class="lcars-empty muted">No previous scans recorded.</p>
+      `;
+    } else {
+      tabHistory.innerHTML = `
+        <h3 class="lcars-section-title">Recent scans</h3>
+        <ul class="lcars-history-list">
+          ${history.map(h => `
+            <li>
+              <span class="mono">${h.ts}</span> —
+              <strong>${h.verdict}</strong>
+              (<span class="mono">${h.probPct}%</span>)
+              • Mode: <span class="mono">${h.mode}</span>
+              • Tag: <span class="mono">${h.tag}</span>
+            </li>
+          `).join("")}
+        </ul>
+      `;
+    }
   }
 
-  // ========== Mission Log tab (LCARS-flavored) ==========
-  if (tMission) {
-    const now = new Date();
-    const stardate =
-      (now.getFullYear() - 2000) * 1000 +
-      (now.getMonth() + 1) * 10 +
-      now.getDate();
-
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
-
-    tMission.innerHTML = `
-      <p class="muted mono">
-        Stardate ${stardate}.${hh}${mm}<br>
-        Warp core online: ${model}<br>
-        Detection mode:   ${mode}<br>
-        Primary verdict:  ${verdict} (${probPct}%)<br>
-        PD overlap J:     ${pdJ}<br>
-        Drift risk:       ${driftRisk}
+  const tabMission = document.getElementById("tab-mission");
+  if (tabMission) {
+    tabMission.innerHTML = `
+      <h3 class="lcars-section-title">Mission log entry</h3>
+      <div class="lcars-kv">
+        <div>Stardate</div><div class="mono">${tsShort}</div>
+        <div>Verdict</div><div class="mono">${verdict}</div>
+        <div>Calibrated prob.</div><div class="mono">${probPct}%</div>
+        <div>Runtime mode</div><div class="mono">${mode}</div>
+      <p class="lcars-subtext">
+        Mission Log is your stardate-style record of this scan. It captures detector
+        status, runtime mode, stylistic fingerprint IDs, and any notable anomalies
+        in one compact entry. In LCARS terms, this is your console report: a trace
+        of how CopyCat saw the text at scan time, so you can correlate verdicts,
+        tuning changes, and revisions without guesswork or hidden state.
       </p>
-      <p class="explain-note">
-        LCARS mission log summarizes the last detection pass like a
-        starship system check.
-      </p>
+
     `;
   }
 }
