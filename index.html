@@ -2107,6 +2107,56 @@ body{
   box-shadow: 0 2px 6px rgba(242, 169, 79, 0.2);
 }
 
+/* Slide-out "What this means" panel */
+.explain-panel {
+  position: fixed;
+  inset-block: 0;
+  right: 0;
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg, #050816);
+  box-shadow: -0.5rem 0 1.5rem rgba(0, 0, 0, 0.7);
+  transform: translateX(100%);
+  opacity: 0;
+  transition: transform 220ms ease-out, opacity 220ms ease-out;
+  z-index: 500;
+  display: flex;
+}
+
+.explain-panel.open {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.explain-panel-inner {
+  padding: 16px;
+  width: 100%;
+  overflow-y: auto;
+}
+
+/* Dimmed click-to-close background */
+.explain-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+  z-index: 490;
+}
+
+.explain-backdrop.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Keep explain sections readable inside the panel */
+#explainBody .explain-section {
+  margin-bottom: 10px;
+}
+
+
 
 </style>
 </head>
@@ -2172,8 +2222,8 @@ body{
           Demo mode (use preset curated samples)
         </label>
 
-        <div id="demoPresetWrap" class="muted">
-          <span style="font-size:0.85em;">Preset:</span>
+      <div id="demoPresetWrap" class="muted">
+         <span style="font-size:0.85em;">Preset:</span>
           <select id="demoPresetSecondary">
             <option value="random">(random curated sample)</option>
             <option value="news">News / op-ed</option>
@@ -2225,27 +2275,51 @@ body{
         <span id="bandPct" style="opacity:.75;"></span>
       </div>
 
-      <div id="explainWrap" style="display:none;" aria-live="polite">
-        <div id="explainHeader">
-          <div id="explainTitle">What this means</div>
-          <button id="explainToggleBtn" aria-expanded="true" aria-controls="explainBody">Hide</button>
-        </div>
-        <div id="explainBody">
-          <div id="explainHeadline" class="explain-section"></div>
-          <div id="explainWhy" class="explain-section"></div>
-          <div id="explainFix" class="explain-section"></div>
-          <div id="explainNotes" class="explain-section explain-note"></div>
-          <div id="teacherRow" class="explain-section" style="opacity:.9;">
-            <small id="teacherMini"></small>
+     <!-- Slide-out panel for "What this means" -->
+      <div id="explainBackdrop" class="explain-backdrop" hidden></div>
+
+      <div id="explainPanel" class="explain-panel" aria-hidden="true">
+        <div class="explain-panel-inner">
+          <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <h3 style="margin:0;">What this means</h3>
+            <button id="btnExplainClose" class="btn ghost" type="button">Close</button>
+          </div>
+
+          <!-- original explain content lives inside the panel -->
+          <div id="explainWrap" aria-live="polite">
+            <div id="explainHeader" style="display:none;">
+              <!-- header text now handled by panel title -->
+              <div id="explainTitle"></div>
+              <button id="explainToggleBtn" aria-expanded="true" aria-controls="explainBody" style="display:none;">
+                Hide
+              </button>
+            </div>
+
+            <div id="explainBody">
+              <div id="explainHeadline" class="explain-section"></div>
+              <div id="explainWhy" class="explain-section"></div>
+              <div id="explainFix" class="explain-section"></div>
+              <div id="explainNotes" class="explain-section explain-note"></div>
+              <div id="teacherRow" class="explain-section" style="opacity:.9;">
+                <small id="teacherMini"></small>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
+
      <div id="result" style="margin-top:16px; display:none">
-  <div class="row" style="justify-content:space-between">
-    <h3 style="margin:0">Result</h3>
-    <span id="verdictPill" class="pill">—</span>
-  </div>
+      <div class="row" style="justify-content:space-between; align-items:center;">
+      <h3 style="margin:0">Result</h3>
+      <div class="row" style="gap:8px; align-items:center;">
+        <span id="verdictPill" class="pill">—</span>
+        <button id="btnExplainPanel" class="btn ghost" type="button" disabled>
+          What this means
+        </button>
+      </div>
+    </div>
+
 
   <!-- Summary row (unchanged) -->
   <div id="resultSummaryRow">
@@ -2995,46 +3069,77 @@ function setBandBadge(band, pctText){
 }
 
 
-function renderExplain(explain, fullJson){
-  const wrap  = document.getElementById('explainWrap');
-  const head  = document.getElementById('explainHeadline');
-  const why   = document.getElementById('explainWhy');
-  const fix   = document.getElementById('explainFix');
-  const notes = document.getElementById('explainNotes');
-  const mini  = document.getElementById('teacherMini');
-  const title = document.getElementById('explainTitle');
+function renderExplain(explain, fullJson) {
+  const wrap     = document.getElementById('explainWrap');
+  const head     = document.getElementById('explainHeadline');
+  const why      = document.getElementById('explainWhy');
+  const fix      = document.getElementById('explainFix');
+  const notes    = document.getElementById('explainNotes');
+  const mini     = document.getElementById('teacherMini');
+  const title    = document.getElementById('explainTitle');
+  const panel    = document.getElementById('explainPanel');
+  const openBtn  = document.getElementById('btnExplainPanel');
 
-  // If the whole Explain block isn't on this page version, just bail safely.
-  if (!wrap){ return; }
+  if (!wrap) return;
 
-  if (!explain){
-    wrap.style.display = 'none';
+  // No explanation payload → disable button, keep panel closed
+  if (!explain) {
+    if (openBtn) {
+      openBtn.disabled = true;
+      openBtn.classList.add('disabled');
+    }
+    if (panel) {
+      panel.classList.remove('open');
+      panel.setAttribute('aria-hidden', 'true');
+    }
     return;
   }
-  wrap.style.display = 'block';
+
+  // Enable “What this means” button once we have data
+  if (openBtn) {
+    openBtn.disabled = false;
+    openBtn.classList.remove('disabled');
+  }
 
   // Badge (if present)
   if (document.getElementById('bandBadge')) {
     setBandBadge(explain.band, explain.ai_likelihood_pct);
   }
 
-  // Header + sections (all guarded)
-  safeSetText(title, 'What this means');
+  // Header + sections
+  if (title) {
+    // keep text in case you ever surface it somewhere else
+    title.textContent = 'What this means';
+  }
+
   safeSetHTML(head, `<b>${explain.headline || ''}</b>`);
 
   const asList = a => Array.isArray(a) ? a.filter(Boolean) : [];
 
-  const whyList = asList(explain.why).map(s=>`<li>${s}</li>`).join('');
-  safeSetHTML(why,  whyList ? `<b>Why we think this:</b><ul class="explain-list">${whyList}</ul>` : '');
+  const whyList = asList(explain.why).map(s => `<li>${s}</li>`).join('');
+  safeSetHTML(
+    why,
+    whyList
+      ? `<b>Why we think this:</b><ul class="explain-list">${whyList}</ul>`
+      : ''
+  );
 
-  const fixList = asList(explain.what_to_fix).map(s=>`<li>${s}</li>`).join('');
-  safeSetHTML(fix,  fixList ? `<b>How to strengthen it:</b><ul class="explain-list">${fixList}</ul>` : '');
+  const fixList = asList(explain.what_to_fix).map(s => `<li>${s}</li>`).join('');
+  safeSetHTML(
+    fix,
+    fixList
+      ? `<b>How to strengthen it:</b><ul class="explain-list">${fixList}</ul>`
+      : ''
+  );
 
   const notesText = asList(explain.notes).join(' ');
-  safeSetHTML(notes, notesText ? `<b>Notes:</b> ${notesText}` : '');
+  safeSetHTML(
+    notes,
+    notesText ? `<b>Notes:</b> ${notesText}` : ''
+  );
 
-  // Compact teacher row (only if mini exists)
-  if (mini){
+  // Compact teacher row
+  if (mini) {
     const t = explain.teacher_report || {};
     const parts = [];
     if (t.nearest_style) parts.push(`Closest style: ${t.nearest_style}`);
@@ -3043,24 +3148,18 @@ function renderExplain(explain, fullJson){
     mini.textContent = parts.join(' • ');
   }
 
-  // PD note (only if notes exists)
-  if (notes && !Number(window.__pdCentroids || 0)){
-    const msg = "Public-domain fingerprinting is off on this server (no centroids loaded). PD overlap shows ‘—’. Add JSON centroids to ./pd_fingerprints/ and restart.";
-    const prefix = notes.innerHTML ? "<br/>" : "";
-    notes.innerHTML += prefix + `<b>PD note:</b> ${msg}`;
+  // PD note
+  if (notes) {
+    if (!Number(window.__pdCentroids || 0)) {
+      const msg = "Public-domain fingerprinting is off on this server (no centroids loaded). PD overlap shows ‘—’. Add JSON centroids to ./pd_fingerprints/ and restart.";
+      const prefix = notes.innerHTML ? "<br/>" : "";
+      notes.innerHTML += prefix + `<b>PD note:</b> ${msg}`;
+    }
   }
 
-  // Collapse toggle (only if controls exist)
-  const btn  = document.getElementById('explainToggleBtn');
-  const body = document.getElementById('explainBody');
-  if (btn && body){
-    btn.onclick = () => {
-      const hidden = body.classList.toggle('hidden');
-      btn.textContent = hidden ? 'Show' : 'Hide';
-      btn.setAttribute('aria-expanded', String(!hidden));
-    };
-  }
+  // No internal hide/show toggle anymore—panel handles visibility.
 }
+
 
 function renderFingerprint(result) {
   const box      = document.getElementById("fpBox");
@@ -4403,6 +4502,41 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+(function initExplainPanel() {
+  const panel    = document.getElementById('explainPanel');
+  const backdrop = document.getElementById('explainBackdrop');
+  const openBtn  = document.getElementById('btnExplainPanel');
+  const closeBtn = document.getElementById('btnExplainClose');
+
+  if (!panel || !openBtn) return;
+
+  function openPanel() {
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.classList.add('show');
+    }
+  }
+
+  function closePanel() {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+    if (backdrop) {
+      backdrop.classList.remove('show');
+      // delay hiding so fade-out can run
+      window.setTimeout(() => { backdrop.hidden = true; }, 180);
+    }
+  }
+
+  openBtn.addEventListener('click', openPanel);
+  if (closeBtn) closeBtn.addEventListener('click', closePanel);
+  if (backdrop) backdrop.addEventListener('click', closePanel);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closePanel();
+  });
+})();
 
 
 </script>
