@@ -2156,6 +2156,41 @@ body{
   margin-bottom: 10px;
 }
 
+/* Keep content column narrower and easier on the eyes */
+.explain-panel-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Section spacing */
+#explainBody .explain-section {
+  margin-bottom: 14px;
+}
+
+/* Section titles inside the panel */
+#explainBody .explain-section b {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+/* Lists: give them a bit of air */
+#explainBody .explain-list {
+  padding-left: 1.2em;
+  margin: 4px 0 0;
+}
+
+#explainBody .explain-list li {
+  margin-bottom: 4px;
+}
+
+/* Notes: make them slightly softer so they read as extra context */
+#explainBody .explain-note {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
 
 
 </style>
@@ -3118,25 +3153,25 @@ function renderExplain(explain, fullJson) {
 
   const whyList = asList(explain.why).map(s => `<li>${s}</li>`).join('');
   safeSetHTML(
-    why,
-    whyList
-      ? `<b>Why we think this:</b><ul class="explain-list">${whyList}</ul>`
-      : ''
-  );
+  why,
+  whyList
+    ? `<b>Why CopyCat thinks this</b><ul class="explain-list">${whyList}</ul>`
+    : ''
+);
 
   const fixList = asList(explain.what_to_fix).map(s => `<li>${s}</li>`).join('');
   safeSetHTML(
-    fix,
-    fixList
-      ? `<b>How to strengthen it:</b><ul class="explain-list">${fixList}</ul>`
-      : ''
-  );
+  fix,
+  fixList
+    ? `<b>How to strengthen your draft</b><ul class="explain-list">${fixList}</ul>`
+    : ''
+);
 
   const notesText = asList(explain.notes).join(' ');
   safeSetHTML(
-    notes,
-    notesText ? `<b>Notes:</b> ${notesText}` : ''
-  );
+  notes,
+  notesText ? `<b>Extra context</b> ${notesText}` : ''
+);
 
   // Compact teacher row
   if (mini) {
