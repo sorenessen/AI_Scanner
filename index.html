@@ -3148,21 +3148,43 @@ function renderFingerprint(result) {
     return;
   }
 
-  const top   = fp.nearest ?? fp.top ?? fp.family ?? "—";
-  const band  = fp.band ?? fp.bucket ?? "—";
-  const spread = fp.spread ?? fp.drift ?? fp.pd_spread ?? "—";
-  const notes  = fp.notes || fp.note || "";
+  // Expanded fallbacks so we handle both old/new backend shapes
+  const top = fp.nearest
+           ?? fp.top_style
+           ?? fp.top
+           ?? fp.family
+           ?? fp.label
+           ?? "—";
 
+  const band = fp.band
+            ?? fp.band_label
+            ?? fp.bucket
+            ?? "—";
+
+  const spread = fp.spread
+              ?? fp.drift
+              ?? fp.pd_spread
+              ?? fp.pd
+              ?? null;
+
+  const notes = fp.notes
+             || fp.note
+             || fp.comment
+             || fp.explain
+             || "";
+
+  // Summary row pills
   if (labelEl)  labelEl.textContent  = top;
   if (bandEl)   bandEl.textContent   = band;
+
+  // Card contents
   if (topEl)    topEl.textContent    = top;
   if (bandCard) bandCard.textContent = band;
-  if (spreadEl) spreadEl.textContent = String(spread);
+  if (spreadEl) spreadEl.textContent = spread == null ? "—" : String(spread);
   if (notesEl)  notesEl.textContent  = notes || "—";
 
   box.style.display = "block";
 }
-
 
 function renderDrift(raw) {
   const box = document.getElementById("driftBox");
@@ -3304,106 +3326,101 @@ function initLiveTabs(){
   activate("summary");
 }
 
-
-
 function renderLlmFingerprint(result) {
   const box      = document.getElementById("llmBox");
+  const bandPill = document.getElementById("llmBand");
   const famEl    = document.getElementById("llmFamily");
   const confEl   = document.getElementById("llmConf");
   const humanEl  = document.getElementById("llmHuman");
-  const bandEl   = document.getElementById("llmBand");
   const legendEl = document.getElementById("llmLegend");
   const canvas   = document.getElementById("llmCanvas");
 
-  if (!box || !canvas) return;
+  if (!box) return;
 
-  // Try to find the fingerprint payload in a few common shapes
-  const fp = result?.llm_fingerprint || result?.llm_fp || result?.llmFingerprint || null;
+  const fp =
+    result?.llm_fingerprint ||
+    result?.fingerprint ||
+    result?.fp ||
+    null;
 
-  if (!fp) {
+  if (!fp || fp.available === false) {
     box.style.display = "none";
+    if (bandPill) bandPill.textContent = "—";
+    if (famEl)    famEl.textContent    = "—";
+    if (confEl)   confEl.textContent   = "—";
+    if (humanEl)  humanEl.textContent  = "—";
     if (legendEl) legendEl.textContent = "";
-    if (famEl) famEl.textContent = "—";
-    if (confEl) confEl.textContent = "—";
-    if (humanEl) humanEl.textContent = "—";
-    if (bandEl) bandEl.textContent = "—";
-    return;
-  }
-
-  const family = fp.nearest_family || fp.nearest || fp.family || "—";
-  const conf   = fp.confidence ?? fp.score ?? null;
-  const human  = fp.human_score ?? fp.human ?? null;
-  const dist   = fp.distribution || {};
-
-  const labels = Object.keys(dist);
-  const values = labels.map(k => Number(dist[k]) || 0);
-
-  // Header line
-  if (famEl)   famEl.textContent  = family;
-  if (confEl)  confEl.textContent = conf != null ? (conf * 100).toFixed(1) + "%" : "—";
-  if (humanEl) humanEl.textContent = human != null ? (human * 100).toFixed(1) + "%" : "—";
-
-  // Band pill: whichever bucket is largest
-  if (bandEl) {
-    if (labels.length) {
-      let topIdx = 0;
-      for (let i = 1; i < labels.length; i++) {
-        if (values[i] > values[topIdx]) topIdx = i;
-      }
-      bandEl.textContent = labels[topIdx];
-    } else {
-      bandEl.textContent = "—";
+    if (canvas && canvas.getContext) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
-  }
-
-  // Draw simple bar chart
-  const ctx = canvas.getContext("2d");
-  const w   = canvas.width  = canvas.clientWidth || 480;
-  const h   = canvas.height = 120;
-
-  ctx.clearRect(0, 0, w, h);
-
-  if (!labels.length) {
-    if (legendEl) legendEl.textContent = "Fingerprint available, but no distribution payload from server.";
-    box.style.display = "block";
     return;
-  }
-
-  const max = Math.max(...values, 0.001);
-  const barW = w / (labels.length * 1.8);
-  const baseY = h - 22;
-
-  labels.forEach((lab, i) => {
-    const v = values[i];
-    const x = (i + 0.5) * (w / labels.length) - barW / 2;
-    const bh = (v / max) * (h - 40);
-
-    // bar
-    ctx.fillStyle = "#3b82f6";
-    ctx.fillRect(x, baseY - bh, barW, bh);
-
-    // label
-    ctx.fillStyle = "#c4cbe3";
-    ctx.font = "10px system-ui, -apple-system, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(lab.replace(/-.*/, ""), x + barW / 2, h - 6);
-  });
-
-  if (legendEl) {
-    legendEl.textContent =
-      "Relative style fingerprint scores across families: " +
-      labels.join(", ");
   }
 
   box.style.display = "block";
+
+  const family =
+    fp.nearest_family ||
+    fp.family ||
+    fp.nearest ||
+    fp.top_style ||
+    fp.top ||
+    fp.label ||
+    "Unknown";
+
+  const dist = fp.distribution || fp.similarity || {};
+  const labels = Object.keys(dist);
+  const values = labels.map(k => Number(dist[k]) || 0);
+
+  const conf = typeof fp.confidence === "number" ? fp.confidence : null;
+  const humanScore =
+    typeof fp.human_score === "number"
+      ? fp.human_score
+      : (typeof fp.human === "number" ? fp.human : null);
+
+  // Band pill based on humanScore
+  let band = "—";
+  if (typeof humanScore === "number") {
+    if (humanScore >= 0.8) band = "Human-like";
+    else if (humanScore <= 0.2) band = "Model-like";
+    else band = "Mixed";
+  }
+
+  if (famEl)    famEl.textContent    = family;
+  if (bandPill) bandPill.textContent = band;
+  if (confEl)   confEl.textContent   = conf == null ? "—" : `${(conf * 100).toFixed(1)}%`;
+  if (humanEl)  humanEl.textContent  = humanScore == null ? "—" : humanScore.toFixed(3);
+
+  // Legend line
+  if (legendEl) {
+    const bits = [];
+    if (labels.length) {
+      bits.push(
+        "Distribution: " +
+        labels.map(k => `${k} ${(dist[k] * 100).toFixed(1)}%`).join(" · ")
+      );
+    }
+    legendEl.textContent = bits.join("  |  ");
+  }
+
+  // Simple bar visualization for human_score, if we have it
+  if (canvas && canvas.getContext && typeof humanScore === "number") {
+    const ctx = canvas.getContext("2d");
+    const w   = canvas.width;
+    const h   = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(0, h / 2 - 2, w, 4);
+
+    const barW = Math.max(4, Math.min(w, w * Math.max(0, Math.min(1, humanScore))));
+    ctx.fillStyle = "rgba(79,134,255,0.9)";
+    ctx.fillRect(0, h / 2 - 6, barW, 12);
+  }
 }
 
 
-// also make the /scan raw-dump close safe (if your code has this line elsewhere):
-const rawBoxEl = document.getElementById("rawJsonBox");
-if (rawBoxEl && typeof rawBoxEl.removeAttribute === "function"){
-  // no-op here; left for parity with your try block
-}
 
 /* ---------- Live verification ---------- */
 let lastScanMetrics = null;
@@ -3832,6 +3849,7 @@ async function runScan(){
 didScan        = true;
 lastScanResult = r;
 
+
 renderExplain(r.explain, r);
 renderFingerprint(r);
 
@@ -3867,8 +3885,22 @@ try {
     document.getElementById("rawJsonBox")?.removeAttribute("open");
 
     $("#result").style.display = "block";
+
+    // Keep your existing bar logic (even though the bar is visually hidden)
     setProbFill(r.calibrated_prob || 0);
     setVerdict(r.verdict || "—");
+
+    // NEW: drive the donut + center label from calibrated_prob
+    const prob = (typeof r.calibrated_prob === "number") ? r.calibrated_prob : null;
+
+    const pctCenter = $("#probPctCenter");
+    if (pctCenter) {
+      pctCenter.textContent = (prob !== null)
+        ? `${Math.round(prob * 100)}% AI`
+        : "—";
+    }
+
+    updateProbDonut(prob);
 
     const NS = r.nonsense_signals || {};
     const top10Pct  = Number.isFinite(NS.top10)
@@ -3890,6 +3922,7 @@ try {
     $("#pdj").textContent       = (r.pd_overlap_j ?? 0).toFixed(3);
     $("#tagEcho").textContent   = body.tag || "—";
     $("#explainShort").textContent = shortExplain(r);
+
 
     fillTokenTable(r.per_token || []);
 
@@ -3931,6 +3964,21 @@ try {
     $("#scanStatus").textContent = "";
   }
 }
+
+function updateProbDonut(prob) {
+  const donut = document.querySelector("#result .donut-val");
+  if (!donut || typeof prob !== "number") {
+    return; // safely no-op if missing or no probability
+  }
+
+  // Must match r="16" from your SVG <circle> in the donut
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+
+  donut.style.strokeDasharray  = `${circumference} ${circumference}`;
+  donut.style.strokeDashoffset = String(circumference * (1 - prob));
+}
+
 
 /* Demos */
 async function loadDemos(){
