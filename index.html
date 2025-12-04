@@ -2816,13 +2816,32 @@ async function driftAnalyze(text){
   return r.json();
 }
 
-async function driftCompare(a, b){
-  const r = await fetch("/drift/compare", {
-    method:"POST", headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ a, b })
+/* Drift Diagnostics */
+async function driftAnalyze(text) {
+  const r = await fetch("/drift/analyze", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text })
   });
-  if(!r.ok) throw new Error(await r.text());
+  if (!r.ok) throw new Error(await r.text());
   return r.json();
+}
+
+/* Drift compare: scan vs live sample */
+async function driftCompare(scanText, liveText) {
+  const resp = await fetch("/drift/compare", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      scan_text: scanText,   // <-- must match the Python model field names
+      live_text: liveText
+    })
+  });
+
+  if (!resp.ok) {
+    throw new Error(await resp.text());
+  }
+  return resp.json();
 }
 
 // Example render (stick this where you show scan extras)

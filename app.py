@@ -224,8 +224,8 @@ class DriftIn(BaseModel):
     text: str
 
 class DriftCompareIn(BaseModel):
-    a: str
-    b: str
+    scan_text: str     # text you originally ran /scan on
+    live_text: str     # 90-second live sample
 
 # -------------------- Core scoring helpers (model-agnostic) --------------------
 def scan_chunk_with(model_obj, tok, input_ids: torch.Tensor) -> Dict:
@@ -1506,14 +1506,56 @@ def drift_analyze(inp: DriftIn):
 
 @app.post("/drift/compare")
 def drift_compare(inp: DriftCompareIn):
-    a = (inp.a or "").strip()
-    b = (inp.b or "").strip()
-    if not a or not b:
-        raise HTTPException(status_code=400, detail="both a and b are required")
-    da = compute_semantic_drift(a)
-    db = compute_semantic_drift(b)
-    sim = _global_bow_sim(a, b)
-    return {"a": da, "b": db, "global_bow_similarity": sim}
+    """
+    Compare the original scanned text vs the live 90s sample.
+
+    Returns a compact object for the UI:
+      - available: bool
+      - paragraphs: int (min of the two texts)
+      - similarity: 0..1 semantic similarity
+      - overlap: 0..1 (currently same as similarity; can refine later)
+      - risk: 0..1 (higher = more drift / less consistent)
+      - score: 0..1 (higher = more human-like / consistent)
+    """
+    scan = (inp.scan_text or "").strip()
+    live = (inp.live_text or "").strip()
+
+    if not scan or not live:
+        raise HTTPException(
+            status_code=400,
+            detail="scan_text and live_text are required"
+        )
+
+    # Per-text drift diagnostics (you may want these later)
+    drift_scan = compute_semantic_drift(scan)
+    drift_live = compute_semantic_drift(live)
+
+    # Simple global semantic similarity between the two texts
+    sim = _global_bow_sim(scan, live)   # 0..1
+
+    # Paragraph count: whichever has fewer paragraphs
+    paras = min(
+        drift_scan.get("paragraphs", 0),
+        drift_live.get("paragraphs", 0),
+    )
+
+    # Combine their individual drift risks + pairwise similarity
+    risk_self = 0.5 * (
+        float(drift_scan.get("risk", 0.5)) +
+        float(drift_live.get("risk", 0.5))
+    )
+    risk_pair = 1.0 - sim
+    risk = _clamp(0.5 * risk_self + 0.5 * risk_pair, 0.0, 1.0)
+
+    return {
+        "available": True,
+        "paragraphs": paras,
+        "similarity": round(sim, 3),
+        "overlap": round(sim, 3),   # placeholder; can change later
+        "risk": round(risk, 3),
+        "score": round(1.0 - risk, 3),
+    }
+
 
 
 # -------------------- Demo route --------------------
