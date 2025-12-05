@@ -281,8 +281,20 @@ body{
     font-size: 1em;
   }
 
+
+
+
   textarea{min-height:360px;resize:vertical}
   .btn{background:var(--accent);border:none;color:#091120;padding:11px 16px;border-radius:10px;font-weight:700;cursor:pointer;min-height:42px}
+
+/* Make form fields fit neatly inside their containers */
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+  box-sizing: border-box;
+}
+
 
   .btn.secondary{
     background: var(--panel-2);
@@ -2113,6 +2125,187 @@ body{
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 0.90em;      /* scales with --scale because html/body use em */
   line-height: 1.45;
+}
+
+/* ===== CopyCat LIGHT THEME – button readability fix ===== */
+
+/* Primary action buttons (Scan, Save, Live Verification, etc.) */
+:root[data-ui-theme="light"] .btn,
+html[data-ui-theme="light"] .btn,
+:root[data-theme="light"] .btn,
+html[data-theme="light"] .btn {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #f9fafb;
+  border: none;
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.30);
+}
+
+/* Secondary buttons – softer pill, dark text, clear border */
+:root[data-ui-theme="light"] .btn.secondary,
+html[data-ui-theme="light"] .btn.secondary,
+:root[data-theme="light"] .btn.secondary,
+html[data-theme="light"] .btn.secondary {
+  background: #e5e7f5;
+  color: #111827;
+  border: 1px solid #cbd2f0;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+/* Ghost / subtle buttons – transparent with clear outline */
+:root[data-ui-theme="light"] .btn.ghost,
+html[data-ui-theme="light"] .btn.ghost,
+:root[data-theme="light"] .btn.ghost,
+html[data-theme="light"] .btn.ghost {
+  background: transparent;
+  color: #1f2937;
+  border: 1px solid #cbd5f5;
+  box-shadow: none;
+}
+
+/* Disabled state: dimmed but still readable */
+:root[data-ui-theme="light"] .btn:disabled,
+html[data-ui-theme="light"] .btn:disabled,
+:root[data-theme="light"] .btn:disabled,
+html[data-theme="light"] .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ===== LIGHT THEME: make pills / tabs readable ===== */
+
+:root[data-ui-theme="light"] .chip,
+html[data-ui-theme="light"] .chip,
+:root[data-theme="light"] .chip,
+html[data-theme="light"] .chip,
+:root[data-ui-theme="light"] .tab-pill,
+html[data-ui-theme="light"] .tab-pill,
+:root[data-theme="light"] .tab-pill,
+html[data-theme="light"] .tab-pill,
+:root[data-ui-theme="light"] .pill,
+html[data-ui-theme="light"] .pill,
+:root[data-theme="light"] .pill,
+html[data-theme="light"] .pill {
+  color: #f9fafb !important;    /* bright white text */
+  font-weight: 600;             /* thicker, matches buttons */
+  letter-spacing: 0.02em;       /* tiny bit more presence */
+}
+
+/* ===== LIGHT THEME: make PD tabs readable ===== */
+:root[data-ui-theme="light"] .card button:not(#btnScan):not(#btnSaveConfig):not(.live-tab),
+html[data-ui-theme="light"] .card button:not(#btnScan):not(#btnSaveConfig):not(.live-tab),
+:root[data-theme="light"] .card button:not(#btnScan):not(#btnSaveConfig):not(.live-tab),
+html[data-theme="light"] .card button:not(#btnScan):not(#btnSaveConfig):not(.live-tab) {
+  background: #111827 !important;            /* dark navy chip */
+  color: #f9fafb !important;                 /* bright white text */
+  border-radius: 999px !important;           /* pill shape */
+  font-weight: 600 !important;               /* thicker text */
+  padding: 4px 12px !important;
+  font-size: 0.78rem !important;             /* a bit bigger/readable */
+  border: 1px solid #0f172a !important;
+}
+
+/* ===== LIGHT THEME: make LCARS tabs readable ===== */
+:root[data-theme="light"] .lcars-tab,
+:root[data-theme="light-paper"] .lcars-tab,
+html[data-theme="light"] .lcars-tab,
+html[data-theme="light-paper"] .lcars-tab,
+:root[data-ui-theme="light"] .lcars-tab,
+html[data-ui-theme="light"] .lcars-tab {
+  background: #020617 !important;      /* dark slate pill */
+  color: #e5e7eb !important;           /* light gray text */
+  border-color: #0f172a !important;
+  font-weight: 600 !important;         /* thicker */
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
+}
+
+/* Active state: bright blue pill, white text */
+:root[data-theme="light"] .lcars-tab.lcars-tab-active,
+:root[data-theme="light-paper"] .lcars-tab.lcars-tab-active,
+html[data-theme="light"] .lcars-tab.lcars-tab-active,
+html[data-theme="light-paper"] .lcars-tab.lcars-tab-active,
+:root[data-ui-theme="light"] .lcars-tab.lcars-tab-active,
+html[data-ui-theme="light"] .lcars-tab.lcars-tab-active {
+  background: #2563eb !important;      /* same gradient family as main buttons */
+  color: #f9fafb !important;           /* white text */
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.9),
+    0 6px 16px rgba(37, 99, 235, 0.35) !important;
+}
+
+/* ==== Live Verification drawer: clearer sections + textarea ==== */
+
+/* Give the two columns inside the live drawer a card frame */
+#liveDrawer .split > div {
+  background: var(--panel);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+}
+
+/* Make the live textarea stand out a bit more in all themes */
+#liveDrawer .live-left textarea {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+/* Light themes: bright, obvious input area */
+html[data-theme="light"] #liveDrawer .live-left textarea,
+html[data-theme="light-paper"] #liveDrawer .live-left textarea {
+  background: #e6efff;          /* light blue panel */
+  border-color: #c3d3ff;
+}
+
+/* Dark “pro” theme: drawer is dark, textarea slightly lifted */
+html:not([data-theme="light"])
+    :not([data-theme="light-paper"])
+    :not([data-theme="lcars"]) #liveDrawer .live-left textarea {
+  background: #050816;          /* darker well */
+  border-color: #1e293b;        /* subtle outline */
+}
+
+/* Keep LCARS exactly as-is */
+html[data-theme="lcars"] #liveDrawer .split > div,
+html[data-theme="lcars"] #liveDrawer .live-left textarea {
+  background: inherit;
+  border: none;
+  padding: 0;
+}
+
+/* LCARS: give the live-typing panel a proper console background */
+:root[data-theme="lcars"] #liveDrawer .live-left {
+  background: #050b18;            /* same family as the drift panel */
+  border-radius: 14px;
+  padding: 12px 14px 16px;        /* a little breathing room around the textarea */
+  box-shadow: 0 0 0 1px #151b2b inset;
+}
+
+/* LCARS: make the textarea itself clearly “inside” that console */
+:root[data-theme="lcars"] #liveDrawer .live-left textarea {
+  background: #02030f;
+  border-color: #151b2b;
+  color: #fdf7e3;
+}
+
+/* LCARS: Live verification input panel */
+:root[data-theme="lcars"] #liveDrawer .live-left,
+html[data-theme="lcars"] #liveDrawer .live-left {
+  background: #050b18;              /* same family as the drift card */
+  border-radius: 14px;
+  border: 1px solid #151b2b;
+  padding: 12px 14px 14px;
+}
+
+/* LCARS: textarea itself sits on a slightly lighter slab */
+:root[data-theme="lcars"] #liveInput,
+html[data-theme="lcars"] #liveInput {
+  background: #070d1e;
+  border: 1px solid #252c42;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 
