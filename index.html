@@ -2470,6 +2470,47 @@ html[data-theme="lcars"] #liveDrawer #liveInput {
   padding: 10px 14px;               /* same idea as right-side padding */
 }
 
+/* === LCARS: Live Verification drawer – final tidy version === */
+/* Left drift panel (bottom-right metrics block) */
+:root[data-theme="lcars"] #liveDriftBox {
+  background: #273363;
+  border-radius: 14px;
+  padding: 14px 22px 18px;
+  box-sizing: border-box;
+  box-shadow:
+    0 0 0 1px #7db7ff,              /* thin light blue outline */
+    0 10px 24px rgba(0,0,0,0.65);   /* depth shadow */
+}
+
+/* LEFT column wrapper around the textarea */
+:root[data-theme="lcars"] #liveDrawer .live-left {
+  background: #273363;
+  border-radius: 14px;
+  padding: 14px 22px 18px;          /* same breathing room as drift box */
+  box-sizing: border-box;
+  box-shadow:
+    0 0 0 1px #7db7ff,              /* matching light blue outline */
+    0 10px 24px rgba(0,0,0,0.65);
+}
+
+/* Actual textarea – black slab with glowing outline */
+:root[data-theme="lcars"] #liveDrawer #liveInput {
+  background: #000000;
+  color: #fdf7e3;
+  border-radius: 10px;
+  border: none;                     /* use the glow instead of a normal border */
+  padding: 10px 14px;
+  box-sizing: border-box;
+  box-shadow:
+    0 0 0 1px #7db7ff,              /* thin blue edge */
+    0 0 18px rgba(125,183,255,0.55);/* soft outer glow */
+}
+
+/* Placeholder on black textarea */
+:root[data-theme="lcars"] #liveDrawer #liveInput::placeholder {
+  color: rgba(253,247,227,0.6);
+}
+
 
 </style>
 </head>
