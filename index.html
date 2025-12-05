@@ -2290,18 +2290,18 @@ html[data-theme="lcars"] #liveDrawer .live-left textarea {
   color: #fdf7e3;
 }
 
-/* LCARS: Live verification input panel */
-:root[data-theme="lcars"] #liveDrawer .live-left,
-html[data-theme="lcars"] #liveDrawer .live-left {
-  background: #050b18;              /* same family as the drift card */
+/* LCARS: Live Verification input panel */
+:root[data-theme="lcars"] #liveDrawer .split > div:first-child,
+html[data-theme="lcars"] #liveDrawer .split > div:first-child {
+  background: #050b18;              /* same family as right-side metrics panel */
   border-radius: 14px;
   border: 1px solid #151b2b;
   padding: 12px 14px 14px;
 }
 
-/* LCARS: textarea itself sits on a slightly lighter slab */
-:root[data-theme="lcars"] #liveInput,
-html[data-theme="lcars"] #liveInput {
+/* LCARS: textarea slab inside that panel */
+:root[data-theme="lcars"] #liveDrawer #liveInput,
+html[data-theme="lcars"] #liveDrawer #liveInput {
   background: #070d1e;
   border: 1px solid #252c42;
   box-sizing: border-box;
