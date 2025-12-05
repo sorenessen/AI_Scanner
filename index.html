@@ -2307,6 +2307,168 @@ html[data-theme="lcars"] #liveDrawer #liveInput {
   box-sizing: border-box;
   width: 100%;
 }
+/* === LCARS live drawer: make input black, surround with LCARS blue card === */
+
+:root[data-theme="lcars"] #liveDrawer .live-left {
+  background: #050b18;              /* same kind of blue as the right panel */
+  border-radius: 16px;
+  padding: 10px 12px 14px;
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 10px 24px rgba(0, 0, 0, 0.9);
+}
+
+/* Textarea itself: black slab, high contrast text */
+:root[data-theme="lcars"] #liveInput {
+  background: #000000;
+  color: #fdf7e3;
+  border-radius: 10px;
+  border: 1px solid #12192e;
+}
+
+/* Make sure it fills the card cleanly */
+:root[data-theme="lcars"] #liveInput {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Placeholder text readable on black */
+:root[data-theme="lcars"] #liveInput::placeholder {
+  color: rgba(253, 247, 227, 0.55);
+}
+
+/* === LCARS live drawer: clear, card-style input area ==================== */
+
+/* Left column “card” behind the textarea */
+:root[data-theme="lcars"] #liveDrawer .live-left {
+  background: var(--panel) !important;   /* same dark blue as right panel */
+  border-radius: 14px !important;
+  padding: 10px 12px 14px !important;
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 10px 22px rgba(0, 0, 0, 0.85) !important;
+}
+
+/* Text box itself: true black slab, high-contrast text */
+:root[data-theme="lcars"] #liveDrawer #liveInput {
+  background: #000000 !important;
+  color: #fdf7e3 !important;
+  border-radius: 10px !important;
+  border: 1px solid #12192e !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Placeholder text on black */
+:root[data-theme="lcars"] #liveDrawer #liveInput::placeholder {
+  color: rgba(253, 247, 227, 0.55) !important;
+}
+
+/* === LCARS live drawer: lighter panel + black textarea ================ */
+
+/* Surrounding panel behind the live input (left side of drawer) */
+:root[data-theme="lcars"] #liveDrawer .live-left {
+  background: linear-gradient(
+    135deg,
+    #222e5a,
+    #283567
+  ) !important;                 /* softer, lighter navy */
+  border-radius: 14px !important;
+  padding: 12px 14px 16px !important;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.9) inset,
+    0 10px 24px rgba(0,0,0,0.65) !important;
+}
+
+/* Textarea itself: true black slab with bright text */
+:root[data-theme="lcars"] #liveDrawer #liveInput {
+  background: #000000 !important;
+  color: #fdf7e3 !important;
+  border-radius: 10px !important;
+  border: 1px solid #5bb5ff !important;   /* brighter edge so it pops */
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Placeholder on black textarea */
+:root[data-theme="lcars"] #liveDrawer #liveInput::placeholder {
+  color: rgba(253, 247, 227, 0.6) !important;
+}
+
+/* LCARS: drift panel matches live-input panel + light blue outline */
+:root[data-theme="lcars"] #liveDriftBox {
+  background: linear-gradient(135deg, #222e5a, #283567) !important;
+  border-radius: 14px !important;
+
+  /* thin light-blue accent outline + soft drop shadow */
+  box-shadow:
+    0 0 0 1px #7ea6ff,                     /* light blue outline */
+    0 10px 24px rgba(0, 0, 0, 0.65);       /* depth shadow */
+}
+
+/* LCARS: drift panel padding + outline + background */
+:root[data-theme="lcars"] #liveDriftBox {
+  /* existing look */
+  background: linear-gradient(135deg, #222e5a, #283567) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    0 0 0 1px #7ea6ff,                     /* light blue outline */
+    0 10px 24px rgba(0, 0, 0, 0.65);
+
+  /* NEW: breathing room so text isn’t hugging the edge */
+  padding: 14px 22px 18px;
+  box-sizing: border-box;
+}
+
+/* LCARS – Live verification LEFT panel wrapper around the textarea */
+:root[data-theme="lcars"] #liveDrawer .live-left {
+  background: linear-gradient(135deg, #222e5a, #283567);
+  border-radius: 14px;
+  padding: 14px 22px 18px;   /* same breathing room as drift box */
+  box-sizing: border-box;
+
+  /* same thin blue outline + soft glow */
+  box-shadow:
+    0 0 0 1px #7ea6ff,
+    0 10px 24px rgba(0, 0, 0, 0.65);
+}
+
+/* LCARS – actual textarea inside that panel */
+:root[data-theme="lcars"] #liveText {
+  background: #020308;          /* solid black text field */
+  color: #fdfdfd;
+  border-radius: 10px;
+  border: 1px solid #89b4ff;    /* inner accent line */
+
+  padding: 10px 12px;           /* text not hugging edge */
+  box-sizing: border-box;
+  resize: vertical;
+
+  /* matching glow around the textbox itself */
+  box-shadow:
+    0 0 0 1px #7ea6ff,
+    0 0 18px rgba(126, 166, 255, 0.45);
+}
+
+/* LCARS – live verification left pane wrapper */
+[data-theme="lcars"] #liveDrawer .live-left,
+[data-theme="lcars"] #liveDrawer #liveLeft {
+  box-sizing: border-box;
+  background: #273363;              /* same blue as the drift block */
+  border-radius: 10px;
+  padding: 16px 20px 18px;          /* same padding feel as drift stats */
+  box-shadow: 0 0 0 1px #7db7ff;    /* thin light blue outline */
+}
+
+/* Keep the textarea inset nicely inside that wrapper */
+[data-theme="lcars"] #liveDrawer .live-left textarea,
+[data-theme="lcars"] #liveDrawer #liveLeft textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid #7db7ff;        /* inner blue line (what you already like) */
+  padding: 10px 14px;               /* same idea as right-side padding */
+}
 
 
 </style>
