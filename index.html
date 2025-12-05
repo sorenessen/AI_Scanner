@@ -380,8 +380,8 @@ textarea {
   }
 
   .live-left textarea{
-    min-height:140px;
-    max-height:220px;
+    min-height:350px;
+    max-height:510px;
   }
 
   .live-metrics-header{
@@ -2250,6 +2250,8 @@ html[data-ui-theme="light"] .lcars-tab.lcars-tab-active {
 #liveDrawer .live-left textarea {
   background: var(--panel-2);
   border: 1px solid var(--border);
+  padding: 12px 14px;      /* ← universal inner space */
+  box-sizing: border-box;  /* ← keeps width calculations sane */
 }
 
 /* Light themes: bright, obvious input area */
@@ -2357,6 +2359,7 @@ html[data-theme="lcars"] #liveDrawer #liveInput {
   border: 1px solid #12192e !important;
   width: 100% !important;
   box-sizing: border-box !important;
+  padding: 12px 14px !important;   /* ← NEW: inner space top/bottom + left/right */
 }
 
 /* Placeholder text on black */
