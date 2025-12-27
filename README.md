@@ -272,7 +272,7 @@ Now it’ll open immediately, no warning.
 
 ```bash
 # 1. Clone
-git clone https://github.com/yourusername/AI_Scanner.git
+git clone https://github.com/yoursorenessen/AI_Scanner.git
 cd AI_Scanner
 
 # 2. Virtual env
