@@ -81,7 +81,7 @@ These are the steps to run the scanner locally using FastAPI + your browser UI.
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/yourusername/AI_Scanner.git
+git clone https://github.com/sorenessen/AI_Scanner.git
 cd AI_Scanner
 ```
 
