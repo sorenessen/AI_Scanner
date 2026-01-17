@@ -9,3 +9,10 @@ scan_summaries.txt
 *.pdf
 server.log
 index.html.bak
+
+# build artifacts
+CopyCat-mac.dmg
+CopyCat-mac.zip
+*.app
+/dist/
+/build/
