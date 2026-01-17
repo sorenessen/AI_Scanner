@@ -5,12 +5,31 @@ import socket
 import threading
 import subprocess
 import webview
+import pathlib
 
 HOST = "127.0.0.1"
 
 # -----------------------
 # helpers
 # -----------------------
+
+def _set_cwd_to_bundle_root():
+    # When frozen, sys._MEIPASS is the extracted bundle resource dir.
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        os.chdir(sys._MEIPASS)
+    else:
+        os.chdir(pathlib.Path(__file__).resolve().parent)
+
+def _ensure_bundle_on_syspath():
+    # In frozen mode, app.py and resources are unpacked to sys._MEIPASS.
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        meipass = sys._MEIPASS
+        if meipass not in sys.path:
+            sys.path.insert(0, meipass)
+
+_set_cwd_to_bundle_root()
+_ensure_bundle_on_syspath()
+
 
 def pick_free_port(host: str) -> int:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -85,23 +104,30 @@ def start_server_dev(port: int):
 # -----------------------
 
 def _run_uvicorn_inprocess(port: int):
-    """
-    Run uvicorn in this same process/thread pool.
-    This avoids trying to exec the bundled binary as if it were `python -m`.
-    """
     import uvicorn
-    uvicorn.run(
-        "app:app",
+    import app as app_module
+
+    config = uvicorn.Config(
+        app_module.app,
         host=HOST,
         port=port,
         log_level="info",
+        access_log=False,
     )
+    server = uvicorn.Server(config)
+    server.run()
+
 
 def start_server_frozen_thread(port: int):
-    """
-    Launch uvicorn in a daemon thread when we're in a frozen app bundle.
-    """
-    t = threading.Thread(target=_run_uvicorn_inprocess, args=(port,), daemon=True)
+    def _target():
+        try:
+            _run_uvicorn_inprocess(port)
+        except Exception as e:
+            import traceback
+            print("[launcher] FATAL: backend thread crashed:", e)
+            traceback.print_exc()
+
+    t = threading.Thread(target=_target, daemon=True)
     t.start()
     return t
 
