@@ -7,11 +7,17 @@ import subprocess
 import webview
 
 HOST = "127.0.0.1"
-PORT = 8080
 
 # -----------------------
 # helpers
 # -----------------------
+
+def pick_free_port(host: str) -> int:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((host, 0))  # 0 = let OS choose
+    port = s.getsockname()[1]
+    s.close()
+    return port
 
 def is_port_open(host: str, port: int) -> bool:
     try:
@@ -23,18 +29,15 @@ def is_port_open(host: str, port: int) -> bool:
 def is_frozen() -> bool:
     return getattr(sys, "frozen", False)
 
-def wait_for_server(timeout_sec=20):
+def wait_for_server(host: str, port: int, timeout_sec: int = 60) -> bool:
     start = time.time()
-    pct = 0
     while True:
-        if is_port_open(HOST, PORT):
+        if is_port_open(host, port):
             print("[launcher] server is UP")
             return True
         if time.time() - start > timeout_sec:
             print("[launcher] ERROR: timeout waiting for server")
             return False
-        pct += 5
-        print(f"[launcher] waiting for server... {pct}%")
         time.sleep(0.3)
 
 def pump_logs(proc):
@@ -51,7 +54,7 @@ def pump_logs(proc):
 # DEV MODE server launcher (subprocess)
 # -----------------------
 
-def start_server_dev():
+def start_server_dev(port: int):
     """
     Run uvicorn as a subprocess using the current interpreter (venv python).
     This is only used when we're NOT frozen.
@@ -64,7 +67,7 @@ def start_server_dev():
         "-m", "uvicorn",
         "app:app",
         "--host", HOST,
-        "--port", str(PORT),
+        "--port", str(port),
     ]
 
     print(f"[launcher] starting server (dev): {cmd} (cwd={app_dir})")
@@ -81,26 +84,24 @@ def start_server_dev():
 # FROZEN MODE server launcher (in-process thread)
 # -----------------------
 
-def _run_uvicorn_inprocess():
+def _run_uvicorn_inprocess(port: int):
     """
     Run uvicorn in this same process/thread pool.
     This avoids trying to exec the bundled binary as if it were `python -m`.
     """
     import uvicorn
-    # Just import the FastAPI app via string. PyInstaller bundled app.py,
-    # and adds the bundle dir to sys.path, so "app:app" should resolve.
     uvicorn.run(
         "app:app",
         host=HOST,
-        port=PORT,
+        port=port,
         log_level="info",
     )
 
-def start_server_frozen_thread():
+def start_server_frozen_thread(port: int):
     """
     Launch uvicorn in a daemon thread when we're in a frozen app bundle.
     """
-    t = threading.Thread(target=_run_uvicorn_inprocess, daemon=True)
+    t = threading.Thread(target=_run_uvicorn_inprocess, args=(port,), daemon=True)
     t.start()
     return t
 
@@ -113,17 +114,19 @@ def main():
     mode = "frozen" if is_frozen() else "dev"
     print(f"[launcher] mode = {mode}")
 
+    port = pick_free_port(HOST)
+    print(f"[launcher] selected port = {port}")
+
     server_proc = None
 
     if mode == "dev":
-        server_proc = start_server_dev()
+        server_proc = start_server_dev(port)
         pump_logs(server_proc)
     else:
-        # we're frozen -> run uvicorn in-process
-        start_server_frozen_thread()
+        start_server_frozen_thread(port)
 
-    # wait until 127.0.0.1:8080 is live (or give up)
-    if not wait_for_server(timeout_sec=20):
+    # wait until 127.0.0.1:<port> is live (or give up)
+    if not wait_for_server(HOST, port, timeout_sec=60):
         print("[launcher] backend failed, terminating")
         if server_proc:
             try:
@@ -132,10 +135,10 @@ def main():
                 pass
         return
 
-    app_url = f"http://{HOST}:{PORT}/"
+    app_url = f"http://{HOST}:{port}/"
     print(f"[launcher] showing client window @ {app_url}")
 
-    window = webview.create_window(
+    webview.create_window(
         title="Calypso Labs — AI Text Scanner",
         url=app_url,
         width=1100,
