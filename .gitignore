@@ -16,3 +16,13 @@ CopyCat-mac.zip
 *.app
 /dist/
 /build/
+*.spec.bak
+
+# virtualenvs
+.venv*/
+venv*/
+
+# macOS packaging
+*.dmg
+*.zip
+dmg/

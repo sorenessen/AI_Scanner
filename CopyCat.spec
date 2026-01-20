@@ -1,27 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
 
-datas = [('index.html', '.'), ('static', 'static'), ('pd_sources', 'pd_sources'), ('pd_fingerprints', 'pd_fingerprints'), ('model_centroids', 'model_centroids')]
-binaries = []
-hiddenimports = ['app']
-tmp_ret = collect_all('webview')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('transformers')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('tokenizers')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('huggingface_hub')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('safetensors')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
+# --- Collect heavy libs that PyInstaller often misses on macOS ---
+torch_datas, torch_binaries, torch_hidden = collect_all("torch")
+
+# Optional but commonly needed with torch stacks (safe even if unused)
+extra_hidden = []
+for m in ("torchvision", "torchaudio", "transformers"):
+    try:
+        extra_hidden += collect_submodules(m)
+    except Exception:
+        pass
 
 a = Analysis(
-    ['launcher.py'],
+    ['app.py'],
     pathex=[],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=torch_binaries,
+    datas=torch_datas,
+    hiddenimports=torch_hidden + extra_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -29,6 +26,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -44,10 +42,11 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch="x86_64",   # force intel build output
     codesign_identity=None,
     entitlements_file=None,
 )
+
 coll = COLLECT(
     exe,
     a.binaries,
@@ -57,6 +56,7 @@ coll = COLLECT(
     upx_exclude=[],
     name='CopyCat',
 )
+
 app = BUNDLE(
     coll,
     name='CopyCat.app',
