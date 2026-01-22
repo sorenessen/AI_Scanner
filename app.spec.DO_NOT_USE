@@ -1,13 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+
 a = Analysis(
-    ['launcher.py'],
+    ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('index.html', '.'),
-        ('static', 'static'),
-    ],
+    datas=[    ('static', 'static'),
+    ('pd_fingerprints', 'pd_fingerprints'),
+    ('model_centroids', 'model_centroids'),
+],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -16,7 +17,6 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -24,7 +24,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='CopyCat',
+    name='app',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -35,9 +35,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='/Users/sorenessen/Downloads/CopyCat.icns',
+    icon=['/Users/sorenessen/Downloads/CopyCat.icns'],
 )
-
 coll = COLLECT(
     exe,
     a.binaries,
@@ -45,12 +44,11 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='CopyCat',
+    name='app',
 )
-
 app = BUNDLE(
     coll,
-    name='CopyCat.app',
+    name='app.app',
     icon='/Users/sorenessen/Downloads/CopyCat.icns',
     bundle_identifier=None,
 )
