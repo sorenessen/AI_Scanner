@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import multiprocessing
+
 import csv
 import glob
 import hashlib
@@ -54,12 +56,23 @@ def resource_path(rel: str) -> pathlib.Path:
 
 def user_data_dir() -> pathlib.Path:
     """
-    Writable location for a notarized macOS .app:
-    ~/Library/Application Support/CopyCat
+    Writable location for packaged apps.
+
+    macOS:  ~/Library/Application Support/CopyCat
+    Windows: %LOCALAPPDATA%\\CopyCat   (fallback: %APPDATA%\\CopyCat)
+    Linux:  ~/.local/share/CopyCat
     """
-    base = pathlib.Path.home() / "Library" / "Application Support" / "CopyCat"
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+    if sys.platform.startswith("win"):
+        base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or str(pathlib.Path.home() / "AppData" / "Local")
+        p = pathlib.Path(base) / "CopyCat"
+    elif sys.platform == "darwin":
+        p = pathlib.Path.home() / "Library" / "Application Support" / "CopyCat"
+    else:
+        p = pathlib.Path(os.getenv("XDG_DATA_HOME") or (pathlib.Path.home() / ".local" / "share")) / "CopyCat"
+
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
 
 
 def ensure_dir(p: pathlib.Path) -> pathlib.Path:
@@ -2037,5 +2050,52 @@ def healthz():
 
 @app.get("/favicon.ico")
 def favicon():
-    # If you ship a favicon in /static, let the browser request it there; this just avoids 404 noise.
+    # If you ship a favicon in /static, let the browser request it there;
+    # this just avoids 404 noise.
     return Response(status_code=204)
+
+
+def _run_dev_server():
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host=os.getenv("HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "8000")),
+        log_level=os.getenv("LOG_LEVEL", "info"),
+        reload=False,  # IMPORTANT inside packaged apps
+    )
+
+def _run_desktop():
+    import threading
+    import time
+    import webview  # pywebview
+
+    # IMPORTANT: this must be an .ico on Windows
+    icon_path = str(resource_path("assets/copycat.ico"))
+
+    def run_server():
+        _run_dev_server()
+
+    t = threading.Thread(target=run_server, daemon=True)
+    t.start()
+    time.sleep(1.0)
+
+    webview.create_window(
+    "CopyCat",
+    "http://127.0.0.1:8000",
+    width=1100,
+    height=780,
+)
+
+    webview.start()
+
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    try:
+        multiprocessing.set_start_method("spawn", force=True)
+    except Exception:
+        pass
+
+    _run_desktop()
