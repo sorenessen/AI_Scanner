@@ -26,3 +26,17 @@ venv*/
 *.dmg
 *.zip
 dmg/
+
+# Windows release artifacts (DO NOT COMMIT)
+release/
+dist_out/
+build_out/
+spec_out/
+
+# PyInstaller caches / misc
+*.spec
+*.toc
+*.log
+
+release/
+
