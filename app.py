@@ -35,9 +35,9 @@ from reportlab.graphics.charts.barcharts import VerticalBarChart
 from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image, PageBreak, KeepTogether
 
 
 # =============================================================================
@@ -960,101 +960,385 @@ def compute_llm_fingerprint(text: str, scan_primary: Dict, stylo: Dict, sigs: Di
 # =============================================================================
 
 def create_pdf_summary(row: dict) -> str:
-    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(row["ts"]))
+    """
+    Generate a polished PDF scan report (ReportLab/Platypus).
+
+    Optional branding assets (drop these into your bundled `assets/` folder):
+      - assets/copycat_logo.png
+      - assets/calypso_logo.png
+
+    If the files don't exist, the report renders without them.
+    """
+    timestamp = row.get("timestamp") or time.strftime("%Y-%m-%d_%H-%M-%S")
     pdf_path = str(REPORTS_DIR / f"scan_summary_{timestamp}.pdf")
 
+    # -------------------------
+    # Helpers
+    # -------------------------
+    def _as_float(v, default=None):
+        try:
+            return float(v)
+        except Exception:
+            return default
 
-    doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+    def _as_int(v, default=None):
+        try:
+            return int(v)
+        except Exception:
+            return default
+
+    def _pct(v, digits=1):
+        f = _as_float(v)
+        return "—" if f is None else f"{f:.{digits}f}%"
+
+    def _num(v, digits=2):
+        f = _as_float(v)
+        return "—" if f is None else f"{f:.{digits}f}"
+
+    def _short_hash(h: str, n: int = 12) -> str:
+        if not h:
+            return "—"
+        h = str(h)
+        return h[:n]
+
+    # Logos (optional)
+    logo_copycat = resource_path(os.path.join("assets", "copycat_logo.png"))
+    logo_calypso = resource_path(os.path.join("assets", "calypso_logo.png"))
+    logos = []
+    for lp in (logo_copycat, logo_calypso):
+        try:
+            if lp and os.path.exists(lp):
+                logos.append(lp)
+        except Exception:
+            pass
+
+    # -------------------------
+    # Document + styles
+    # -------------------------
+    doc = SimpleDocTemplate(
+        pdf_path,
+        pagesize=letter,
+        leftMargin=0.72 * inch,
+        rightMargin=0.72 * inch,
+        topMargin=0.85 * inch,
+        bottomMargin=0.75 * inch,
+        title="CopyCat — AI Text Scan Report",
+        author="CopyCat by Calypso Labs",
+    )
+
     styles = getSampleStyleSheet()
-    story: List = []
+    # Add a few nicer styles without depending on extra fonts
+    styles.add(ParagraphStyle(
+        name="CC_Title",
+        parent=styles["Title"],
+        fontSize=22,
+        leading=26,
+        spaceAfter=8,
+    ))
+    styles.add(ParagraphStyle(
+        name="CC_Subtitle",
+        parent=styles["Normal"],
+        fontSize=10.5,
+        leading=14,
+        textColor=colors.HexColor("#4B5563"),
+        spaceAfter=10,
+    ))
+    styles.add(ParagraphStyle(
+        name="CC_H2",
+        parent=styles["Heading2"],
+        fontSize=13.5,
+        leading=16,
+        spaceBefore=14,
+        spaceAfter=6,
+        textColor=colors.HexColor("#111827"),
+    ))
+    styles.add(ParagraphStyle(
+        name="CC_Small",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor("#374151"),
+    ))
+    styles.add(ParagraphStyle(
+        name="CC_Mono",
+        parent=styles["Normal"],
+        fontName="Courier",
+        fontSize=8.8,
+        leading=11,
+        textColor=colors.HexColor("#111827"),
+    ))
 
-    likelihood_pct = int(float(row["ai_likelihood_calibrated"]) * 100)
-    verdict = (
-        "Almost certainly AI-generated"
-        if likelihood_pct >= 85
-        else "Very likely AI-generated"
-        if likelihood_pct >= 70
-        else "Possibly AI-generated"
-        if likelihood_pct >= 50
-        else "Likely human-written"
-    )
+    # Palette (keep it neutral + "trust blue")
+    C_BG = colors.HexColor("#0B1020")
+    C_BLUE = colors.HexColor("#2563EB")
+    C_BLUE_SOFT = colors.HexColor("#DBEAFE")
+    C_BORDER = colors.HexColor("#E5E7EB")
+    C_TEXT = colors.HexColor("#111827")
+    C_MUTED = colors.HexColor("#6B7280")
 
-    story.append(Paragraph("<b>AI Text Scan Report</b>", styles["Title"]))
-    story.append(Spacer(1, 0.15 * inch))
-    story.append(Paragraph(f"<b>Verdict:</b> {verdict}", styles["Heading2"]))
-    story.append(Paragraph(f"<b>Likelihood:</b> {likelihood_pct}%", styles["Normal"]))
-    story.append(
-        Paragraph(
-            f"<b>Detected style:</b> {row.get('category','other').replace('_',' ')} "
-            f"(conf {int(100 * float(row.get('category_conf', 0)))}%)",
-            styles["Normal"],
-        )
-    )
-    story.append(Paragraph(f"<i>{row.get('category_note','')}</i>", styles["Normal"]))
-    story.append(Spacer(1, 0.15 * inch))
+    # -------------------------
+    # Header/footer (drawn on canvas)
+    # -------------------------
+    report_id = f"scan_summary_{timestamp}"
+    generated_at = time.strftime("%Y-%m-%d %H:%M:%S")
+    text_hash = row.get("text_hash") or row.get("hash") or ""
 
-    data = [
-        ["Metric", "Value"],
-        ["Predictability Score", f"{float(row['overall_score']):.2f}"],
-        ["Top-10 Tokens", f"{float(row['top10_frac']) * 100:.1f}%"],
-        ["Top-100 Tokens", f"{float(row['top100_frac']) * 100:.1f}%"],
-        ["Perplexity", f"{float(row['ppl']):.1f}"],
-        ["Burstiness", f"{float(row['burstiness']):.2f}"],
-        ["Model", str(row["model_name"])],
-        ["Device", str(row["device"])],
-        ["Text Length", f"{int(row['text_len_chars'])} chars / {int(row['text_len_tokens'])} tokens"],
-        ["Tag", row.get("tag") or "(none)"],
+    def _draw_header_footer(c, d):
+        w, h = letter
+        # Top band
+        c.saveState()
+        c.setFillColor(C_BG)
+        c.rect(0, h - 52, w, 52, stroke=0, fill=1)
+
+        # Title in band
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(doc.leftMargin, h - 34, "CopyCat — AI Text Scan Report")
+
+        # Optional tiny logos on the right
+        x_right = w - doc.rightMargin
+        y_logo = h - 45
+        if logos:
+            # Render at most 2, right-aligned
+            size_h = 22
+            gap = 8
+            x = x_right
+            for lp in reversed(logos[:2]):
+                try:
+                    from reportlab.lib.utils import ImageReader
+                    ir = ImageReader(lp)
+                    iw, ih = ir.getSize()
+                    scale = size_h / float(ih)
+                    size_w = iw * scale
+                    x -= size_w
+                    c.drawImage(ir, x, y_logo, width=size_w, height=size_h, mask="auto")
+                    x -= gap
+                except Exception:
+                    pass
+
+        # Footer
+        c.setFillColor(C_MUTED)
+        c.setFont("Helvetica", 8.5)
+        footer_left = f"{report_id}  •  text_hash={_short_hash(text_hash)}"
+        footer_right = f"Generated {generated_at}  •  Page {c.getPageNumber()}"
+        c.drawString(doc.leftMargin, 18, footer_left)
+        c.drawRightString(w - doc.rightMargin, 18, footer_right)
+        c.restoreState()
+
+    # -------------------------
+    # Content
+    # -------------------------
+    # NOTE: the in-memory `row` uses internal keys (e.g. ai_likelihood_calibrated, top10_frac),
+    # while the CSV uses human headers (e.g. "Likelihood %", "Top-10 %"). The PDF supports both.
+    verdict = str(row.get("verdict") or row.get("Verdict") or "").strip()
+    if not verdict:
+        cal = _as_float(row.get("ai_likelihood_calibrated"))
+        if cal is not None:
+            verdict = "Likely AI-generated" if cal >= 0.6 else "Likely human-written"
+
+    # Likelihood: prefer explicit percent, else derive from calibrated 0..1 likelihood
+    likelihood = _as_float(row.get("likelihood_pct") or row.get("likelihood") or row.get("Likelihood %"))
+    if likelihood is None:
+        cal = _as_float(row.get("ai_likelihood_calibrated"))
+        if cal is not None:
+            likelihood = cal * 100.0
+
+    overall = _as_float(row.get("overall_score") or row.get("Predictability Score"))
+
+    # Top-k: accept either percent or fraction (0..1)
+    top10 = _as_float(row.get("top10") or row.get("Top-10 %"))
+    if top10 is None:
+        frac = _as_float(row.get("top10_frac"))
+        if frac is not None:
+            top10 = frac * 100.0
+
+    top100 = _as_float(row.get("top100") or row.get("Top-100 %"))
+    if top100 is None:
+        frac = _as_float(row.get("top100_frac"))
+        if frac is not None:
+            top100 = frac * 100.0
+
+    ppl = _as_float(row.get("ppl") or row.get("Perplexity"))
+    burst = _as_float(row.get("burstiness") or row.get("Burstiness"))
+
+    model_name = row.get("model") or row.get("Model") or row.get("model_name") or row.get("modelName") or "—"
+    device = row.get("device") or row.get("Device") or "—"
+
+    n_chars = _as_int(row.get("chars") or row.get("Chars") or row.get("text_len_chars"))
+    n_tokens = _as_int(row.get("tokens") or row.get("Tokens") or row.get("text_len_tokens"))
+
+    tag = row.get("tag") or row.get("Tag") or ""
+    category = row.get("category") or row.get("Category") or ""
+    category_conf = row.get("category_conf") or row.get("Category Conf")
+    category_note = row.get("category_note") or row.get("Category Note") or ""
+
+    # A small, human-readable interpretation line
+    def _interpret(lh: float | None) -> str:
+        if lh is None:
+            return "Likelihood could not be computed for this scan."
+        if lh >= 85:
+            return "Strong indicators of AI generation."
+        if lh >= 65:
+            return "Moderate indicators of AI generation."
+        if lh >= 45:
+            return "Mixed signal. Could be edited or hybrid."
+        if lh >= 25:
+            return "Leans human, with some AI-like regularity."
+        return "Strong indicators of human-authored text."
+
+    story = []
+
+    # Cover heading
+    story.append(Paragraph("CopyCat — AI Text Scan Report", styles["CC_Title"]))
+    subtitle_bits = [
+        f"<b>Verdict:</b> {verdict}",
+        f"<b>Likelihood:</b> {_pct(likelihood, 1)}",
+        f"<b>Report ID:</b> {report_id}",
     ]
+    story.append(Paragraph(" &nbsp;&nbsp;•&nbsp;&nbsp; ".join(subtitle_bits), styles["CC_Subtitle"]))
 
-    table = Table(data, colWidths=[2.5 * inch, 3.5 * inch])
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-                ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
-            ]
-        )
-    )
-    story.append(table)
-    story.append(Spacer(1, 0.2 * inch))
+    # At-a-glance table
+    at_glance = [
+        ["Likelihood", _pct(likelihood, 1), "Predictability", _num(overall, 2)],
+        ["Top-10 %", _pct(top10, 1), "Top-100 %", _pct(top100, 1)],
+        ["Perplexity", "—" if ppl is None else f"{ppl:.1f}", "Burstiness", _num(burst, 2)],
+        ["Tokens", "—" if n_tokens is None else f"{n_tokens:,}", "Chars", "—" if n_chars is None else f"{n_chars:,}"],
+        ["Model", str(model_name), "Device", str(device)],
+    ]
+    if tag or category:
+        at_glance.append(["Tag", str(tag or "—"), "Category", str(category or "—")])
 
-    story.append(Paragraph("<b>Likelihood Indicator</b>", styles["Heading3"]))
-    bar_color = (
-        colors.red
-        if likelihood_pct >= 85
-        else colors.orange
-        if likelihood_pct >= 60
-        else colors.yellow
-        if likelihood_pct >= 40
-        else colors.green
-    )
-    d = Drawing(420, 40)
-    d.add(Rect(0, 10, 4 * likelihood_pct, 20, fillColor=bar_color))
-    d.add(Rect(0, 10, 400, 20, fillColor=None, strokeColor=colors.black))
-    d.add(String(410, 15, f"{likelihood_pct}%", fontSize=12))
-    story.append(d)
-    story.append(Spacer(1, 0.25 * inch))
+    t = Table(at_glance, colWidths=[1.1*inch, 2.0*inch, 1.2*inch, 2.0*inch])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), C_BLUE_SOFT),
+        ("TEXTCOLOR", (0, 0), (-1, 0), C_TEXT),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
+        ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 0.18 * inch))
 
-    chart = VerticalBarChart()
-    chart.x, chart.y = 50, 30
-    chart.height, chart.width = 150, 400
-    chart.data = [[float(row["top10_frac"]) * 100, float(row["top100_frac"]) * 100, float(row["ppl"]), float(row["burstiness"])]]
-    chart.categoryAxis.categoryNames = ["Top-10 %", "Top-100 %", "Perplexity", "Burstiness"]
-    chart.bars[0].fillColor = colors.darkblue
-    chart.valueAxis.valueMin = 0
-    chart.valueAxis.valueMax = max(100, float(row["ppl"]) + 10)
-    chart.valueAxis.valueStep = 20
+    # Interpretation
+    story.append(Paragraph("Likelihood Indicator", styles["CC_H2"]))
+    story.append(Paragraph(_interpret(likelihood), styles["Normal"]))
 
-    d2 = Drawing(500, 200)
-    d2.add(chart)
-    story.append(d2)
+    # Add calibration / category notes if present
+    notes_bits = []
+    if category:
+        if category_conf is not None and str(category_conf).strip() != "":
+            try:
+                notes_bits.append(f"<b>Category:</b> {category} (conf {float(category_conf):.2f})")
+            except Exception:
+                notes_bits.append(f"<b>Category:</b> {category}")
+        else:
+            notes_bits.append(f"<b>Category:</b> {category}")
+    if category_note:
+        notes_bits.append(f"<b>Note:</b> {str(category_note)}")
 
-    doc.build(story)
+    if notes_bits:
+        story.append(Spacer(1, 0.08 * inch))
+        story.append(Paragraph("<br/>".join(notes_bits), styles["CC_Small"]))
+
+    # Metrics explanation cards
+    story.append(Paragraph("What these metrics mean", styles["CC_H2"]))
+    cards = [
+        ["Predictability Score", "A composite score combining multiple signals. Higher usually means more model-like regularity.", _num(overall, 2)],
+        ["Top-10 %", "Percent of tokens that fell within the model's top-10 predictions. Higher can indicate templated phrasing.", _pct(top10, 1)],
+        ["Top-100 %", "Percent within the model's top-100 predictions. Used with Top-10% to detect “over-confident” runs.", _pct(top100, 1)],
+        ["Perplexity", "Average token surprise. Very low can mean highly predictable / repetitive structure.", "—" if ppl is None else f"{ppl:.1f}"],
+        ["Burstiness", "Variance of surprise across the text. Humans often show rhythm and unevenness.", _num(burst, 2)],
+    ]
+    # 2-column table layout: metric + value, with definition under it
+    card_rows = []
+    for name, desc, value in cards:
+        card_rows.append([
+            Paragraph(f"<b>{name}</b><br/><font color='#6B7280'>" + desc + "</font>", styles["CC_Small"]),
+            Paragraph(f"<b>{value}</b>", styles["Normal"]),
+        ])
+    cards_tbl = Table(card_rows, colWidths=[5.2*inch, 1.1*inch])
+    cards_tbl.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(cards_tbl)
+
+    # Chart: normalized bars
+    story.append(Paragraph("Signal overview", styles["CC_H2"]))
+    try:
+        # Normalize metrics to 0–100 scale for a compact "radar-like" bar
+        # For ppl/burst we use gentle transforms to keep the chart stable.
+        v_top10 = 0 if top10 is None else max(0.0, min(100.0, top10))
+        v_top100 = 0 if top100 is None else max(0.0, min(100.0, top100))
+        v_ppl = 0 if ppl is None else max(0.0, min(100.0, (ppl / 100.0) * 100.0))  # assume ppl ~ 20-120 typical
+        v_burst = 0 if burst is None else max(0.0, min(100.0, burst * 100.0))        # burst usually small-ish
+        data = [[v_top10, v_top100, v_ppl, v_burst]]
+
+        drawing = Drawing(420, 180)
+        drawing.add(Rect(0, 0, 420, 180, fillColor=colors.white, strokeColor=C_BORDER, strokeWidth=1))
+
+        chart = VerticalBarChart()
+        chart.x = 40
+        chart.y = 30
+        chart.height = 120
+        chart.width = 360
+        chart.data = data
+        chart.valueAxis.valueMin = 0
+        chart.valueAxis.valueMax = 100
+        chart.valueAxis.valueStep = 20
+        chart.categoryAxis.categoryNames = ["Top-10 %", "Top-100 %", "Perplexity*", "Burstiness*"]
+        chart.bars[0].fillColor = C_BLUE
+        chart.barLabels.nudge = 7
+        chart.barLabelFormat = "%0.0f"
+        chart.barLabels.fontSize = 8
+        chart.barLabels.fillColor = C_TEXT
+        chart.valueAxis.labels.fontSize = 8
+        chart.categoryAxis.labels.fontSize = 8
+
+        drawing.add(chart)
+        drawing.add(String(42, 10, "*scaled to 0–100 for display", fontSize=7, fillColor=C_MUTED))
+        story.append(drawing)
+    except Exception:
+        # Don't fail report generation over charting
+        story.append(Paragraph("Signal chart unavailable for this run.", styles["CC_Small"]))
+
+    # Raw details
+    story.append(Paragraph("Technical details", styles["CC_H2"]))
+    details = [
+        ["Report ID", report_id],
+        ["Generated", generated_at],
+        ["Text hash", str(text_hash or "—")],
+    ]
+    if row.get("filepath"):
+        details.append(["Input file", str(row.get("filepath"))])
+    det_tbl = Table(details, colWidths=[1.2*inch, 5.1*inch])
+    det_tbl.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
+        ("BACKGROUND", (0, 0), (-1, 0), C_BLUE_SOFT),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(det_tbl)
+
+    doc.build(story, onFirstPage=_draw_header_footer, onLaterPages=_draw_header_footer)
     return pdf_path
 
 
@@ -1097,6 +1381,14 @@ def log_scan_row(row: dict) -> None:
             )
 
         verdict = "Likely AI-generated" if float(row["ai_likelihood_calibrated"]) >= 0.6 else "Likely human-written"
+        # Add convenience keys for the PDF generator (keeps report robust even if internals change)
+        row.setdefault("verdict", verdict)
+        row.setdefault("likelihood_pct", float(row["ai_likelihood_calibrated"]) * 100.0)
+        row.setdefault("top10", float(row.get("top10_frac", 0.0)) * 100.0)
+        row.setdefault("top100", float(row.get("top100_frac", 0.0)) * 100.0)
+        row.setdefault("model", row.get("model_name"))
+        row.setdefault("chars", row.get("text_len_chars"))
+        row.setdefault("tokens", row.get("text_len_tokens"))
         writer.writerow(
             [
                 time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row["ts"])),
