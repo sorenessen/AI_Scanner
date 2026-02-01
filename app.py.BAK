@@ -322,45 +322,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if STATIC_DIR.exists():
+    else:
+    print("[server] WARNING: static directory missing:", str(STATIC_DIR))
+
+
+
 def _resolve_static_dir() -> pathlib.Path:
-    """Resolve where UI static/ assets live in both dev + bundled builds.
-
-    Resolution order:
-      1) $STATIC_DIR (explicit override)
-      2) PyInstaller bundle root via resource_path("static")
-      3) Project checkout next to this file: <repo>/static
-      4) macOS .app bundle: CopyCat.app/Contents/Resources/static
-      5) Legacy fallback: CopyCat.app/Contents/Frameworks/static
+    """Resolve where the packaged UI static/ assets live.
+    We support:
+      - PyInstaller bundle:   <_MEIPASS>/static
+      - Source checkout:     <project>/static
+      - macOS app bundle:    CopyCat.app/Contents/Resources/static
     """
-    env = os.getenv("STATIC_DIR")
-    if env:
-        try:
-            p = pathlib.Path(env)
-            if p.exists() and p.is_dir():
-                return p
-        except Exception:
-            pass
-
     candidates = [
         resource_path("static"),
-        pathlib.Path(__file__).resolve().parent / "static",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Resources" / "static",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Frameworks" / "static",
+        (pathlib.Path(__file__).resolve().parent / "static"),
+        # When running from within a .app, Resources is the common place for data
+        (pathlib.Path(sys.executable).resolve().parent.parent / "Resources" / "static"),
+        (pathlib.Path(sys.executable).resolve().parent.parent / "Frameworks" / "static"),
     ]
     for p in candidates:
         try:
-            if p.exists() and p.is_dir():
+            if p and p.exists() and p.is_dir():
                 return p
         except Exception:
             pass
     return candidates[0]
 
-
 STATIC_DIR = _resolve_static_dir()
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-else:
-    print("[server] WARNING: static directory missing:", str(STATIC_DIR))
+if not STATIC_DIR.exists():
+    print(f"[server] WARNING: static directory missing: {STATIC_DIR}")
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 # =============================================================================
 # Model load (safe)
 # =============================================================================
@@ -2375,23 +2370,10 @@ def demo():
 
 @app.get("/", response_class=HTMLResponse)
 def serve_index():
-    # Prefer bundle root index.html, otherwise try common packaged locations.
-    candidates = [
-        resource_path("index.html"),
-        resource_path("static/index.html"),
-        pathlib.Path(__file__).resolve().parent / "index.html",
-        pathlib.Path(__file__).resolve().parent / "static" / "index.html",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Resources" / "index.html",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Resources" / "static" / "index.html",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Frameworks" / "index.html",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Frameworks" / "static" / "index.html",
-    ]
-    for index_path in candidates:
-        try:
-            if index_path.exists():
-                return index_path.read_text(encoding="utf-8")
-        except Exception:
-            pass
+    # Prefer bundle root index.html, otherwise show a tiny help page.
+    index_path = resource_path("index.html")
+    if index_path.exists():
+        return index_path.read_text(encoding="utf-8")
 
     return """
     <html><head><title>AI Text Scanner</title></head>
