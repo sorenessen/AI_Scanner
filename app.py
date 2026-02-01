@@ -20,6 +20,7 @@ import time
 import uuid
 from statistics import mean, pstdev
 from typing import Dict, List, Optional, Tuple
+from pathlib import Path
 
 import torch
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -75,6 +76,47 @@ def user_data_dir() -> pathlib.Path:
 
 
 
+def user_documents_dir() -> pathlib.Path:
+    """
+    Best-effort 'Documents' directory across macOS + Windows + Linux.
+
+    macOS:    ~/Documents
+    Windows:  %USERPROFILE%\Documents, or OneDrive 'Documents' if redirected
+    Linux:    ~/Documents (fallback if XDG_DOCUMENTS_DIR not available)
+    """
+    # Windows: OneDrive can redirect Documents; prefer it if present.
+    if sys.platform.startswith("win"):
+        userprofile = os.getenv("USERPROFILE") or str(pathlib.Path.home())
+        # Common OneDrive env vars (personal / business)
+        onedrive = (
+            os.getenv("OneDriveCommercial")
+            or os.getenv("OneDrive")
+            or os.getenv("OneDriveConsumer")
+        )
+        candidates = []
+        if onedrive:
+            candidates.append(pathlib.Path(onedrive) / "Documents")
+        candidates.append(pathlib.Path(userprofile) / "Documents")
+        # Fallback: home/Documents
+        candidates.append(pathlib.Path.home() / "Documents")
+        for c in candidates:
+            try:
+                c.mkdir(parents=True, exist_ok=True)
+                return c
+            except Exception:
+                continue
+        return pathlib.Path.home()
+
+    # macOS + Linux
+    docs = pathlib.Path.home() / "Documents"
+    try:
+        docs.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return pathlib.Path.home()
+    return docs
+
+
+
 def ensure_dir(p: pathlib.Path) -> pathlib.Path:
     p.mkdir(parents=True, exist_ok=True)
     return p
@@ -85,7 +127,8 @@ PD_USER_DIR = ensure_dir(APP_DATA_DIR / "pd_fingerprints")
 CENTROIDS_USER_DIR = ensure_dir(APP_DATA_DIR / "model_centroids")
 LOG_PATH = str(APP_DATA_DIR / "scan_logs.csv")
 
-# Bundled read-only resources (optional)
+
+REPORTS_DIR = ensure_dir(user_documents_dir() / "CopyCat" / "Reports")# Bundled read-only resources (optional)
 PD_BUNDLE_DIR = resource_path("pd_fingerprints")
 CENTROIDS_BUNDLE_DIR = resource_path("model_centroids")
 
@@ -918,7 +961,8 @@ def compute_llm_fingerprint(text: str, scan_primary: Dict, stylo: Dict, sigs: Di
 
 def create_pdf_summary(row: dict) -> str:
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(row["ts"]))
-    pdf_path = str(APP_DATA_DIR / f"scan_summary_{timestamp}.pdf")
+    pdf_path = str(REPORTS_DIR / f"scan_summary_{timestamp}.pdf")
+
 
     doc = SimpleDocTemplate(pdf_path, pagesize=letter)
     styles = getSampleStyleSheet()
@@ -1232,6 +1276,7 @@ def get_config():
             "pd_fingerprints": str(PD_FINGERPRINT_DIR),
             "model_centroids": str(MODEL_CENTROID_DIR),
             "scan_log": str(LOG_PATH),
+            "reports_dir": str(REPORTS_DIR),
         },
     }
 
@@ -2039,6 +2084,7 @@ def version():
             "pd_fingerprints": str(PD_FINGERPRINT_DIR),
             "model_centroids": str(MODEL_CENTROID_DIR),
             "scan_log": str(LOG_PATH),
+            "reports_dir": str(REPORTS_DIR),
         },
     }
 
