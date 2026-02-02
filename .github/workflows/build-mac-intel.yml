@@ -6,20 +6,10 @@ on:
 jobs:
   mac_intel:
     runs-on: macos-15-intel
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Show runner arch
-        run: |
-          uname -m
-          sysctl -n hw.optional.arm64 || true
-          python -c "import platform; print(platform.platform()); print(platform.machine())"
-
-      - name: Fail if not Intel runner
-        run: |
-          test "$(uname -m)" = "x86_64"
-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,131 +22,133 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # ---- BUILD (NO SPEC FILE) ----
-      - name: Build app (PyInstaller, no spec)
+      # ---- BUILD (BUILD THE LAUNCHER, NOT app.py) ----
+      - name: Build app (PyInstaller)
         run: |
           rm -rf build dist
+
           python -m PyInstaller --clean --noconfirm \
             --name "CopyCat" \
             --windowed \
             --icon "assets/copycat.icns" \
             --add-data "static:static" \
             --add-data "index.html:." \
-            app.py
+            --add-data "model_centroids:model_centroids" \
+            --add-data "pd_fingerprints:pd_fingerprints" \
+            --add-data "pd_sources:pd_sources" \
+            run_copycat_desktop.py
 
-          echo "---- dist listing ----"
           ls -la dist
-          echo "---- app bundle listing ----"
           ls -la dist/CopyCat.app || true
 
       - name: Verify architecture is Intel
         run: |
-          file dist/CopyCat.app/Contents/MacOS/CopyCat
-          file dist/CopyCat.app/Contents/MacOS/CopyCat | grep -q "x86_64"
+          APP="dist/CopyCat.app/Contents/MacOS/CopyCat"
+          file "$APP"
+          file "$APP" | grep -q "x86_64"
+          lipo -info "$APP" || true
 
       # ---- SIGNING ----
-      - name: Import Developer ID certificate
+      - name: Import Developer ID certificate (P12) into temporary keychain
         env:
           MAC_CERT_P12_B64: ${{ secrets.MAC_CERT_P12_B64 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         run: |
-          set -euo pipefail
-
-          echo "$MAC_CERT_P12_B64" | base64 --decode > cert.p12
+          # Decode base64 using Python (avoids macOS base64 flag differences)
+          python - <<'PY'
+          import os, base64
+          b64 = os.environ.get("MAC_CERT_P12_B64","").strip()
+          if not b64:
+            raise SystemExit("MAC_CERT_P12_B64 secret is empty.")
+          data = base64.b64decode(b64)
+          open("cert.p12","wb").write(data)
+          print("Wrote cert.p12 bytes:", len(data))
+          PY
 
           security create-keychain -p "" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
 
-          # Keep keychain unlocked long enough for the job
-          security set-keychain-settings -lut 21600 build.keychain
-
-          # Import cert + allow codesign to access it
           security import cert.p12 -k build.keychain -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
 
-          # Required so codesign can use the private key non-interactively
+          # Allow codesign to access imported key without prompts
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
 
-      - name: Show signing identities
+          echo "== Available signing identities =="
+          security find-identity -v -p codesigning
+
+      - name: Assert Developer ID identity is present
+        env:
+          CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
         run: |
-          echo "---- signing identities (codesigning) ----"
-          security find-identity -v -p codesigning || true
-          echo "---- keychains ----"
-          security list-keychains -d user || true
-          echo "---- default keychain ----"
-          security default-keychain || true
+          if [ -z "$CODESIGN_IDENTITY" ]; then
+            echo "MAC_CODESIGN_IDENTITY secret is empty."
+            echo "Set it to: Developer ID Application: Soren Essen (282VJ37HVD)"
+            exit 1
+          fi
+
+          security find-identity -v -p codesigning | grep -F "$CODESIGN_IDENTITY" >/dev/null || {
+            echo "Identity not found in keychain: $CODESIGN_IDENTITY"
+            echo "Make sure the P12 contains the Developer ID Application certificate + private key."
+            exit 1
+          }
 
       - name: Codesign app (hardened runtime)
         env:
           CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
         run: |
-          set -euo pipefail
+          codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" dist/CopyCat.app
 
-          echo "Requested identity from secret: ${CODESIGN_IDENTITY:-<empty>}"
-
-          # First: try the identity exactly as provided
-          if [ -n "${CODESIGN_IDENTITY:-}" ]; then
-            echo "Attempting codesign with provided identity..."
-            if codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" dist/CopyCat.app; then
-              echo "✅ Signed with provided identity."
-            else
-              echo "⚠️ Provided identity failed. Will attempt auto-detect Developer ID Application identity."
-            fi
-          fi
-
-          # If not signed yet, auto-detect Developer ID Application identity (most reliable)
-          if ! codesign -dv dist/CopyCat.app >/dev/null 2>&1; then
-            AUTO_IDENTITY=$(
-              security find-identity -v -p codesigning \
-              | awk -F\" '/Developer ID Application/ {print $2; exit}'
-            )
-
-            if [ -z "${AUTO_IDENTITY:-}" ]; then
-              echo "❌ Could not find a 'Developer ID Application' identity in keychain."
-              echo "Available identities were:"
-              security find-identity -v -p codesigning || true
-              exit 1
-            fi
-
-            echo "Auto-selected identity: $AUTO_IDENTITY"
-            codesign --force --deep --options runtime --timestamp --sign "$AUTO_IDENTITY" dist/CopyCat.app
-            echo "✅ Signed with auto-selected identity."
-          fi
-
-          echo "---- verify ----"
+          echo "== codesign verify =="
           codesign --verify --deep --strict --verbose=2 dist/CopyCat.app
+
+          echo "== spctl assess (may warn without notarization) =="
           spctl --assess --type execute --verbose dist/CopyCat.app || true
 
       # ---- DMG ----
       - name: Build DMG
         run: |
-          set -euo pipefail
           rm -rf dmg-stage
           mkdir -p dmg-stage
           cp -R dist/CopyCat.app dmg-stage/
           ln -s /Applications dmg-stage/Applications
-          hdiutil create -volname "CopyCat" -srcfolder dmg-stage -ov -format UDZO CopyCat-mac-x86_64.dmg
+
+          hdiutil create -volname "CopyCat" \
+            -srcfolder dmg-stage \
+            -ov -format UDZO \
+            CopyCat-mac-x86_64.dmg
+
           ls -la CopyCat-mac-x86_64.dmg
 
-      # ---- NOTARIZATION ----
-      # Recommended: App Store Connect API Key (stable for CI)
-      # - name: Notarize DMG + staple
-      #   env:
-      #     AC_KEY_ID: ${{ secrets.AC_KEY_ID }}
-      #     AC_ISSUER_ID: ${{ secrets.AC_ISSUER_ID }}
-      #     AC_P8_B64: ${{ secrets.AC_P8_B64 }}
-      #   run: |
-      #     set -euo pipefail
-      #     echo "$AC_P8_B64" | base64 --decode > AuthKey.p8
-      #     xcrun notarytool submit CopyCat-mac-x86_64.dmg \
-      #       --key AuthKey.p8 \
-      #       --key-id "$AC_KEY_ID" \
-      #       --issuer "$AC_ISSUER_ID" \
-      #       --wait
-      #     xcrun stapler staple CopyCat-mac-x86_64.dmg
-      #     xcrun stapler validate CopyCat-mac-x86_64.dmg
+      # ---- NOTARIZATION (OPTIONAL) ----
+      # Use App Store Connect API Key secrets (recommended for CI):
+      #   AC_KEY_ID, AC_ISSUER_ID, AC_P8_B64
+      #
+      - name: Notarize DMG + staple (API key)
+        if: ${{ secrets.AC_KEY_ID != '' && secrets.AC_ISSUER_ID != '' && secrets.AC_P8_B64 != '' }}
+        env:
+          AC_KEY_ID: ${{ secrets.AC_KEY_ID }}
+          AC_ISSUER_ID: ${{ secrets.AC_ISSUER_ID }}
+          AC_P8_B64: ${{ secrets.AC_P8_B64 }}
+        run: |
+          python - <<'PY'
+          import os, base64
+          b64 = os.environ["AC_P8_B64"].strip()
+          open("AuthKey.p8","wb").write(base64.b64decode(b64))
+          print("Wrote AuthKey.p8")
+          PY
 
-      - name: Upload artifact
+          xcrun notarytool submit CopyCat-mac-x86_64.dmg \
+            --key AuthKey.p8 \
+            --key-id "$AC_KEY_ID" \
+            --issuer "$AC_ISSUER_ID" \
+            --wait
+
+          xcrun stapler staple CopyCat-mac-x86_64.dmg
+          xcrun stapler validate CopyCat-mac-x86_64.dmg
+
+      - name: Upload artifact (DMG)
         uses: actions/upload-artifact@v4
         with:
           name: CopyCat-mac-x86_64-dmg
