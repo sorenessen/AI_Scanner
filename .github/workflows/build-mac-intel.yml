@@ -32,7 +32,10 @@ jobs:
             --add-data "static:static" \
             --add-data "index.html:." \
             app.py
+
+          echo "---- dist listing ----"
           ls -la dist
+          echo "---- app bundle listing ----"
           ls -la dist/CopyCat.app || true
 
       - name: Verify architecture is Intel
@@ -46,25 +49,77 @@ jobs:
           MAC_CERT_P12_B64: ${{ secrets.MAC_CERT_P12_B64 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         run: |
+          set -euo pipefail
+
           echo "$MAC_CERT_P12_B64" | base64 --decode > cert.p12
+
           security create-keychain -p "" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "" build.keychain
+
+          # Keep keychain unlocked long enough for the job
+          security set-keychain-settings -lut 21600 build.keychain
+
+          # Import cert + allow codesign to access it
           security import cert.p12 -k build.keychain -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
+
+          # Required so codesign can use the private key non-interactively
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
-          security find-identity -v -p codesigning
+
+      - name: Show signing identities
+        run: |
+          echo "---- signing identities (codesigning) ----"
+          security find-identity -v -p codesigning || true
+          echo "---- keychains ----"
+          security list-keychains -d user || true
+          echo "---- default keychain ----"
+          security default-keychain || true
 
       - name: Codesign app (hardened runtime)
         env:
           CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
         run: |
-          codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" dist/CopyCat.app
+          set -euo pipefail
+
+          echo "Requested identity from secret: ${CODESIGN_IDENTITY:-<empty>}"
+
+          # First: try the identity exactly as provided
+          if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+            echo "Attempting codesign with provided identity..."
+            if codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" dist/CopyCat.app; then
+              echo "✅ Signed with provided identity."
+            else
+              echo "⚠️ Provided identity failed. Will attempt auto-detect Developer ID Application identity."
+            fi
+          fi
+
+          # If not signed yet, auto-detect Developer ID Application identity (most reliable)
+          if ! codesign -dv dist/CopyCat.app >/dev/null 2>&1; then
+            AUTO_IDENTITY=$(
+              security find-identity -v -p codesigning \
+              | awk -F\" '/Developer ID Application/ {print $2; exit}'
+            )
+
+            if [ -z "${AUTO_IDENTITY:-}" ]; then
+              echo "❌ Could not find a 'Developer ID Application' identity in keychain."
+              echo "Available identities were:"
+              security find-identity -v -p codesigning || true
+              exit 1
+            fi
+
+            echo "Auto-selected identity: $AUTO_IDENTITY"
+            codesign --force --deep --options runtime --timestamp --sign "$AUTO_IDENTITY" dist/CopyCat.app
+            echo "✅ Signed with auto-selected identity."
+          fi
+
+          echo "---- verify ----"
           codesign --verify --deep --strict --verbose=2 dist/CopyCat.app
           spctl --assess --type execute --verbose dist/CopyCat.app || true
 
       # ---- DMG ----
       - name: Build DMG
         run: |
+          set -euo pipefail
           rm -rf dmg-stage
           mkdir -p dmg-stage
           cp -R dist/CopyCat.app dmg-stage/
@@ -80,6 +135,7 @@ jobs:
       #     AC_ISSUER_ID: ${{ secrets.AC_ISSUER_ID }}
       #     AC_P8_B64: ${{ secrets.AC_P8_B64 }}
       #   run: |
+      #     set -euo pipefail
       #     echo "$AC_P8_B64" | base64 --decode > AuthKey.p8
       #     xcrun notarytool submit CopyCat-mac-x86_64.dmg \
       #       --key AuthKey.p8 \
