@@ -117,6 +117,45 @@ def user_documents_dir() -> pathlib.Path:
 
 
 
+
+def reports_output_dir() -> pathlib.Path:
+    """
+    Choose a writable Reports directory for PDF outputs.
+
+    Windows note:
+      Many users keep "CopyCat" under OneDrive root (OneDrive\CopyCat\Reports),
+      while others expect it under Documents (Documents\CopyCat\Reports).
+      We prefer the OneDrive root when available, then fall back to Documents.
+
+    You can override this completely with env var COPYCAT_REPORTS_DIR.
+    """
+    override = os.environ.get("COPYCAT_REPORTS_DIR")
+    if override:
+        try:
+            return ensure_dir(pathlib.Path(override).expanduser())
+        except Exception:
+            # fall through to defaults
+            pass
+
+    docs = user_documents_dir()
+
+    if sys.platform.startswith("win"):
+        # OneDrive root (most common)
+        onedrive = (
+            os.environ.get("OneDriveCommercial")
+            or os.environ.get("OneDriveConsumer")
+            or os.environ.get("OneDrive")
+        )
+        if onedrive:
+            od = pathlib.Path(onedrive)
+            if od.exists():
+                try:
+                    return ensure_dir(od / "CopyCat" / "Reports")
+                except Exception:
+                    pass
+
+    return ensure_dir(docs / "CopyCat" / "Reports")
+
 def ensure_dir(p: pathlib.Path) -> pathlib.Path:
     p.mkdir(parents=True, exist_ok=True)
     return p
@@ -128,7 +167,15 @@ CENTROIDS_USER_DIR = ensure_dir(APP_DATA_DIR / "model_centroids")
 LOG_PATH = str(APP_DATA_DIR / "scan_logs.csv")
 
 
-REPORTS_DIR = ensure_dir(user_documents_dir() / "CopyCat" / "Reports")# Bundled read-only resources (optional)
+REPORTS_DIR = reports_output_dir()
+# --- Diagnostics: print resolved reports directory at startup (helps verify Windows/OneDrive vs Documents)
+try:
+    import logging as _logging
+    _logging.getLogger("copycat").info("Reports dir resolved to: %s", str(REPORTS_DIR))
+except Exception:
+    pass
+print(f"[CopyCat] Reports dir resolved to: {REPORTS_DIR}")
+
 PD_BUNDLE_DIR = resource_path("pd_fingerprints")
 CENTROIDS_BUNDLE_DIR = resource_path("model_centroids")
 
