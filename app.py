@@ -77,7 +77,7 @@ def user_data_dir() -> pathlib.Path:
 
 
 def user_documents_dir() -> pathlib.Path:
-    """
+    r"""
     Best-effort 'Documents' directory across macOS + Windows + Linux.
 
     macOS:    ~/Documents
@@ -119,7 +119,7 @@ def user_documents_dir() -> pathlib.Path:
 
 
 def reports_output_dir() -> pathlib.Path:
-    """
+    r"""
     Choose a writable Reports directory for PDF outputs.
 
     Windows note:
