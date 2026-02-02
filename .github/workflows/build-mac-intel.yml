@@ -1,0 +1,87 @@
+name: build-mac-intel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mac_intel:
+    runs-on: macos-13  # Intel runner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build app (PyInstaller)
+        run: |
+          rm -rf build dist
+          pyinstaller --clean --noconfirm CopyCat.spec
+
+      - name: Verify architecture is Intel
+        run: |
+          file dist/CopyCat.app/Contents/MacOS/CopyCat
+          file dist/CopyCat.app/Contents/MacOS/CopyCat | grep -q "x86_64"
+
+      # ---- SIGNING ----
+      - name: Import Developer ID certificate
+        env:
+          MAC_CERT_P12_B64: ${{ secrets.MAC_CERT_P12_B64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          echo "$MAC_CERT_P12_B64" | base64 --decode > cert.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import cert.p12 -k build.keychain -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+          security find-identity -v -p codesigning
+
+      - name: Codesign app (hardened runtime)
+        env:
+          CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
+        run: |
+          codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" dist/CopyCat.app
+          codesign --verify --deep --strict --verbose=2 dist/CopyCat.app
+          spctl --assess --type execute --verbose dist/CopyCat.app || true
+
+      # ---- DMG ----
+      - name: Build DMG
+        run: |
+          rm -rf dmg-stage
+          mkdir -p dmg-stage
+          cp -R dist/CopyCat.app dmg-stage/
+          ln -s /Applications dmg-stage/Applications
+          hdiutil create -volname "CopyCat" -srcfolder dmg-stage -ov -format UDZO CopyCat-mac-x86_64.dmg
+          ls -la CopyCat-mac-x86_64.dmg
+
+      # ---- NOTARIZATION ----
+      # Recommended: App Store Connect API Key (stable for CI)
+      - name: Notarize DMG + staple
+        env:
+          AC_KEY_ID: ${{ secrets.AC_KEY_ID }}
+          AC_ISSUER_ID: ${{ secrets.AC_ISSUER_ID }}
+          AC_P8_B64: ${{ secrets.AC_P8_B64 }}
+        run: |
+          echo "$AC_P8_B64" | base64 --decode > AuthKey.p8
+          xcrun notarytool submit CopyCat-mac-x86_64.dmg \
+            --key AuthKey.p8 \
+            --key-id "$AC_KEY_ID" \
+            --issuer "$AC_ISSUER_ID" \
+            --wait
+          xcrun stapler staple CopyCat-mac-x86_64.dmg
+          xcrun stapler validate CopyCat-mac-x86_64.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CopyCat-mac-x86_64-dmg
+          path: CopyCat-mac-x86_64.dmg
