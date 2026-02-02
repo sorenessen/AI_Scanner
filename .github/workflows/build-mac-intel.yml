@@ -3,9 +3,6 @@ name: build-mac-intel
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   mac_intel:
     runs-on: macos-15-intel
@@ -13,12 +10,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Show trigger info
-        run: |
-          echo "event: ${{ github.event_name }}"
-          echo "ref:   ${{ github.ref }}"
-          echo "sha:   ${{ github.sha }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,119 +21,35 @@ jobs:
           python -m pip install -U pip
           pip install -r requirements.txt
           pip install pyinstaller
-          python -V
-          pip -V
 
-      # Build the launcher so the desktop boot path matches real usage
-      - name: Build app (PyInstaller)
+      - name: Build Intel App (PyInstaller)
         run: |
           rm -rf build dist
-
           python -m PyInstaller --clean --noconfirm \
             --name "CopyCat" \
             --windowed \
             --icon "assets/copycat.icns" \
             --add-data "static:static" \
             --add-data "index.html:." \
-            --add-data "model_centroids:model_centroids" \
-            --add-data "pd_fingerprints:pd_fingerprints" \
-            --add-data "pd_sources:pd_sources" \
             run_copycat_desktop.py
 
-          ls -la dist
-          test -d dist/CopyCat.app
-
-      - name: Verify architecture is Intel
+      - name: Verify architecture
         run: |
-          APP="dist/CopyCat.app/Contents/MacOS/CopyCat"
-          file "$APP"
-          file "$APP" | grep -q "x86_64"
-          lipo -info "$APP" || true
+          file dist/CopyCat.app/Contents/MacOS/CopyCat
+          file dist/CopyCat.app/Contents/MacOS/CopyCat | grep -q "x86_64"
 
-      # ---- SIGNING ----
-      - name: Import Developer ID certificate (P12) into temporary keychain
-        env:
-          MAC_CERT_P12_B64: ${{ secrets.MAC_CERT_P12_B64 }}
-          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-        run: |
-          python - <<'PY'
-          import os, base64
-          b64 = os.environ.get("MAC_CERT_P12_B64","").strip()
-          if not b64:
-            raise SystemExit("MAC_CERT_P12_B64 secret is empty.")
-          data = base64.b64decode(b64)
-          open("cert.p12","wb").write(data)
-          print("Wrote cert.p12 bytes:", len(data))
-          PY
-
-          security create-keychain -p "" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
-
-          security import cert.p12 -k build.keychain -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
-
-          echo "== identities =="
-          security find-identity -v -p codesigning
-
-      - name: Assert Developer ID identity is present
-        env:
-          CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
-        run: |
-          if [ -z "$CODESIGN_IDENTITY" ]; then
-            echo "MAC_CODESIGN_IDENTITY secret is empty."
-            echo "Set it to: Developer ID Application: Soren Essen (282VJ37HVD)"
-            exit 1
-          fi
-          security find-identity -v -p codesigning | grep -F "$CODESIGN_IDENTITY" >/dev/null || {
-            echo "Identity not found in keychain: $CODESIGN_IDENTITY"
-            exit 1
-          }
-
-        - name: Codesign app (hardened runtime)
-          env:
-            CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
-          run: |
-            set -euo pipefail
-
-            APP="dist/CopyCat.app"
-
-            echo "== Signing embedded dylibs/so first (Frameworks) =="
-            if [ -d "$APP/Contents/Frameworks" ]; then
-              # Sign all native libs before the bundle
-              find "$APP/Contents/Frameworks" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 \
-                | while IFS= read -r -d '' f; do
-                    echo "Signing $f"
-                    /usr/bin/codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$f" || \
-                    /usr/bin/codesign --force --options runtime --sign "$CODESIGN_IDENTITY" --timestamp=none "$f"
-                  done
-            fi
-
-            echo "== Signing main bundle (deep) =="
-            /usr/bin/codesign --force --deep --options runtime --sign "$CODESIGN_IDENTITY" "$APP" || \
-            /usr/bin/codesign --force --deep --options runtime --sign "$CODESIGN_IDENTITY" --timestamp=none "$APP"
-
-            echo "== Verify =="
-            /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP"
-            /usr/sbin/spctl --assess --type execute --verbose "$APP" || true
-
-            echo "== Display signature =="
-            /usr/bin/codesign -dv --verbose=4 "$APP" 2>&1 | head -n 60
-
-
-      # ---- DMG ----
-      - name: Build DMG
+      - name: Build DMG (unsigned)
         run: |
           rm -rf dmg-stage
           mkdir -p dmg-stage
           cp -R dist/CopyCat.app dmg-stage/
           ln -s /Applications dmg-stage/Applications
-          hdiutil create -volname "CopyCat" -srcfolder dmg-stage -ov -format UDZO CopyCat-mac-x86_64.dmg
-          ls -la CopyCat-mac-x86_64.dmg
+          hdiutil create -volname "CopyCat" \
+            -srcfolder dmg-stage \
+            -ov -format UDZO CopyCat-mac-x86_64-UNSIGNED.dmg
 
-      - name: Upload artifact (DMG)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CopyCat-mac-x86_64-dmg
-          path: CopyCat-mac-x86_64.dmg
+          name: CopyCat-mac-x86_64-UNSIGNED
+          path: CopyCat-mac-x86_64-UNSIGNED.dmg
