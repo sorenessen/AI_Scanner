@@ -25,7 +25,7 @@ from pathlib import Path
 import torch
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -408,6 +408,36 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 else:
     print("[server] WARNING: static directory missing:", str(STATIC_DIR))
+
+
+# =============================================================================
+# UI Routes (serve bundled index.html)
+# =============================================================================
+
+def _resolve_ui_html() -> pathlib.Path:
+    """Find index.html in both dev + PyInstaller frozen mode."""
+    p = resource_path("index.html")
+    if p.exists():
+        return p
+    # Fallback: next to this file (dev checkout) or current working dir
+    here = pathlib.Path(__file__).resolve().parent
+    for cand in (here / "index.html", pathlib.Path.cwd() / "index.html"):
+        try:
+            if cand.exists():
+                return cand
+        except Exception:
+            pass
+    return p  # best-effort
+
+@app.get("/ui")
+def ui():
+    p = _resolve_ui_html()
+    if not p.exists():
+        return HTMLResponse(
+            "<h2>CopyCat UI missing</h2><p>index.html was not found/bundled.</p>",
+            status_code=500,
+        )
+    return FileResponse(str(p))
 # =============================================================================
 # Model load (safe)
 # =============================================================================
@@ -2420,35 +2450,9 @@ def demo():
 # Serve UI + misc
 # =============================================================================
 
-@app.get("/", response_class=HTMLResponse)
-def serve_index():
-    # Prefer bundle root index.html, otherwise try common packaged locations.
-    candidates = [
-        resource_path("index.html"),
-        resource_path("static/index.html"),
-        pathlib.Path(__file__).resolve().parent / "index.html",
-        pathlib.Path(__file__).resolve().parent / "static" / "index.html",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Resources" / "index.html",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Resources" / "static" / "index.html",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Frameworks" / "index.html",
-        pathlib.Path(sys.executable).resolve().parent.parent / "Frameworks" / "static" / "index.html",
-    ]
-    for index_path in candidates:
-        try:
-            if index_path.exists():
-                return index_path.read_text(encoding="utf-8")
-        except Exception:
-            pass
-
-    return """
-    <html><head><title>AI Text Scanner</title></head>
-    <body style="font-family: sans-serif; max-width: 720px; margin: 40px;">
-      <h1>AI Text Scanner</h1>
-      <p>POST <code>/scan</code> with JSON {"text": "...", "tag": "optional", "mode":"Balanced|Strict|Academic"}</p>
-      <p>GET <code>/config</code> to view settings; POST <code>/config</code> to change them.</p>
-      <p>GET <code>/demo</code> for sample texts. GET <code>/version</code> for build info.</p>
-    </body></html>
-    """
+@app.get("/")
+def root():
+    return RedirectResponse(url="/ui")
 
 
 @app.get("/version")
