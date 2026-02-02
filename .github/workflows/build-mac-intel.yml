@@ -21,10 +21,19 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build app (PyInstaller)
+      # ---- BUILD (NO SPEC FILE) ----
+      - name: Build app (PyInstaller, no spec)
         run: |
           rm -rf build dist
-          pyinstaller --clean --noconfirm CopyCat.spec
+          python -m PyInstaller --clean --noconfirm \
+            --name "CopyCat" \
+            --windowed \
+            --icon "assets/copycat.icns" \
+            --add-data "static:static" \
+            --add-data "index.html:." \
+            app.py
+          ls -la dist
+          ls -la dist/CopyCat.app || true
 
       - name: Verify architecture is Intel
         run: |
