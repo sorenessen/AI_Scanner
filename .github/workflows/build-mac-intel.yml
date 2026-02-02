@@ -10,6 +10,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Show runner arch
+        run: |
+          uname -m
+          sysctl -n hw.optional.arm64 || true
+          python -c "import platform; print(platform.platform()); print(platform.machine())"
+
+      - name: Fail if not Intel runner
+        run: |
+          test "$(uname -m)" = "x86_64"
+
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
