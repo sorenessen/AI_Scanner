@@ -100,13 +100,36 @@ jobs:
             exit 1
           }
 
-      - name: Codesign app (hardened runtime)
-        env:
-          CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
-        run: |
-          codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" dist/CopyCat.app
-          codesign --verify --deep --strict --verbose=2 dist/CopyCat.app
-          spctl --assess --type execute --verbose dist/CopyCat.app || true
+        - name: Codesign app (hardened runtime)
+          env:
+            CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
+          run: |
+            set -euo pipefail
+
+            APP="dist/CopyCat.app"
+
+            echo "== Signing embedded dylibs/so first (Frameworks) =="
+            if [ -d "$APP/Contents/Frameworks" ]; then
+              # Sign all native libs before the bundle
+              find "$APP/Contents/Frameworks" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 \
+                | while IFS= read -r -d '' f; do
+                    echo "Signing $f"
+                    /usr/bin/codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$f" || \
+                    /usr/bin/codesign --force --options runtime --sign "$CODESIGN_IDENTITY" --timestamp=none "$f"
+                  done
+            fi
+
+            echo "== Signing main bundle (deep) =="
+            /usr/bin/codesign --force --deep --options runtime --sign "$CODESIGN_IDENTITY" "$APP" || \
+            /usr/bin/codesign --force --deep --options runtime --sign "$CODESIGN_IDENTITY" --timestamp=none "$APP"
+
+            echo "== Verify =="
+            /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP"
+            /usr/sbin/spctl --assess --type execute --verbose "$APP" || true
+
+            echo "== Display signature =="
+            /usr/bin/codesign -dv --verbose=4 "$APP" 2>&1 | head -n 60
+
 
       # ---- DMG ----
       - name: Build DMG
