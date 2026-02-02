@@ -2,13 +2,17 @@
 
 
 a = Analysis(
-    ['app.py'],
+    a = Analysis(
+    ['run_copycat_desktop.py'],
     pathex=[],
     binaries=[],
-    datas=[
-         ("static", "static"),
-         ("index.html", "."),
-         ],
+   datas=[
+        ("static", "static"),
+        ("index.html", "."),
+        ("model_centroids", "model_centroids"),
+        ("pd_fingerprints", "pd_fingerprints"),
+        ("pd_sources", "pd_sources"),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

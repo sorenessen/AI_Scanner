@@ -65,20 +65,20 @@ jobs:
 
       # ---- NOTARIZATION ----
       # Recommended: App Store Connect API Key (stable for CI)
-      - name: Notarize DMG + staple
-        env:
-          AC_KEY_ID: ${{ secrets.AC_KEY_ID }}
-          AC_ISSUER_ID: ${{ secrets.AC_ISSUER_ID }}
-          AC_P8_B64: ${{ secrets.AC_P8_B64 }}
-        run: |
-          echo "$AC_P8_B64" | base64 --decode > AuthKey.p8
-          xcrun notarytool submit CopyCat-mac-x86_64.dmg \
-            --key AuthKey.p8 \
-            --key-id "$AC_KEY_ID" \
-            --issuer "$AC_ISSUER_ID" \
-            --wait
-          xcrun stapler staple CopyCat-mac-x86_64.dmg
-          xcrun stapler validate CopyCat-mac-x86_64.dmg
+      # - name: Notarize DMG + staple
+      #   env:
+      #     AC_KEY_ID: ${{ secrets.AC_KEY_ID }}
+      #     AC_ISSUER_ID: ${{ secrets.AC_ISSUER_ID }}
+      #     AC_P8_B64: ${{ secrets.AC_P8_B64 }}
+      #   run: |
+      #     echo "$AC_P8_B64" | base64 --decode > AuthKey.p8
+      #     xcrun notarytool submit CopyCat-mac-x86_64.dmg \
+      #       --key AuthKey.p8 \
+      #       --key-id "$AC_KEY_ID" \
+      #       --issuer "$AC_ISSUER_ID" \
+      #       --wait
+      #     xcrun stapler staple CopyCat-mac-x86_64.dmg
+      #     xcrun stapler validate CopyCat-mac-x86_64.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
