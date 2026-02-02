@@ -3,6 +3,9 @@ name: build-mac-intel
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   mac_intel:
     runs-on: macos-15-intel
@@ -10,6 +13,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Show trigger info
+        run: |
+          echo "event: ${{ github.event_name }}"
+          echo "ref:   ${{ github.ref }}"
+          echo "sha:   ${{ github.sha }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -21,8 +30,10 @@ jobs:
           python -m pip install -U pip
           pip install -r requirements.txt
           pip install pyinstaller
+          python -V
+          pip -V
 
-      # ---- BUILD (BUILD THE LAUNCHER, NOT app.py) ----
+      # Build the launcher so the desktop boot path matches real usage
       - name: Build app (PyInstaller)
         run: |
           rm -rf build dist
@@ -39,7 +50,7 @@ jobs:
             run_copycat_desktop.py
 
           ls -la dist
-          ls -la dist/CopyCat.app || true
+          test -d dist/CopyCat.app
 
       - name: Verify architecture is Intel
         run: |
@@ -54,7 +65,6 @@ jobs:
           MAC_CERT_P12_B64: ${{ secrets.MAC_CERT_P12_B64 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         run: |
-          # Decode base64 using Python (avoids macOS base64 flag differences)
           python - <<'PY'
           import os, base64
           b64 = os.environ.get("MAC_CERT_P12_B64","").strip()
@@ -71,11 +81,9 @@ jobs:
           security set-keychain-settings -t 3600 -u build.keychain
 
           security import cert.p12 -k build.keychain -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
-
-          # Allow codesign to access imported key without prompts
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
 
-          echo "== Available signing identities =="
+          echo "== identities =="
           security find-identity -v -p codesigning
 
       - name: Assert Developer ID identity is present
@@ -87,10 +95,8 @@ jobs:
             echo "Set it to: Developer ID Application: Soren Essen (282VJ37HVD)"
             exit 1
           fi
-
           security find-identity -v -p codesigning | grep -F "$CODESIGN_IDENTITY" >/dev/null || {
             echo "Identity not found in keychain: $CODESIGN_IDENTITY"
-            echo "Make sure the P12 contains the Developer ID Application certificate + private key."
             exit 1
           }
 
@@ -99,11 +105,7 @@ jobs:
           CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
         run: |
           codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" dist/CopyCat.app
-
-          echo "== codesign verify =="
           codesign --verify --deep --strict --verbose=2 dist/CopyCat.app
-
-          echo "== spctl assess (may warn without notarization) =="
           spctl --assess --type execute --verbose dist/CopyCat.app || true
 
       # ---- DMG ----
@@ -113,40 +115,8 @@ jobs:
           mkdir -p dmg-stage
           cp -R dist/CopyCat.app dmg-stage/
           ln -s /Applications dmg-stage/Applications
-
-          hdiutil create -volname "CopyCat" \
-            -srcfolder dmg-stage \
-            -ov -format UDZO \
-            CopyCat-mac-x86_64.dmg
-
+          hdiutil create -volname "CopyCat" -srcfolder dmg-stage -ov -format UDZO CopyCat-mac-x86_64.dmg
           ls -la CopyCat-mac-x86_64.dmg
-
-      # ---- NOTARIZATION (OPTIONAL) ----
-      # Use App Store Connect API Key secrets (recommended for CI):
-      #   AC_KEY_ID, AC_ISSUER_ID, AC_P8_B64
-      #
-      - name: Notarize DMG + staple (API key)
-        if: ${{ secrets.AC_KEY_ID != '' && secrets.AC_ISSUER_ID != '' && secrets.AC_P8_B64 != '' }}
-        env:
-          AC_KEY_ID: ${{ secrets.AC_KEY_ID }}
-          AC_ISSUER_ID: ${{ secrets.AC_ISSUER_ID }}
-          AC_P8_B64: ${{ secrets.AC_P8_B64 }}
-        run: |
-          python - <<'PY'
-          import os, base64
-          b64 = os.environ["AC_P8_B64"].strip()
-          open("AuthKey.p8","wb").write(base64.b64decode(b64))
-          print("Wrote AuthKey.p8")
-          PY
-
-          xcrun notarytool submit CopyCat-mac-x86_64.dmg \
-            --key AuthKey.p8 \
-            --key-id "$AC_KEY_ID" \
-            --issuer "$AC_ISSUER_ID" \
-            --wait
-
-          xcrun stapler staple CopyCat-mac-x86_64.dmg
-          xcrun stapler validate CopyCat-mac-x86_64.dmg
 
       - name: Upload artifact (DMG)
         uses: actions/upload-artifact@v4
