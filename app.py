@@ -172,8 +172,9 @@ REPORTS_DIR = reports_output_dir()
 try:
     import logging as _logging
     _logging.getLogger("copycat").info("Reports dir resolved to: %s", str(REPORTS_DIR))
-except Exception:
-    pass
+except Exception as e:
+    print("LOGO DRAW ERROR:", e)
+
 print(f"[CopyCat] Reports dir resolved to: {REPORTS_DIR}")
 
 PD_BUNDLE_DIR = resource_path("pd_fingerprints")
@@ -1110,9 +1111,29 @@ def create_pdf_summary(row: dict) -> str:
         return h[:n]
 
     # Logos (optional)
-    logo_copycat = resource_path(os.path.join("assets", "copycat_logo.png"))
-    logo_calypso = resource_path(os.path.join("assets", "calypso_logo.png"))
-    logos = []
+    def _resolve_asset(rel_path: str) -> pathlib.Path:
+        # 1) PyInstaller _MEIPASS or next-to-this-file
+        p = resource_path(rel_path)
+        if p.exists():
+            return p
+
+        # 2) macOS .app bundle Resources
+        if sys.platform == "darwin":
+            try:
+                mac_resources = pathlib.Path(sys.executable).resolve().parent.parent / "Resources"
+                p2 = mac_resources / rel_path
+                if p2.exists():
+                    return p2
+            except Exception:
+                pass
+
+        return p
+
+    logo_copycat = _resolve_asset("assets/copycat_logo.png")
+    logo_calypso = _resolve_asset("assets/calypso_logo.png")
+
+    logos = [p for p in (logo_copycat, logo_calypso) if p and p.exists()]
+
     for lp in (logo_copycat, logo_calypso):
         try:
             if lp and os.path.exists(lp):
@@ -1211,10 +1232,11 @@ def create_pdf_summary(row: dict) -> str:
             size_h = 22
             gap = 8
             x = x_right
+
             for lp in reversed(logos[:2]):
                 try:
                     from reportlab.lib.utils import ImageReader
-                    ir = ImageReader(lp)
+                    ir = ImageReader(str(lp))
                     iw, ih = ir.getSize()
                     scale = size_h / float(ih)
                     size_w = iw * scale

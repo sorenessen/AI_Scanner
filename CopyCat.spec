@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['run_copycat_desktop.py'],
+    ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[('static', 'static'), ('index.html', '.'), ('model_centroids', 'model_centroids'), ('pd_fingerprints', 'pd_fingerprints'), ('pd_sources', 'pd_sources')],
+    datas=[('index.html', '.'), ('static', 'static'), ('assets', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -32,7 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets/copycat.icns'],
+    icon=['assets/CopyCat.icns'],
 )
 coll = COLLECT(
     exe,
@@ -46,6 +46,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='CopyCat.app',
-    icon='assets/copycat.icns',
+    icon='assets/CopyCat.icns',
     bundle_identifier=None,
 )
