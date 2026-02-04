@@ -370,6 +370,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
 def _resolve_static_dir() -> pathlib.Path:
     """Resolve where UI static/ assets live in both dev + bundled builds.
 
