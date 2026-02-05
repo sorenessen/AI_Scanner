@@ -1578,7 +1578,251 @@ async function saveConfig(){
   finally{ $("#btnSave").disabled = false; }
 }
 
+
+/* ---------- File upload + scan (UI-only, minimal surface) ---------- */
+async function uploadAndScanFile(file){
+  if (!file) return;
+
+  const statusEl = document.getElementById("uploadStatus");
+  const setUploadStatus = (t)=>{ if(statusEl) statusEl.textContent = t || ""; };
+
+  // Basic allowlist
+  const name = (file.name || "").toLowerCase();
+  const ok = name.endsWith(".txt") || name.endsWith(".pdf") || name.endsWith(".docx");
+  if (!ok){
+    setUploadStatus("Unsupported file type. Use .txt, .pdf, or .docx.");
+    return;
+  }
+
+  const modeVal = document.getElementById("mode")?.value || "";
+  const tagVal  = document.getElementById("tag")?.value?.trim() || "";
+
+  setUploadStatus("Uploading…");
+  document.getElementById("btnUpload")?.setAttribute("disabled","disabled");
+
+  try{
+    const fd = new FormData();
+    fd.append("file", file);
+    // optional metadata (server will ignore if absent)
+    fd.append("mode", modeVal);
+    fd.append("tag", tagVal);
+
+    const resp = await fetch("/scan/file", { method:"POST", body: fd });
+    if(!resp.ok) throw new Error(await resp.text());
+    const r = await resp.json();
+
+    // If backend provided extracted text, populate textarea so the user sees what's being scanned.
+    const extracted = (typeof r._source_text === "string") ? r._source_text : "";
+    if (extracted) {
+      const ta = document.getElementById("text");
+      if (ta) ta.value = extracted;
+    }
+
+    await applyScanResult(r, extracted || "", tagVal, modeVal);
+
+    setUploadStatus("Uploaded.");
+  }catch(e){
+    setUploadStatus("Upload failed: " + (e?.message || String(e)));
+  }finally{
+    document.getElementById("btnUpload")?.removeAttribute("disabled");
+    // clear input so selecting the same file twice still fires change
+    const fi = document.getElementById("fileInput");
+    if (fi) fi.value = "";
+    window.setTimeout(()=>setUploadStatus(""), 2200);
+  }
+}
+
+/* Reuse the same render pipeline as a normal scan */
+async function applyScanResult(r, sourceText, tagVal, modeVal){
+  didScan        = true;
+  lastScanResult = r;
+
+  // Keep a usable source text for drift compare (when available)
+  lastScanText = (sourceText || "").trim();
+
+  renderExplain(r.explain, r);
+  renderFingerprint(r);
+
+  // Drift diagnostics (best-effort)
+  let driftForPanel = null;
+  try {
+    if (lastScanText) {
+      const drift = await driftAnalyze(lastScanText);
+      driftForPanel = drift;
+      renderDrift(drift);
+    } else {
+      renderDrift(null);
+    }
+  } catch (e) {
+    console.warn("Drift diagnostics failed:", e);
+    renderDrift(null);
+  }
+
+  // LLM fingerprint card
+  try { renderLlmFingerprint(r); }
+  catch (e) { console.warn("LLM fingerprint render failed:", e); renderLlmFingerprint(null); }
+
+  // LCARS side panel
+  try { updateLcarsPanel(r, driftForPanel); }
+  catch (e) { console.warn("LCARS panel update failed:", e); }
+
+  const rawBox = document.getElementById("rawDump");
+  if (rawBox) rawBox.textContent = JSON.stringify(r, null, 2);
+  document.getElementById("rawJsonBox")?.removeAttribute("open");
+
+  $("#result").style.display = "block";
+
+  // Probability + verdict
+  setProbFill(r.calibrated_prob || 0);
+  setVerdict(r.verdict || "—");
+
+  const prob = (typeof r.calibrated_prob === "number") ? r.calibrated_prob : null;
+  const pctCenter = $("#probPctCenter");
+  if (pctCenter) pctCenter.textContent = (prob !== null) ? `${Math.round(prob * 100)}% AI` : "—";
+  updateProbDonut(typeof prob === "number" ? prob : 0);
+
+  // Metrics readout
+  const NS = r.nonsense_signals || {};
+  const top10Pct  = Number.isFinite(NS.top10)
+    ? Math.round(NS.top10*100)
+    : (r.bins ? Math.round((r.bins[10]  / Math.max(1,r.total))*100) : null);
+  const top100Pct = Number.isFinite(NS.top100)
+    ? Math.round(NS.top100*100)
+    : (r.bins ? Math.round((r.bins[100] / Math.max(1,r.total))*100) : null);
+
+  $("#top10").textContent   = top10Pct  ?? "—";
+  $("#top100").textContent  = top100Pct ?? "—";
+  $("#ppl").textContent     = (NS.ppl ?? r.ppl ?? 0).toFixed(2);
+  $("#burst").textContent   = (NS.burst ?? r.burstiness ?? 0).toFixed(3);
+  $("#category").textContent = r.category
+    ? `${r.category} (${Math.round((r.category_conf||0)*100)}%)`
+    : "—";
+  $("#modelName").textContent = r.model_name || "—";
+  $("#modeEcho").textContent  = r.mode || modeVal || "—";
+  $("#pdj").textContent       = (r.pd_overlap_j ?? 0).toFixed(3);
+  $("#tagEcho").textContent   = tagVal || "—";
+  $("#explainShort").textContent = shortExplain(r);
+
+  fillTokenTable(r.per_token || []);
+
+  const S = r.stylometry || r.style || r.metrics?.stylometry || r.stats?.stylometry || {};
+  const N2 = r.nonsense_signals || r.nonsense || r.metrics?.nonsense || r.stats?.nonsense || {};
+
+  setTxt("#sty_func",  pickNum(S.func_ratio, S.function_word_ratio, S.funcWordsRatio), 3);
+  setTxt("#sty_hapax", pickNum(S.hapax_ratio, S.hapax, S.hapaxRatio), 3);
+  setTxt("#sty_smean", pickNum(S.sent_mean, S.sentence_mean, S.sentMean), 2);
+  setTxt("#sty_svar",  pickNum(S.sent_var, S.sentence_var, S.sentVar), 2);
+  setTxt("#sty_mlps",  pickNum(S.mlps, S.delta_logp_mean, S.dlogp_mean, S.deltaLogpMean), 4);
+  setTxt("#sty_mlpsv", pickNum(S.mlps_var, S.delta_logp_var, S.dlogp_var, S.deltaLogpVar), 4);
+  setTxt("#sty_pent",  pickNum(S.punct_entropy, S.punctuation_entropy, S.punctEntropy), 3);
+
+  setTxt("#ns_rhyme", pickNum(N2.rhyme_density, N2.rhyme, N2.rhymeDensity), 3);
+  setTxt("#ns_meter", pickNum(N2.meter_cv, N2.meter, N2.meterCV), 3);
+  setTxt("#ns_inv",   pickNum(N2.invented_ratio, N2.invented, N2.inventedRatio), 3);
+  setTxt("#ns_lex",   pickNum(N2.lex_hits, N2.lexHits), 0);
+  setTxt("#ns_sem",   pickNum(N2.semantic_disc, N2.semantic_discontinuity, N2.semanticDisc), 3);
+
+  lastScanMetrics = {
+    func_ratio:    Number(S.func_ratio ?? S.function_word_ratio ?? 0),
+    hapax_ratio:   Number(S.hapax_ratio ?? S.hapax ?? 0),
+    sent_mean:     Number(S.sent_mean ?? S.sentence_mean ?? 0),
+    sent_var:      Number(S.sent_var  ?? S.sentence_var  ?? 0),
+    punct_entropy: Number(S.punct_entropy ?? S.punctuation_entropy ?? 0),
+  };
+
+  $("#btnStartLive").disabled = false;
+  $("#liveInput").disabled    = false;
+  setFinalizeEnabled(true);
+  setExportEnabled(false);
+  setMsg("exportStatus","");
+}
+
 /* Wire */
+
+function initFileUpload() {
+  const fileInput   = document.getElementById("fileInput");
+  const uploadBtn   = document.getElementById("uploadBtn");
+  const uploadStatus= document.getElementById("uploadStatus");
+
+  if (!fileInput || !uploadBtn) return;
+
+  uploadBtn.addEventListener("click", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return alert("Choose a .txt, .pdf, or .docx file first.");
+
+    uploadBtn.disabled = true;
+    if (uploadStatus) uploadStatus.textContent = "Uploading…";
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("mode", document.getElementById("mode")?.value || "Balanced");
+      fd.append("tag",  document.getElementById("tag")?.value?.trim() || "");
+
+      const resp = await fetch("/scan/file", { method: "POST", body: fd });
+
+      const ct = resp.headers.get("content-type") || "";
+      const payload = ct.includes("application/json")
+        ? await resp.json()
+        : { raw: await resp.text(), contentType: ct };
+
+      if (!resp.ok) {
+        if (uploadStatus) uploadStatus.textContent = `Upload failed (${resp.status}).`;
+        console.error("Upload failed:", payload);
+        alert("Upload failed. See console.");
+        return;
+      }
+
+      if (uploadStatus) uploadStatus.textContent = `Scanned: ${file.name}`;
+
+      // Treat it like a normal scan result so everything updates
+      didScan        = true;
+      lastScanResult = payload;
+      lastScanText   = payload.input_text || ""; // if backend returns it; otherwise leave
+
+      // Reuse your existing rendering pipeline
+      renderExplain(payload.explain, payload);
+      renderFingerprint(payload);
+
+      let driftForPanel = null;
+      try {
+        // If backend extracted text and returned it, use that
+        const t = payload.text || payload.input_text || "";
+        if (t.trim()) {
+          driftForPanel = await driftAnalyze(t);
+          renderDrift(driftForPanel);
+        } else {
+          renderDrift(null);
+        }
+      } catch (e) {
+        console.warn("Drift diagnostics failed:", e);
+        renderDrift(null);
+      }
+
+      try { renderLlmFingerprint(payload); } catch(e){ renderLlmFingerprint(null); }
+      try { updateLcarsPanel(payload, driftForPanel); } catch(e){}
+
+      // Update the main result UI like runScan does
+      $("#result").style.display = "block";
+      setProbFill(payload.calibrated_prob || 0);
+      setVerdict(payload.verdict || "—");
+      updateProbDonut(payload.calibrated_prob);
+
+      // If your backend returns report_url/report_file, show it in the UI
+      const rawBox = document.getElementById("rawDump");
+      if (rawBox) rawBox.textContent = JSON.stringify(payload, null, 2);
+      document.getElementById("rawJsonBox")?.removeAttribute("open");
+
+    } catch (e) {
+      console.error(e);
+      if (uploadStatus) uploadStatus.textContent = "Upload error (see console).";
+    } finally {
+      uploadBtn.disabled = false;
+    }
+  });
+}
+
+
 $("#btnScan").addEventListener("click", runScan);
 $("#btnDemo").addEventListener("click", loadDemos);
 $("#btnClear").addEventListener("click", ()=>{
@@ -1615,6 +1859,18 @@ $("#btnFinalize").addEventListener("click", finalizeCompute);
 $("#btnExport").addEventListener("click", copyExport);
 $("#btnDownload").addEventListener("click", downloadExportTxt);
 
+// Upload & scan (file picker)
+const fileInputEl = document.getElementById("fileInput");
+const btnUploadEl = document.getElementById("btnUpload");
+if (btnUploadEl && fileInputEl) {
+  btnUploadEl.addEventListener("click", () => fileInputEl.click());
+  fileInputEl.addEventListener("change", () => {
+    const f = fileInputEl.files && fileInputEl.files[0];
+    if (f) uploadAndScanFile(f);
+  });
+}
+
+
 // Keep HUD updated as you type in Live Verification
 const liveInputEl = document.getElementById("liveInput");
 if (liveInputEl) {
@@ -1631,6 +1887,7 @@ if (liveInputEl) {
   setExportEnabled(false);
   initSmartTooltips();
   initAdvToggleButton();
+  initFileUpload();
 
 })();
 

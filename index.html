@@ -103,14 +103,25 @@
           <input id="tag" type="text" placeholder="e.g., classic, pre-1920, …" />
         </div>
 
+
         <div style="display:flex;align-items:flex-end;gap:10px">
           <div class="help-wrap">
             <button id="btnScan" class="btn">Scan</button>
             <span class="help-dot" tabindex="0"><span class="tip">Send the text to the server and compute detection metrics.</span></span>
           </div>
+
+          <div class="help-wrap upload-cta">
+            <input id="fileInput" type="file" accept=".txt,.pdf,.docx" style="display:none" />
+            <button id="btnUpload" class="btn">Upload &amp; Scan</button>
+            <span class="help-dot" tabindex="0"><span class="tip">Upload a .txt, .pdf, or .docx file and scan the extracted text.</span></span>
+          </div>
+
           <span id="scanStatus" class="muted" aria-live="polite" role="status"></span>
+          <span id="uploadStatus" class="muted" aria-live="polite" role="status"></span>
         </div>
       </div>
+
+      <!-- Upload row (desktop) -->
 
       <!-- Explain + Result -->
       <div id="bandBadge" class="band-badge" aria-live="polite" style="display:none;">

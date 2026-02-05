@@ -2285,6 +2285,7 @@ async def scan_file(
     resp["source_file"] = filename
     resp["source_ext"] = ext
     resp["source_chars"] = len(text)
+    resp["_source_text"] = text
 
     return resp
 

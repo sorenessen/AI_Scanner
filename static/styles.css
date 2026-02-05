@@ -2493,4 +2493,110 @@ html[data-theme="lcars"] #liveDrawer #liveInput {
     0 10px 24px rgba(0,0,0,0.65);
 }
 
+/* Upload block sizing + layout (desktop /ui) */
+.card-tight { padding: 14px 16px; }
+
+.row-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.row-title { font-weight: 800; }
+.row-sub { font-size: 12px; opacity: .75; white-space: nowrap; }
+
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.file-input{
+  flex: 1 1 420px;
+  min-width: 260px;
+  height: 44px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.25);
+  color: rgba(255,255,255,0.92);
+}
+
+.btn.btn-wide{
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+/* Make the native file picker button not microscopic */
+.file-input::-webkit-file-upload-button {
+  height: 32px;
+  padding: 0 12px;
+  margin-right: 10px;
+  border-radius: 999px;
+  border: 0;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* Status line */
+.upload-status { margin-top: 10px; }
+
+/* Small screens: stack nicely */
+@media (max-width: 900px){
+  .row-sub{ display:none; }
+  .file-input{ flex-basis: 100%; min-width: 0; }
+  .btn.btn-wide{ width: 100%; }
+}
+
+/* --- Upload row: make it feel native (desktop) --- */
+.upload-row{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:10px;
+  padding-top:10px;
+  border-top: 1px solid var(--border);
+}
+
+.upload-left{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  min-width: 520px; /* keeps it from collapsing into “tiny” mode */
+}
+
+.upload-title{
+  font-weight:700;
+  opacity:.92;
+  margin-right:2px;
+}
+
+.upload-file{
+  width: 360px;
+  max-width: 44vw; /* responsive-ish */
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.upload-status{
+  opacity:.75;
+  font-size:12px;
+  min-height: 16px;
+}
+
+.upload-cta .btn{
+  min-width: 180px;
+  height: 38px;
+}
+
+/* optional: make the native file control easier to click */
+.upload-file::-webkit-file-upload-button{
+  height: 30px;
+  cursor: pointer;
+}
+
+
+
 </style>
+#uploadStatus{ margin-left:6px; font-size:12px; opacity:.85; }
