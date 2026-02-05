@@ -462,6 +462,11 @@ def ui():
             status_code=500,
         )
     return FileResponse(str(p))
+
+@app.get("/m")
+def mobile_home():
+    return FileResponse("static/mobile/index.html")
+
 # =============================================================================
 # Model load (safe)
 # =============================================================================

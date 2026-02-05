@@ -106,6 +106,16 @@ function renderResults(data) {
   statusEl.classList.add("hidden");
   resultsEl.classList.remove("hidden");
 
+  if (data.source_file) {
+    resultsEl.innerHTML =
+      `<div class="card">
+        <strong>Source</strong><br/>
+        ${escapeHtml(data.source_file)} · ${escapeHtml(data.source_ext || "")}
+        ${data.source_chars ? ` · ${data.source_chars} chars` : ""}
+      </div>` + resultsEl.innerHTML;
+  }
+
+
   const explanation = data.explanation || data.summary || "";
   const aiProb = (typeof data.calibrated_prob === "number") ? data.calibrated_prob : null;
 
@@ -213,6 +223,15 @@ function renderResults(data) {
       alert("Copied!");
     };
   }
+
+  document.getElementById("clearBtn").onclick = () => {
+    textInput.value = "";
+    if (fileInput) fileInput.value = "";
+    resultsEl.classList.add("hidden");
+    resultsEl.innerHTML = "";
+    statusEl.classList.add("hidden");
+    if (uploadStatus) uploadStatus.textContent = "";
+  };
 }
 
 
