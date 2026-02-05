@@ -59,7 +59,7 @@ scanBtn.onclick = async () => {
 
   uploadBtn.onclick = async () => {
     const file = fileInput.files && fileInput.files[0];
-    if (!file) return alert("Choose a .txt file first.");
+    if (!file) return alert("Choose a .txt, .pdf, or .docx file first.");
 
     uploadStatus.textContent = "Uploading…";
 

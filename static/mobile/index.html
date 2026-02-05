@@ -19,12 +19,13 @@
 
     <div class="card" style="margin-top:14px;">
       <div style="font-weight:700; margin-bottom:8px;">Upload a file</div>
-      <input id="fileInput" type="file" accept=".txt" />
+      <input id="fileInput" type="file" accept=".txt,.pdf,.docx" />
+         <div style="opacity:.75;font-size:12px;margin-top:6px;">
+            Supports .txt, .pdf, .docx (max 10MB)
+         </div>
       <button id="uploadBtn" style="margin-top:10px;" class="btn">Upload & Scan</button>
       <div id="uploadStatus" style="margin-top:10px; opacity:.85; font-size:13px;"></div>
     </div>
-
-
 
     <button id="scanBtn">Scan</button>
 

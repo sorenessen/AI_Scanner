@@ -14,6 +14,7 @@ import os
 import pathlib
 import random
 import re
+import io
 import string
 import sys
 import time
@@ -38,6 +39,16 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image, PageBreak, KeepTogether
+
+try:
+    from pypdf import PdfReader
+except Exception:
+    PdfReader = None
+
+try:
+    import docx  # python-docx
+except Exception:
+    docx = None
 
 
 # =============================================================================
@@ -2209,39 +2220,69 @@ async def scan_file(
     mode: str = Form("Balanced"),
     tag: str = Form(""),
 ):
-    # 1) basic type gate
     filename = file.filename or "upload"
     ext = Path(filename).suffix.lower()
 
-    if ext not in (".txt",):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type {ext}. For now upload a .txt file.",
-        )
-
-    # 2) read bytes -> decode text
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    # try utf-8, fall back to latin-1
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        text = raw.decode("latin-1", errors="replace")
+    # Basic size guard (adjust as you like)
+    MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+    if len(raw) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10MB)")
 
-    # normalize a bit
+    text = ""
+
+    if ext == ".txt":
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1", errors="replace")
+
+    elif ext == ".pdf":
+        if PdfReader is None:
+            raise HTTPException(status_code=500, detail="PDF support not installed (pypdf missing)")
+        try:
+            reader = PdfReader(io.BytesIO(raw))
+            parts = []
+            for page in reader.pages:
+                t = page.extract_text() or ""
+                if t.strip():
+                    parts.append(t)
+            text = "\n\n".join(parts)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not read PDF: {e}")
+
+    elif ext == ".docx":
+        if docx is None:
+            raise HTTPException(status_code=500, detail="DOCX support not installed (python-docx missing)")
+        try:
+            d = docx.Document(io.BytesIO(raw))
+            parts = [p.text for p in d.paragraphs if (p.text or "").strip()]
+            text = "\n".join(parts)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not read DOCX: {e}")
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext} (use .txt, .pdf, .docx)")
+
+    # Normalize
     text = re.sub(r"\r\n?", "\n", text).strip()
     if not text:
-        raise HTTPException(status_code=400, detail="No readable text in file")
+        raise HTTPException(status_code=400, detail="No readable text extracted from file")
 
-    # 3) call existing scan route logic by constructing ScanIn
+    # Reuse your existing scan() logic
     inp = ScanIn(text=text, mode=mode, tag=tag)
-    resp = scan(inp)  # reuse your existing /scan function
+    resp = scan(inp)
 
-    # 4) OPTIONAL: include original filename for display
+    # Helpful metadata for UI
     resp["source_file"] = filename
+    resp["source_ext"] = ext
+    resp["source_chars"] = len(text)
+
     return resp
+
 
 
 # =============================================================================
