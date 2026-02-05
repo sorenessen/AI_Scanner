@@ -53,6 +53,45 @@ scanBtn.onclick = async () => {
   }
 };
 
+  const fileInput = document.getElementById("fileInput");
+  const uploadBtn = document.getElementById("uploadBtn");
+  const uploadStatus = document.getElementById("uploadStatus");
+
+  uploadBtn.onclick = async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return alert("Choose a .txt file first.");
+
+    uploadStatus.textContent = "Uploading…";
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      // keep the same flow controls you already use
+      fd.append("mode", "Balanced"); // or read from a selector later
+      fd.append("tag", "");
+
+      const res = await fetch(`/scan/file`, {
+        method: "POST",
+        body: fd,
+      });
+
+      const ct = res.headers.get("content-type") || "";
+      const payload = ct.includes("application/json") ? await res.json() : { raw: await res.text() };
+
+      if (!res.ok) {
+        uploadStatus.textContent = `Upload failed (${res.status}).`;
+        console.error(payload);
+        return;
+      }
+
+      uploadStatus.textContent = `Scanned: ${file.name}`;
+      renderResults(payload);
+    } catch (e) {
+      console.error(e);
+      uploadStatus.textContent = "Upload error (see console).";
+    }
+  };
+
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({
     "&": "&amp;",
@@ -174,7 +213,6 @@ function renderResults(data) {
       alert("Copied!");
     };
   }
-
 }
 
 

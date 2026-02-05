@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -2201,7 +2201,46 @@ def scan(inp: ScanIn):
     except Exception:
         pass
 
+    return resp
 
+@app.post("/scan/file")
+async def scan_file(
+    file: UploadFile = File(...),
+    mode: str = Form("Balanced"),
+    tag: str = Form(""),
+):
+    # 1) basic type gate
+    filename = file.filename or "upload"
+    ext = Path(filename).suffix.lower()
+
+    if ext not in (".txt",):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type {ext}. For now upload a .txt file.",
+        )
+
+    # 2) read bytes -> decode text
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    # try utf-8, fall back to latin-1
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1", errors="replace")
+
+    # normalize a bit
+    text = re.sub(r"\r\n?", "\n", text).strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="No readable text in file")
+
+    # 3) call existing scan route logic by constructing ScanIn
+    inp = ScanIn(text=text, mode=mode, tag=tag)
+    resp = scan(inp)  # reuse your existing /scan function
+
+    # 4) OPTIONAL: include original filename for display
+    resp["source_file"] = filename
     return resp
 
 
