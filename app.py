@@ -374,6 +374,13 @@ from fastapi.staticfiles import StaticFiles
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+app.mount(
+  "/reports",
+  StaticFiles(directory="/Users/sorenessen/Documents/CopyCat/Reports"),
+  name="reports"
+)
+
+
 
 def _resolve_static_dir() -> pathlib.Path:
     """Resolve where UI static/ assets live in both dev + bundled builds.
@@ -2179,6 +2186,21 @@ def scan(inp: ScanIn):
             "notes": ["Explain mode encountered an error."],
             "what_to_fix": [],
         }
+
+     # --- Add report URL for mobile UI (so it can open the generated PDF)
+    try:
+        # match the report naming you already generate
+        report_id = time.strftime("scan_summary_%Y-%m-%d_%H-%M-%S", time.localtime(row["ts"]))
+        pdf_name = f"{report_id}.pdf"
+
+        # only expose the URL if the file exists
+        pdf_path = os.path.join(str(REPORTS_DIR), pdf_name)
+        if os.path.exists(pdf_path):
+            resp["report_file"] = Path(pdf_path).name
+            resp["report_url"] = f"/reports/{resp['report_file']}"
+    except Exception:
+        pass
+
 
     return resp
 

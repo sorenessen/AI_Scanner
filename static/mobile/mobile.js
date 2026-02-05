@@ -139,6 +139,42 @@ function renderResults(data) {
       <pre style="white-space: pre-wrap; margin: 10px 0 0;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
     </details>
   `;
+
+  if (data.report_url) {
+    resultsEl.innerHTML += `
+      <div class="card">
+        <a href="${data.report_url}" target="_blank"
+           style="display:block;text-align:center;
+                  padding:12px;border-radius:8px;
+                  background:#4da3ff;color:black;
+                  font-weight:600;text-decoration:none;">
+          Open PDF Report
+        </a>
+      </div>
+    `;
+  }
+
+  const reportUrl =
+    data.report_url ||
+    (data.report_file ? `/reports/${data.report_file}` : null);
+
+  if (reportUrl) {
+    resultsEl.innerHTML += `... use reportUrl ...`;
+  }
+
+  if (reportUrl) {
+    resultsEl.innerHTML += `
+      <div class="card" style="display:grid; gap:10px;">
+        <a href="${reportUrl}" target="_blank" rel="noopener" style="...">Open PDF Report</a>
+        <button id="copyLinkBtn" style="...">Copy report link</button>
+      </div>
+    `;
+    document.getElementById("copyLinkBtn").onclick = async () => {
+      await navigator.clipboard.writeText(location.origin + reportUrl);
+      alert("Copied!");
+    };
+  }
+
 }
 
 
