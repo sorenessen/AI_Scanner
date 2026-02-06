@@ -33,12 +33,19 @@ need "$ASSETS_DIR/calypso_logo.png"
 
 # --- venv (optional)
 if [[ -f ".venv/bin/activate" ]]; then
-  # shellcheck disable=SC1091
   source ".venv/bin/activate"
   blue "[build] activated .venv"
 else
-  blue "[build] .venv not found, continuing (assuming env already active)"
+  red "[error] .venv not found. Create it first."
+  exit 1
 fi
+
+PYVER="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+if [[ "$PYVER" != "3.11" ]]; then
+  red "[error] build requires Python 3.11.x in .venv (found $PYVER)"
+  exit 1
+fi
+
 
 # --- clean
 blue "[build] cleaning build/dist..."
@@ -50,10 +57,18 @@ python -m PyInstaller --noconfirm --clean \
   --windowed \
   --name "$APP_NAME" \
   --icon "$ICON_PATH" \
+  --collect-submodules numpy \
+  --collect-binaries numpy \
+  --collect-data numpy \
+  --hidden-import numpy.core._multiarray_umath \
+  --hidden-import numpy._core._multiarray_umath \
+  --collect-all torch \
   --add-data "$UI_HTML:." \
   --add-data "$STATIC_DIR:$STATIC_DIR" \
   --add-data "$ASSETS_DIR:$ASSETS_DIR" \
   "$ENTRYPOINT"
+
+
 
 # --- verify output
 APP_BUNDLE="dist/${APP_NAME}.app"
@@ -67,6 +82,26 @@ blue "[build] verifying bundle contents..."
 need "$APP_BUNDLE/Contents/Resources/index.html"
 need "$APP_BUNDLE/Contents/Resources/assets/copycat_logo.png"
 need "$APP_BUNDLE/Contents/Resources/assets/calypso_logo.png"
+
+blue "[build] forcing macOS bundle icon keys..."
+
+PLIST="$APP_BUNDLE/Contents/Info.plist"
+RES="$APP_BUNDLE/Contents/Resources"
+
+# Put a known icon file in Resources
+cp -f "$ICON_PATH" "$RES/CopyCat.icns"
+
+# Ensure Info.plist points at it (no extension in CFBundleIconFile)
+ /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile CopyCat" "$PLIST" 2>/dev/null \
+|| /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string CopyCat" "$PLIST"
+
+# Optional but helps caching a LOT — keep it stable:
+ /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.calypso-labs.copycat" "$PLIST" 2>/dev/null \
+|| /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.calypso-labs.copycat" "$PLIST"
+
+# Touch so Finder/Dock notices
+touch "$APP_BUNDLE" "$PLIST" "$RES/CopyCat.icns"
+
 
 green "[ok] build complete: $APP_BUNDLE"
 green "[ok] logos + UI assets present"

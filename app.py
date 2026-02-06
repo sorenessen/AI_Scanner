@@ -3,30 +3,31 @@
 
 from __future__ import annotations
 
-import multiprocessing
-
 import csv
 import glob
 import hashlib
+import io
 import json
 import math
+import multiprocessing
 import os
 import pathlib
 import random
 import re
-import io
 import string
 import sys
 import time
 import uuid
+import platform
+import socket
+from pathlib import Path
 from statistics import mean, pstdev
 from typing import Dict, List, Optional, Tuple
-from pathlib import Path
 
 import torch
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, Form
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -36,9 +37,9 @@ from reportlab.graphics.charts.barcharts import VerticalBarChart
 from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image, PageBreak, KeepTogether
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 try:
     from pypdf import PdfReader
@@ -66,6 +67,11 @@ def resource_path(rel: str) -> pathlib.Path:
     return base / rel
 
 
+def ensure_dir(p: pathlib.Path) -> pathlib.Path:
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def user_data_dir() -> pathlib.Path:
     """
     Writable location for packaged apps.
@@ -82,9 +88,7 @@ def user_data_dir() -> pathlib.Path:
     else:
         p = pathlib.Path(os.getenv("XDG_DATA_HOME") or (pathlib.Path.home() / ".local" / "share")) / "CopyCat"
 
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
+    return ensure_dir(p)
 
 
 def user_documents_dir() -> pathlib.Path:
@@ -95,38 +99,29 @@ def user_documents_dir() -> pathlib.Path:
     Windows:  %USERPROFILE%\Documents, or OneDrive 'Documents' if redirected
     Linux:    ~/Documents (fallback if XDG_DOCUMENTS_DIR not available)
     """
-    # Windows: OneDrive can redirect Documents; prefer it if present.
     if sys.platform.startswith("win"):
         userprofile = os.getenv("USERPROFILE") or str(pathlib.Path.home())
-        # Common OneDrive env vars (personal / business)
-        onedrive = (
-            os.getenv("OneDriveCommercial")
-            or os.getenv("OneDrive")
-            or os.getenv("OneDriveConsumer")
-        )
-        candidates = []
+        onedrive = os.getenv("OneDriveCommercial") or os.getenv("OneDrive") or os.getenv("OneDriveConsumer")
+
+        candidates: List[pathlib.Path] = []
         if onedrive:
             candidates.append(pathlib.Path(onedrive) / "Documents")
         candidates.append(pathlib.Path(userprofile) / "Documents")
-        # Fallback: home/Documents
         candidates.append(pathlib.Path.home() / "Documents")
+
         for c in candidates:
             try:
-                c.mkdir(parents=True, exist_ok=True)
-                return c
+                return ensure_dir(c)
             except Exception:
                 continue
+
         return pathlib.Path.home()
 
-    # macOS + Linux
     docs = pathlib.Path.home() / "Documents"
     try:
-        docs.mkdir(parents=True, exist_ok=True)
+        return ensure_dir(docs)
     except Exception:
         return pathlib.Path.home()
-    return docs
-
-
 
 
 def reports_output_dir() -> pathlib.Path:
@@ -145,18 +140,12 @@ def reports_output_dir() -> pathlib.Path:
         try:
             return ensure_dir(pathlib.Path(override).expanduser())
         except Exception:
-            # fall through to defaults
             pass
 
     docs = user_documents_dir()
 
     if sys.platform.startswith("win"):
-        # OneDrive root (most common)
-        onedrive = (
-            os.environ.get("OneDriveCommercial")
-            or os.environ.get("OneDriveConsumer")
-            or os.environ.get("OneDrive")
-        )
+        onedrive = os.environ.get("OneDriveCommercial") or os.environ.get("OneDriveConsumer") or os.environ.get("OneDrive")
         if onedrive:
             od = pathlib.Path(onedrive)
             if od.exists():
@@ -167,31 +156,18 @@ def reports_output_dir() -> pathlib.Path:
 
     return ensure_dir(docs / "CopyCat" / "Reports")
 
-def ensure_dir(p: pathlib.Path) -> pathlib.Path:
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
 
 APP_DATA_DIR = user_data_dir()
 PD_USER_DIR = ensure_dir(APP_DATA_DIR / "pd_fingerprints")
 CENTROIDS_USER_DIR = ensure_dir(APP_DATA_DIR / "model_centroids")
 LOG_PATH = str(APP_DATA_DIR / "scan_logs.csv")
 
-
 REPORTS_DIR = reports_output_dir()
-# --- Diagnostics: print resolved reports directory at startup (helps verify Windows/OneDrive vs Documents)
-try:
-    import logging as _logging
-    _logging.getLogger("copycat").info("Reports dir resolved to: %s", str(REPORTS_DIR))
-except Exception as e:
-    print("LOGO DRAW ERROR:", e)
-
 print(f"[CopyCat] Reports dir resolved to: {REPORTS_DIR}")
 
 PD_BUNDLE_DIR = resource_path("pd_fingerprints")
 CENTROIDS_BUNDLE_DIR = resource_path("model_centroids")
 
-# Optional env overrides (still should be writable if you expect uploads)
 PD_FINGERPRINT_DIR = pathlib.Path(os.getenv("PD_FINGERPRINT_DIR") or str(PD_USER_DIR))
 MODEL_CENTROID_DIR = pathlib.Path(os.getenv("MODEL_CENTROID_DIR") or str(CENTROIDS_USER_DIR))
 ensure_dir(PD_FINGERPRINT_DIR)
@@ -213,7 +189,6 @@ within between about above below through across against because therefore
 said says say asked replied
 """.split())
 
-# (Optional) live verification scratch state
 LAST_SCAN_STYLO: Optional[Dict[str, float]] = None
 LAST_SCAN_META: Optional[Dict[str, float]] = None
 
@@ -284,11 +259,9 @@ MAX_TOKENS_PER_PASS = int(os.getenv("MAX_TOKENS_PER_PASS", "768"))
 STRIDE = int(os.getenv("STRIDE", "128"))
 USE_FP16 = os.getenv("USE_FP16", "1") == "1"
 
-# Confidence + abstain
 ABSTAIN_LOW_DEF = float(os.getenv("ABSTAIN_LOW", "0.35"))
 ABSTAIN_HIGH_DEF = float(os.getenv("ABSTAIN_HIGH", "0.65"))
 
-# Hardening
 MIN_TOKENS_STRONG_DEF = int(os.getenv("MIN_TOKENS_STRONG", "180"))
 SHORT_CAP_DEF = (os.getenv("SHORT_CAP", "0") == "1")
 MAX_CONF_SHORT_DEF = float(os.getenv("MAX_CONF_SHORT", "0.35"))
@@ -303,12 +276,10 @@ DEFAULT_MODE = os.getenv("MODE", "Balanced").strip().title()
 if DEFAULT_MODE not in ("Balanced", "Strict", "Academic"):
     DEFAULT_MODE = "Balanced"
 
-# Public-domain statistical dampener
 PD_NGRAM_N = int(os.getenv("PD_NGRAM_N", "5"))
 PD_DAMP_THRESHOLD = float(os.getenv("PD_DAMP_THRESHOLD", "0.12"))
 PD_MAX_CONF = float(os.getenv("PD_MAX_CONF", "0.25"))
 
-# PDF logging
 ENABLE_PDF = os.getenv("ENABLE_PDF", "1") == "1"
 
 
@@ -369,7 +340,7 @@ DTYPE = torch.float16 if (USE_FP16 and (DEVICE.type in {"cuda", "mps"})) else to
 
 
 # =============================================================================
-# App + CORS + Static
+# App + CORS + Static + Reports
 # =============================================================================
 
 app = FastAPI(title="AI Text Scanner (Pattern Classic + Nonsense + Ensemble)")
@@ -381,20 +352,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from fastapi.staticfiles import StaticFiles
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-app.mount(
-  "/reports",
-  StaticFiles(directory="/Users/sorenessen/Documents/CopyCat/Reports"),
-  name="reports"
-)
-
-
 
 def _resolve_static_dir() -> pathlib.Path:
-    """Resolve where UI static/ assets live in both dev + bundled builds.
+    """Resolve where UI static/assets live in both dev + bundled builds.
 
     Resolution order:
       1) $STATIC_DIR (explicit override)
@@ -433,25 +393,68 @@ if STATIC_DIR.exists():
 else:
     print("[server] WARNING: static directory missing:", str(STATIC_DIR))
 
+# Serve generated PDFs from the real REPORTS_DIR (no hardcoded user path)
+app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
+
 
 # =============================================================================
 # UI Routes (serve bundled index.html)
 # =============================================================================
 
 def _resolve_ui_html() -> pathlib.Path:
-    """Find index.html in both dev + PyInstaller frozen mode."""
+    """Find index.html in both dev + PyInstaller frozen mode.
+
+    Where we look:
+      1) $UI_HTML (explicit override)
+      2) PyInstaller bundle root via resource_path("index.html")
+      3) macOS/Windows/Linux frozen app resources (../Resources/index.html)
+      4) next to this source file (dev checkout)
+      5) current working directory (dev)
+      6) common alternative: static/index.html
+    """
+    env = os.getenv("UI_HTML")
+    if env:
+        try:
+            p = pathlib.Path(env).expanduser()
+            if p.exists():
+                return p
+        except Exception:
+            pass
+
     p = resource_path("index.html")
     if p.exists():
         return p
-    # Fallback: next to this file (dev checkout) or current working dir
-    here = pathlib.Path(__file__).resolve().parent
-    for cand in (here / "index.html", pathlib.Path.cwd() / "index.html"):
-        try:
+
+    # Frozen app: <exe>/../Resources/index.html (macOS) or similar layout
+    try:
+        exe = pathlib.Path(sys.executable).resolve()
+        resources = exe.parent.parent / "Resources"
+        for cand in (
+            resources / "index.html",
+            resources / "static" / "index.html",
+            resources / "ui" / "index.html",
+        ):
             if cand.exists():
                 return cand
-        except Exception:
-            pass
+    except Exception:
+        pass
+
+    # Dev checkout / fallback
+    try:
+        here = pathlib.Path(__file__).resolve().parent
+        for cand in (
+            here / "index.html",
+            here / "static" / "index.html",
+            pathlib.Path.cwd() / "index.html",
+            pathlib.Path.cwd() / "static" / "index.html",
+        ):
+            if cand.exists():
+                return cand
+    except Exception:
+        pass
+
     return p  # best-effort
+
 
 @app.get("/ui")
 def ui():
@@ -463,9 +466,18 @@ def ui():
         )
     return FileResponse(str(p))
 
+
 @app.get("/m")
 def mobile_home():
-    return FileResponse("static/mobile/index.html")
+    p = STATIC_DIR / "mobile" / "index.html"
+    if p.exists():
+        return FileResponse(str(p))
+    # fallback (dev)
+    p2 = pathlib.Path("static/mobile/index.html")
+    if p2.exists():
+        return FileResponse(str(p2))
+    return HTMLResponse("<h3>Mobile UI missing</h3>", status_code=500)
+
 
 # =============================================================================
 # Model load (safe)
@@ -480,10 +492,6 @@ SECONDARY_READY = False
 SECOND_MODEL = SECOND_MODEL_ENV
 
 print("[server] loading model(s)...")
-
-SECONDARY_READY = False
-model2 = None
-tokenizer2 = None
 
 try:
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -532,7 +540,6 @@ try:
 except Exception as e:
     model_load_error = str(e)
     print("[server] FAILED TO LOAD MODEL:", model_load_error)
-
 
 
 # =============================================================================
@@ -688,7 +695,6 @@ def chunked_scan_primary(text: str) -> Dict:
 def chunked_scan_secondary(text: str) -> Optional[Dict]:
     if not (SECONDARY_READY and model2 is not None and tokenizer2 is not None):
         return None
-    # keep it cheaper for distil/tiny models
     max_tokens = min(MAX_TOKENS_PER_PASS, 512)
     return _chunked_scan_with(
         model2,
@@ -914,7 +920,6 @@ def _load_pd_fingerprints() -> List[Dict]:
     fps: List[Dict] = []
     seen = set()
 
-    # Prefer writable dir first, then bundle dir (bundle is read-only in .app)
     search_dirs: List[pathlib.Path] = []
     if PD_FINGERPRINT_DIR:
         search_dirs.append(PD_FINGERPRINT_DIR)
@@ -980,7 +985,6 @@ FPRINT_MIN_TOKENS = int(os.getenv("FPRINT_MIN_TOKENS", "180"))
 def _load_model_centroids() -> List[Dict]:
     cents: List[Dict] = []
 
-    # Prefer writable dir first, then bundle dir
     search_dirs: List[pathlib.Path] = [MODEL_CENTROID_DIR]
     if CENTROIDS_BUNDLE_DIR.exists() and CENTROIDS_BUNDLE_DIR != MODEL_CENTROID_DIR:
         search_dirs.append(CENTROIDS_BUNDLE_DIR)
@@ -1031,9 +1035,6 @@ def _softmax(xs: List[float]) -> List[float]:
 
 
 def _style_vector(text: str, scan_primary: Dict, stylo: Dict, sigs: Dict) -> List[float]:
-    """
-    Fixed-length 12D vector. Keep order/length stable across releases.
-    """
     total = max(1, int(scan_primary.get("total", 0)))
     bins = scan_primary.get("bins", {10: 0, 100: 0, 1000: 0, "rest": 0})
     frac10 = float(bins.get(10, 0)) / total
@@ -1098,20 +1099,22 @@ def compute_llm_fingerprint(text: str, scan_primary: Dict, stylo: Dict, sigs: Di
 
 def create_pdf_summary(row: dict) -> str:
     """
-    Generate a polished PDF scan report (ReportLab/Platypus).
+    Generate a polished PDF scan report (ReportLab).
 
-    Optional branding assets (drop these into your bundled `assets/` folder):
+    Optional branding assets (bundle into `assets/`):
       - assets/copycat_logo.png
       - assets/calypso_logo.png
 
-    If the files don't exist, the report renders without them.
+    If missing, the report renders without them.
     """
-    timestamp = row.get("timestamp") or time.strftime("%Y-%m-%d_%H-%M-%S")
+    ts = row.get("ts")
+    if isinstance(ts, (int, float)):
+        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(int(ts)))
+    else:
+        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+
     pdf_path = str(REPORTS_DIR / f"scan_summary_{timestamp}.pdf")
 
-    # -------------------------
-    # Helpers
-    # -------------------------
     def _as_float(v, default=None):
         try:
             return float(v)
@@ -1138,14 +1141,10 @@ def create_pdf_summary(row: dict) -> str:
         h = str(h)
         return h[:n]
 
-    # Logos (optional)
     def _resolve_asset(rel_path: str) -> pathlib.Path:
-        # 1) PyInstaller _MEIPASS or next-to-this-file
         p = resource_path(rel_path)
         if p.exists():
             return p
-
-        # 2) macOS .app bundle Resources
         if sys.platform == "darwin":
             try:
                 mac_resources = pathlib.Path(sys.executable).resolve().parent.parent / "Resources"
@@ -1154,24 +1153,12 @@ def create_pdf_summary(row: dict) -> str:
                     return p2
             except Exception:
                 pass
-
         return p
 
     logo_copycat = _resolve_asset("assets/copycat_logo.png")
     logo_calypso = _resolve_asset("assets/calypso_logo.png")
-
     logos = [p for p in (logo_copycat, logo_calypso) if p and p.exists()]
 
-    for lp in (logo_copycat, logo_calypso):
-        try:
-            if lp and os.path.exists(lp):
-                logos.append(lp)
-        except Exception:
-            pass
-
-    # -------------------------
-    # Document + styles
-    # -------------------------
     doc = SimpleDocTemplate(
         pdf_path,
         pagesize=letter,
@@ -1184,48 +1171,30 @@ def create_pdf_summary(row: dict) -> str:
     )
 
     styles = getSampleStyleSheet()
-    # Add a few nicer styles without depending on extra fonts
-    styles.add(ParagraphStyle(
-        name="CC_Title",
-        parent=styles["Title"],
-        fontSize=22,
-        leading=26,
-        spaceAfter=8,
-    ))
-    styles.add(ParagraphStyle(
-        name="CC_Subtitle",
-        parent=styles["Normal"],
-        fontSize=10.5,
-        leading=14,
-        textColor=colors.HexColor("#4B5563"),
-        spaceAfter=10,
-    ))
-    styles.add(ParagraphStyle(
-        name="CC_H2",
-        parent=styles["Heading2"],
-        fontSize=13.5,
-        leading=16,
-        spaceBefore=14,
-        spaceAfter=6,
-        textColor=colors.HexColor("#111827"),
-    ))
-    styles.add(ParagraphStyle(
-        name="CC_Small",
-        parent=styles["Normal"],
-        fontSize=9,
-        leading=12,
-        textColor=colors.HexColor("#374151"),
-    ))
-    styles.add(ParagraphStyle(
-        name="CC_Mono",
-        parent=styles["Normal"],
-        fontName="Courier",
-        fontSize=8.8,
-        leading=11,
-        textColor=colors.HexColor("#111827"),
-    ))
+    styles.add(ParagraphStyle(name="CC_Title", parent=styles["Title"], fontSize=22, leading=26, spaceAfter=8))
+    styles.add(
+        ParagraphStyle(
+            name="CC_Subtitle",
+            parent=styles["Normal"],
+            fontSize=10.5,
+            leading=14,
+            textColor=colors.HexColor("#4B5563"),
+            spaceAfter=10,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="CC_H2",
+            parent=styles["Heading2"],
+            fontSize=13.5,
+            leading=16,
+            spaceBefore=14,
+            spaceAfter=6,
+            textColor=colors.HexColor("#111827"),
+        )
+    )
+    styles.add(ParagraphStyle(name="CC_Small", parent=styles["Normal"], fontSize=9, leading=12, textColor=colors.HexColor("#374151")))
 
-    # Palette (keep it neutral + "trust blue")
     C_BG = colors.HexColor("#0B1020")
     C_BLUE = colors.HexColor("#2563EB")
     C_BLUE_SOFT = colors.HexColor("#DBEAFE")
@@ -1233,34 +1202,26 @@ def create_pdf_summary(row: dict) -> str:
     C_TEXT = colors.HexColor("#111827")
     C_MUTED = colors.HexColor("#6B7280")
 
-    # -------------------------
-    # Header/footer (drawn on canvas)
-    # -------------------------
     report_id = f"scan_summary_{timestamp}"
     generated_at = time.strftime("%Y-%m-%d %H:%M:%S")
-    text_hash = row.get("text_hash") or row.get("hash") or ""
+    text_hash = row.get("text_hash") or row.get("hash") or row.get("text_sha256") or ""
 
     def _draw_header_footer(c, d):
         w, h = letter
-        # Top band
         c.saveState()
         c.setFillColor(C_BG)
         c.rect(0, h - 52, w, 52, stroke=0, fill=1)
 
-        # Title in band
         c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 12)
         c.drawString(doc.leftMargin, h - 34, "CopyCat — AI Text Scan Report")
 
-        # Optional tiny logos on the right
         x_right = w - doc.rightMargin
         y_logo = h - 45
         if logos:
-            # Render at most 2, right-aligned
             size_h = 22
             gap = 8
             x = x_right
-
             for lp in reversed(logos[:2]):
                 try:
                     from reportlab.lib.utils import ImageReader
@@ -1274,7 +1235,6 @@ def create_pdf_summary(row: dict) -> str:
                 except Exception:
                     pass
 
-        # Footer
         c.setFillColor(C_MUTED)
         c.setFont("Helvetica", 8.5)
         footer_left = f"{report_id}  •  text_hash={_short_hash(text_hash)}"
@@ -1283,18 +1243,12 @@ def create_pdf_summary(row: dict) -> str:
         c.drawRightString(w - doc.rightMargin, 18, footer_right)
         c.restoreState()
 
-    # -------------------------
-    # Content
-    # -------------------------
-    # NOTE: the in-memory `row` uses internal keys (e.g. ai_likelihood_calibrated, top10_frac),
-    # while the CSV uses human headers (e.g. "Likelihood %", "Top-10 %"). The PDF supports both.
     verdict = str(row.get("verdict") or row.get("Verdict") or "").strip()
     if not verdict:
         cal = _as_float(row.get("ai_likelihood_calibrated"))
         if cal is not None:
             verdict = "Likely AI-generated" if cal >= 0.6 else "Likely human-written"
 
-    # Likelihood: prefer explicit percent, else derive from calibrated 0..1 likelihood
     likelihood = _as_float(row.get("likelihood_pct") or row.get("likelihood") or row.get("Likelihood %"))
     if likelihood is None:
         cal = _as_float(row.get("ai_likelihood_calibrated"))
@@ -1303,7 +1257,6 @@ def create_pdf_summary(row: dict) -> str:
 
     overall = _as_float(row.get("overall_score") or row.get("Predictability Score"))
 
-    # Top-k: accept either percent or fraction (0..1)
     top10 = _as_float(row.get("top10") or row.get("Top-10 %"))
     if top10 is None:
         frac = _as_float(row.get("top10_frac"))
@@ -1330,7 +1283,6 @@ def create_pdf_summary(row: dict) -> str:
     category_conf = row.get("category_conf") or row.get("Category Conf")
     category_note = row.get("category_note") or row.get("Category Note") or ""
 
-    # A small, human-readable interpretation line
     def _interpret(lh: float | None) -> str:
         if lh is None:
             return "Likelihood could not be computed for this scan."
@@ -1345,17 +1297,10 @@ def create_pdf_summary(row: dict) -> str:
         return "Strong indicators of human-authored text."
 
     story = []
-
-    # Cover heading
     story.append(Paragraph("CopyCat — AI Text Scan Report", styles["CC_Title"]))
-    subtitle_bits = [
-        f"<b>Verdict:</b> {verdict}",
-        f"<b>Likelihood:</b> {_pct(likelihood, 1)}",
-        f"<b>Report ID:</b> {report_id}",
-    ]
+    subtitle_bits = [f"<b>Verdict:</b> {verdict}", f"<b>Likelihood:</b> {_pct(likelihood, 1)}", f"<b>Report ID:</b> {report_id}"]
     story.append(Paragraph(" &nbsp;&nbsp;•&nbsp;&nbsp; ".join(subtitle_bits), styles["CC_Subtitle"]))
 
-    # At-a-glance table
     at_glance = [
         ["Likelihood", _pct(likelihood, 1), "Predictability", _num(overall, 2)],
         ["Top-10 %", _pct(top10, 1), "Top-100 %", _pct(top100, 1)],
@@ -1366,28 +1311,30 @@ def create_pdf_summary(row: dict) -> str:
     if tag or category:
         at_glance.append(["Tag", str(tag or "—"), "Category", str(category or "—")])
 
-    t = Table(at_glance, colWidths=[1.1*inch, 2.0*inch, 1.2*inch, 2.0*inch])
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), C_BLUE_SOFT),
-        ("TEXTCOLOR", (0, 0), (-1, 0), C_TEXT),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
-        ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
-        ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
+    t = Table(at_glance, colWidths=[1.1 * inch, 2.0 * inch, 1.2 * inch, 2.0 * inch])
+    t.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), C_BLUE_SOFT),
+                ("TEXTCOLOR", (0, 0), (-1, 0), C_TEXT),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
+                ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
     story.append(t)
     story.append(Spacer(1, 0.18 * inch))
 
-    # Interpretation
     story.append(Paragraph("Likelihood Indicator", styles["CC_H2"]))
     story.append(Paragraph(_interpret(likelihood), styles["Normal"]))
 
-    # Add calibration / category notes if present
     notes_bits = []
     if category:
         if category_conf is not None and str(category_conf).strip() != "":
@@ -1399,49 +1346,49 @@ def create_pdf_summary(row: dict) -> str:
             notes_bits.append(f"<b>Category:</b> {category}")
     if category_note:
         notes_bits.append(f"<b>Note:</b> {str(category_note)}")
-
     if notes_bits:
         story.append(Spacer(1, 0.08 * inch))
         story.append(Paragraph("<br/>".join(notes_bits), styles["CC_Small"]))
 
-    # Metrics explanation cards
     story.append(Paragraph("What these metrics mean", styles["CC_H2"]))
     cards = [
         ["Predictability Score", "A composite score combining multiple signals. Higher usually means more model-like regularity.", _num(overall, 2)],
-        ["Top-10 %", "Percent of tokens that fell within the model's top-10 predictions. Higher can indicate templated phrasing.", _pct(top10, 1)],
-        ["Top-100 %", "Percent within the model's top-100 predictions. Used with Top-10% to detect “over-confident” runs.", _pct(top100, 1)],
-        ["Perplexity", "Average token surprise. Very low can mean highly predictable / repetitive structure.", "—" if ppl is None else f"{ppl:.1f}"],
+        ["Top-10 %", "Percent of tokens within the model's top-10 predictions. Higher can indicate templated phrasing.", _pct(top10, 1)],
+        ["Top-100 %", "Percent within the model's top-100 predictions. Used with Top-10% to detect over-confident runs.", _pct(top100, 1)],
+        ["Perplexity", "Average token surprise. Very low can mean highly predictable/repetitive structure.", "—" if ppl is None else f"{ppl:.1f}"],
         ["Burstiness", "Variance of surprise across the text. Humans often show rhythm and unevenness.", _num(burst, 2)],
     ]
-    # 2-column table layout: metric + value, with definition under it
     card_rows = []
     for name, desc, value in cards:
-        card_rows.append([
-            Paragraph(f"<b>{name}</b><br/><font color='#6B7280'>" + desc + "</font>", styles["CC_Small"]),
-            Paragraph(f"<b>{value}</b>", styles["Normal"]),
-        ])
-    cards_tbl = Table(card_rows, colWidths=[5.2*inch, 1.1*inch])
-    cards_tbl.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
-        ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
-        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-    ]))
+        card_rows.append(
+            [
+                Paragraph(f"<b>{name}</b><br/><font color='#6B7280'>{desc}</font>", styles["CC_Small"]),
+                Paragraph(f"<b>{value}</b>", styles["Normal"]),
+            ]
+        )
+    cards_tbl = Table(card_rows, colWidths=[5.2 * inch, 1.1 * inch])
+    cards_tbl.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
     story.append(cards_tbl)
 
-    # Chart: normalized bars
     story.append(Paragraph("Signal overview", styles["CC_H2"]))
     try:
-        # Normalize metrics to 0–100 scale for a compact "radar-like" bar
-        # For ppl/burst we use gentle transforms to keep the chart stable.
         v_top10 = 0 if top10 is None else max(0.0, min(100.0, top10))
         v_top100 = 0 if top100 is None else max(0.0, min(100.0, top100))
-        v_ppl = 0 if ppl is None else max(0.0, min(100.0, (ppl / 100.0) * 100.0))  # assume ppl ~ 20-120 typical
-        v_burst = 0 if burst is None else max(0.0, min(100.0, burst * 100.0))        # burst usually small-ish
+        v_ppl = 0 if ppl is None else max(0.0, min(100.0, ppl))        # already ~0..100-ish for display
+        v_burst = 0 if burst is None else max(0.0, min(100.0, burst * 10.0))  # gentle scaling
         data = [[v_top10, v_top100, v_ppl, v_burst]]
 
         drawing = Drawing(420, 180)
@@ -1456,7 +1403,7 @@ def create_pdf_summary(row: dict) -> str:
         chart.valueAxis.valueMin = 0
         chart.valueAxis.valueMax = 100
         chart.valueAxis.valueStep = 20
-        chart.categoryAxis.categoryNames = ["Top-10 %", "Top-100 %", "Perplexity*", "Burstiness*"]
+        chart.categoryAxis.categoryNames = ["Top-10 %", "Top-100 %", "Perplexity", "Burstiness*"]
         chart.bars[0].fillColor = C_BLUE
         chart.barLabels.nudge = 7
         chart.barLabelFormat = "%0.0f"
@@ -1466,13 +1413,11 @@ def create_pdf_summary(row: dict) -> str:
         chart.categoryAxis.labels.fontSize = 8
 
         drawing.add(chart)
-        drawing.add(String(42, 10, "*scaled to 0–100 for display", fontSize=7, fillColor=C_MUTED))
+        drawing.add(String(42, 10, "*burstiness scaled for display", fontSize=7, fillColor=C_MUTED))
         story.append(drawing)
     except Exception:
-        # Don't fail report generation over charting
         story.append(Paragraph("Signal chart unavailable for this run.", styles["CC_Small"]))
 
-    # Raw details
     story.append(Paragraph("Technical details", styles["CC_H2"]))
     details = [
         ["Report ID", report_id],
@@ -1481,19 +1426,23 @@ def create_pdf_summary(row: dict) -> str:
     ]
     if row.get("filepath"):
         details.append(["Input file", str(row.get("filepath"))])
-    det_tbl = Table(details, colWidths=[1.2*inch, 5.1*inch])
-    det_tbl.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
-        ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
-        ("BACKGROUND", (0, 0), (-1, 0), C_BLUE_SOFT),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
+    det_tbl = Table(details, colWidths=[1.2 * inch, 5.1 * inch])
+    det_tbl.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.75, C_BORDER),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, C_BORDER),
+                ("BACKGROUND", (0, 0), (-1, 0), C_BLUE_SOFT),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
     story.append(det_tbl)
 
     doc.build(story, onFirstPage=_draw_header_footer, onLaterPages=_draw_header_footer)
@@ -1539,7 +1488,6 @@ def log_scan_row(row: dict) -> None:
             )
 
         verdict = "Likely AI-generated" if float(row["ai_likelihood_calibrated"]) >= 0.6 else "Likely human-written"
-        # Add convenience keys for the PDF generator (keeps report robust even if internals change)
         row.setdefault("verdict", verdict)
         row.setdefault("likelihood_pct", float(row["ai_likelihood_calibrated"]) * 100.0)
         row.setdefault("top10", float(row.get("top10_frac", 0.0)) * 100.0)
@@ -1547,6 +1495,7 @@ def log_scan_row(row: dict) -> None:
         row.setdefault("model", row.get("model_name"))
         row.setdefault("chars", row.get("text_len_chars"))
         row.setdefault("tokens", row.get("text_len_tokens"))
+
         writer.writerow(
             [
                 time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row["ts"])),
@@ -1781,11 +1730,7 @@ def pd_list():
         except Exception as e:
             disk.append({"filename": os.path.basename(path), "name": os.path.basename(path), "error": str(e)})
 
-    loaded = [
-        {"name": fp.get("name") or "(unnamed)", "N": fp.get("N"), "ngrams_count": len((fp.get("ngrams") or {}))}
-        for fp in PD_FPS
-    ]
-
+    loaded = [{"name": fp.get("name") or "(unnamed)", "N": fp.get("N"), "ngrams_count": len((fp.get("ngrams") or {}))} for fp in PD_FPS]
     return {"dir": str(PD_FINGERPRINT_DIR), "disk": disk, "loaded": loaded}
 
 
@@ -1805,10 +1750,7 @@ async def pd_upload(file: UploadFile = File(...)):
         return JSONResponse({"ok": False, "error": f"Invalid JSON: {e}"}, status_code=400)
 
     if not (isinstance(obj, dict) and "ngrams" in obj and "N" in obj and isinstance(obj["ngrams"], dict)):
-        return JSONResponse(
-            {"ok": False, "error": "Fingerprint must be an object with keys: 'ngrams' (dict) and 'N' (int)."},
-            status_code=400,
-        )
+        return JSONResponse({"ok": False, "error": "Fingerprint must be an object with keys: 'ngrams' (dict) and 'N' (int)."}, status_code=400)
 
     base = obj.get("name") or file.filename or f"pd_{int(time.time())}.json"
     base = _safe_name(base)
@@ -1850,11 +1792,7 @@ def pd_delete(filename: str = Query(..., description="Filename under PD_FINGERPR
 
 @app.get("/fingerprint/centroids")
 def fp_list():
-    return {
-        "dir": str(MODEL_CENTROID_DIR),
-        "count": len(MODEL_CENTROIDS),
-        "families": [c["family"] for c in MODEL_CENTROIDS],
-    }
+    return {"dir": str(MODEL_CENTROID_DIR), "count": len(MODEL_CENTROIDS), "families": [c["family"] for c in MODEL_CENTROIDS]}
 
 
 @app.post("/fingerprint/reload")
@@ -1996,7 +1934,6 @@ def scan(inp: ScanIn):
     fPpl = _clamp((25 - float(out1["ppl"] or 25)) / 20, 0, 1)
     fBurst = _clamp((8 - float(out1["burstiness"] or 8)) / 6, 0, 1)
 
-    # Reliability
     ci10 = _binom_ci_halfwidth(frac10, total)
     len_factor = min(1.0, total / float(max(1, min_tokens_strong)))
     shape_factor = 1.0 - min(0.6, ci10 * 1.8)
@@ -2010,7 +1947,6 @@ def scan(inp: ScanIn):
     fp = compute_llm_fingerprint(text, out1, stylo, sigs)
     drift = compute_semantic_drift(text)
 
-    # Keep scratch state
     LAST_SCAN_STYLO = stylo
     LAST_SCAN_META = {
         "total_tokens": total,
@@ -2020,11 +1956,9 @@ def scan(inp: ScanIn):
         "burstiness": float(out1["burstiness"]),
     }
 
-    # Primary calibration
     z = sens_boost * ((2.0 * float(out1["score"])) + (0.9 * fPpl) + (0.8 * fBurst) + (0.35 * frac10) - 1.6)
     calP1 = _clamp(1 / (1 + math.exp(-4 * z)), 0.0, 1.0)
 
-    # Optional secondary
     calP2 = None
     out2 = None
     if use_ensemble:
@@ -2040,7 +1974,6 @@ def scan(inp: ScanIn):
 
     calP = _combine_models(calP1, calP2, use_ensemble)
 
-    # Artifact gate
     machine_artifact = (
         frac10 >= (0.985 * artifact_bias)
         and frac100 <= 0.03
@@ -2048,7 +1981,6 @@ def scan(inp: ScanIn):
         and float(out1["burstiness"]) <= (3.5 / artifact_bias)
     )
 
-    # Classic style decision
     looks_classic = (
         cscore >= 0.62
         and 6.0 <= float(out1["ppl"] or 99.0) <= 28.0
@@ -2071,7 +2003,6 @@ def scan(inp: ScanIn):
         calP = min(calP, 0.10)
         note += " | user-tag classic"
 
-    # Nonsense guard
     nonsense = looks_nonsense_verse(text, out1, frac10, frac100)
     if nonsense["hit"]:
         calP = min(calP, 0.02)
@@ -2086,35 +2017,29 @@ def scan(inp: ScanIn):
             f"sem_disc={nonsense['signals']['semantic_disc']}"
         )
 
-    # Short excerpt attenuation
     if short_cap_on and total < min_tokens_strong and not machine_artifact:
         scale = max(0.25, total / float(max(1, min_tokens_strong)))
         calP = min(calP * scale, max_conf_short)
         note += f" | short-excerpt cap: {total} tokens"
 
-    # Bootstrap instability shrink/cap
     instab = _bootstrap_instability(out1["per_token"], token_logps)
     if instab > 0.20 and not machine_artifact:
         calP *= 1.0 / (1.0 + 2.0 * instab)
         calP = min(calP, max_conf_unstable)
         note += f" | instability cv≈{instab:.2f}"
 
-    # Non-English cap (unless explicitly tagged classic)
     en_conf = _english_confidence(text)
     if en_conf < en_thresh and not tag_says_classic(inp.tag) and not machine_artifact:
         calP = min(calP, non_en_cap)
         note += f" | non-English cap (p_en≈{en_conf:.2f})"
 
-    # Public-domain overlap dampener
     pd_score = pd_overlap_score(text, PD_NGRAM_N)
     if pd_score >= PD_DAMP_THRESHOLD and not machine_artifact:
         calP = min(calP, PD_MAX_CONF)
         note += f" | PD-overlap dampener (J≈{pd_score:.3f})"
 
-    # Final reliability shrink
     calP = _shrink_toward_half(calP, reliability)
 
-    # Abstain band + thermometer
     low = max(0.0, abstain_low + abstain_delta)
     high = min(1.0, abstain_high - abstain_delta)
     if low > high:
@@ -2185,31 +2110,18 @@ def scan(inp: ScanIn):
     }
 
     if out2:
-        resp["secondary"] = {
-            "ppl": float(out2["ppl"]),
-            "burstiness": float(out2["burstiness"]),
-            "total": int(out2["total"]),
-            "score": float(out2["score"]),
-        }
+        resp["secondary"] = {"ppl": float(out2["ppl"]), "burstiness": float(out2["burstiness"]), "total": int(out2["total"]), "score": float(out2["score"])}
 
     try:
         resp["explain"] = _explain_from(resp)
     except Exception:
-        resp["explain"] = {
-            "headline": "Summary unavailable",
-            "band": _label_band(resp.get("calibrated_prob", 0.5)),
-            "why": [],
-            "notes": ["Explain mode encountered an error."],
-            "what_to_fix": [],
-        }
+        resp["explain"] = {"headline": "Summary unavailable", "band": _label_band(resp.get("calibrated_prob", 0.5)), "why": [], "notes": ["Explain mode encountered an error."], "what_to_fix": []}
 
-     # --- Add report URL for mobile UI (so it can open the generated PDF)
+    # --- Add report URL for mobile UI (so it can open the generated PDF)
     try:
-        # match the report naming you already generate
-        report_id = time.strftime("scan_summary_%Y-%m-%d_%H-%M-%S", time.localtime(row["ts"]))
-        pdf_name = f"{report_id}.pdf"
-
-        # only expose the URL if the file exists
+        ts = int(row["ts"])
+        stamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(ts))
+        pdf_name = f"scan_summary_{stamp}.pdf"
         pdf_path = os.path.join(str(REPORTS_DIR), pdf_name)
         if os.path.exists(pdf_path):
             resp["report_file"] = Path(pdf_path).name
@@ -2218,6 +2130,7 @@ def scan(inp: ScanIn):
         pass
 
     return resp
+
 
 @app.post("/scan/file")
 async def scan_file(
@@ -2232,7 +2145,6 @@ async def scan_file(
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    # Basic size guard (adjust as you like)
     MAX_BYTES = 10 * 1024 * 1024  # 10 MB
     if len(raw) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 10MB)")
@@ -2272,23 +2184,17 @@ async def scan_file(
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext} (use .txt, .pdf, .docx)")
 
-    # Normalize
     text = re.sub(r"\r\n?", "\n", text).strip()
     if not text:
         raise HTTPException(status_code=400, detail="No readable text extracted from file")
 
-    # Reuse your existing scan() logic
     inp = ScanIn(text=text, mode=mode, tag=tag)
     resp = scan(inp)
 
-    # Helpful metadata for UI
     resp["source_file"] = filename
     resp["source_ext"] = ext
     resp["source_chars"] = len(text)
-    resp["_source_text"] = text
-
     return resp
-
 
 
 # =============================================================================
@@ -2408,13 +2314,7 @@ def auth_sample_start(inp: SampleStartIn):
     if not ref:
         raise HTTPException(status_code=400, detail="reference_text is empty")
     sid = str(uuid.uuid4())
-    LIVE_SESSIONS[sid] = {
-        "ts": time.time(),
-        "duration_sec": int(inp.duration_sec or 90),
-        "reference": ref,
-        "accum": [],
-        "final": None,
-    }
+    LIVE_SESSIONS[sid] = {"ts": time.time(), "duration_sec": int(inp.duration_sec or 90), "reference": ref, "accum": [], "final": None}
     return {"session_id": sid, "duration_sec": LIVE_SESSIONS[sid]["duration_sec"]}
 
 
@@ -2474,13 +2374,7 @@ def auth_sample_finalize(inp: SampleFinalizeIn):
         verdict = "Weak/No match"
         note = "Insufficient alignment or sample too short to confirm."
 
-    return {
-        "session_id": inp.session_id,
-        "match_score": round(m * 100),
-        "verdict": verdict,
-        "explanation": note,
-        "details": cmpd,
-    }
+    return {"session_id": inp.session_id, "match_score": round(m * 100), "verdict": verdict, "explanation": note, "details": cmpd}
 
 
 # =============================================================================
@@ -2511,14 +2405,7 @@ def drift_compare(inp: DriftCompareIn):
     risk_pair = 1.0 - sim
     risk = _clamp(0.5 * risk_self + 0.5 * risk_pair, 0.0, 1.0)
 
-    return {
-        "available": True,
-        "paragraphs": paras,
-        "similarity": round(sim, 3),
-        "overlap": round(sim, 3),
-        "risk": round(risk, 3),
-        "score": round(1.0 - risk, 3),
-    }
+    return {"available": True, "paragraphs": paras, "similarity": round(sim, 3), "overlap": round(sim, 3), "risk": round(risk, 3), "score": round(1.0 - risk, 3)}
 
 
 # =============================================================================
@@ -2616,16 +2503,24 @@ def healthz():
     return {"ok": True}
 
 
-@app.get("/favicon.ico")
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"])
 def favicon():
-    # If you ship a favicon in /static, let the browser request it there;
-    # this just avoids 404 noise.
-    return Response(status_code=204)
+    ico = STATIC_DIR / "favicon.ico"
+    if not ico.exists():
+        # (optional) also try ./static/favicon.ico in dev
+        ico2 = pathlib.Path("static/favicon.ico")
+        if ico2.exists():
+            return FileResponse(str(ico2), media_type="image/x-icon")
+        raise HTTPException(status_code=404, detail="favicon.ico not found")
+    return FileResponse(str(ico), media_type="image/x-icon")
 
+
+# =============================================================================
+# Desktop + Dev runner (FIXED: single _run_desktop, no NameError, server wait)
+# =============================================================================
 
 def _run_dev_server():
     import uvicorn
-
     uvicorn.run(
         app,
         host=os.getenv("HOST", "127.0.0.1"),
@@ -2634,28 +2529,79 @@ def _run_dev_server():
         reload=False,  # IMPORTANT inside packaged apps
     )
 
+
+def _wait_for_port(host: str, port: int, timeout_sec: float = 12.0) -> bool:
+    t0 = time.time()
+    while (time.time() - t0) < timeout_sec:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return True
+        except OSError:
+            time.sleep(0.10)
+    return False
+
+
 def _run_desktop():
+    """
+    Starts the FastAPI server in a background thread, then opens pywebview to /ui.
+
+    - Avoids NameError by importing pywebview inside this function.
+    - Avoids macOS icon= incompatibility by only passing icon on non-Darwin.
+    - Waits for the server socket to be ready before opening the window.
+    """
     import threading
-    import time
-    import webview  # pywebview
+    import uvicorn
 
-    # IMPORTANT: this must be an .ico on Windows
-    icon_path = str(resource_path("assets/copycat.ico"))
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
+    url = f"http://{host}:{port}/ui"
 
-    def run_server():
-        _run_dev_server()
+    # Start server in background thread
+    def _serve():
+        cfg = uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_level=os.getenv("LOG_LEVEL", "info"),
+            reload=False,
+            access_log=False if getattr(sys, "frozen", False) else True,
+        )
+        server = uvicorn.Server(cfg)
+        server.run()
 
-    t = threading.Thread(target=run_server, daemon=True)
+    t = threading.Thread(target=_serve, daemon=True)
     t.start()
-    time.sleep(1.0)
 
-    webview.create_window(
-    "CopyCat",
-    "http://127.0.0.1:8000",
-    width=1100,
-    height=780,
-)
+    if not _wait_for_port(host, port, timeout_sec=18.0):
+        raise SystemExit(f"[CopyCat] Server failed to start on {host}:{port}")
 
+    # Import pywebview late so failure is explicit and not swallowed.
+    try:
+        import webview  # pywebview
+    except Exception as e:
+        raise SystemExit(
+            "Missing dependency: pywebview.\n"
+            "Install with: python3 -m pip install pywebview\n"
+            f"Original error: {e}"
+        )
+
+    kwargs = dict(
+        title="CopyCat",
+        url=url,
+        width=1100,
+        height=760,
+        resizable=True,
+    )
+
+    # pywebview 4.x: don't pass icon= on macOS.
+    if platform.system() != "Darwin":
+        # If you want an icon on Windows/Linux, uncomment and ensure the file exists.
+        # ico = STATIC_DIR / "favicon.ico"
+        # if ico.exists():
+        #     kwargs["icon"] = str(ico)
+        pass
+
+    webview.create_window(**kwargs)
     webview.start()
 
 

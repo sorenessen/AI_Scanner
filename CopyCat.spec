@@ -5,7 +5,7 @@ a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[('index.html', '.'), ('static', 'static'), ('assets', 'assets')],
+    datas=[('static', 'static'), ('index.html', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -32,7 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets/CopyCat.icns'],
+    icon=['static/CopyCat.icns'],
 )
 coll = COLLECT(
     exe,
@@ -46,6 +46,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='CopyCat.app',
-    icon='assets/CopyCat.icns',
+    icon='static/CopyCat.icns',
     bundle_identifier=None,
 )
