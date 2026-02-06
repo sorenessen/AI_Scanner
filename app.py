@@ -1142,21 +1142,50 @@ def create_pdf_summary(row: dict) -> str:
         return h[:n]
 
     def _resolve_asset(rel_path: str) -> pathlib.Path:
-        p = resource_path(rel_path)
-        if p.exists():
-            return p
-        if sys.platform == "darwin":
+        """
+        Resolve branding assets in dev + PyInstaller + macOS .app + static folder layouts.
+
+        We intentionally check STATIC_DIR because many builds place images under:
+          static/assets/<file>.png
+        """
+        candidates: List[pathlib.Path] = []
+
+        # 1) PyInstaller / dev base (resource_path already handles frozen vs dev)
+        candidates.append(resource_path(rel_path))
+
+        # 2) If rel_path looks like "assets/...", also try under static/assets/...
+        try:
+            if rel_path.startswith("assets/"):
+                candidates.append(STATIC_DIR / rel_path)                 # <static>/assets/foo.png
+                candidates.append(STATIC_DIR / "images" / pathlib.Path(rel_path).name)  # <static>/images/foo.png
+                candidates.append(STATIC_DIR / "img" / pathlib.Path(rel_path).name)     # <static>/img/foo.png
+        except Exception:
+            pass
+
+        # 3) macOS/Windows frozen app: <exe>/../Resources/...
+        try:
+            exe = pathlib.Path(sys.executable).resolve()
+            resources = exe.parent.parent / "Resources"
+            candidates.append(resources / rel_path)
+            if rel_path.startswith("assets/"):
+                candidates.append(resources / "static" / rel_path)  # Resources/static/assets/foo.png
+        except Exception:
+            pass
+
+        for p in candidates:
             try:
-                mac_resources = pathlib.Path(sys.executable).resolve().parent.parent / "Resources"
-                p2 = mac_resources / rel_path
-                if p2.exists():
-                    return p2
+                if p and p.exists():
+                    return p
             except Exception:
-                pass
-        return p
+                continue
+
+        # Fall back (non-existing) to keep type stable
+        return candidates[0] if candidates else resource_path(rel_path)
 
     logo_copycat = _resolve_asset("assets/copycat_logo.png")
     logo_calypso = _resolve_asset("assets/calypso_logo.png")
+
+    # Keep order consistent: CopyCat then Calypso
     logos = [p for p in (logo_copycat, logo_calypso) if p and p.exists()]
 
     doc = SimpleDocTemplate(
@@ -1232,8 +1261,9 @@ def create_pdf_summary(row: dict) -> str:
                     x -= size_w
                     c.drawImage(ir, x, y_logo, width=size_w, height=size_h, mask="auto")
                     x -= gap
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[pdf] logo draw failed: {lp} — {e}")
+
 
         c.setFillColor(C_MUTED)
         c.setFont("Helvetica", 8.5)

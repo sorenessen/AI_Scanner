@@ -84,7 +84,9 @@ python -m PyInstaller --noconfirm --clean \
   --collect-all torch \
   --add-data "${UI_HTML}:." \
   --add-data "${STATIC_DIR}:${STATIC_DIR}" \
-  "${ENTRYPOINT}"
+  "${ENTRYPOINT}" \
+  --add-data "assets/copycat_logo.png:assets" \
+  --add-data "assets/calypso_logo.png:assets"
 
 APP_BUNDLE="dist/${APP_NAME}.app"
 need "${APP_BUNDLE}"
