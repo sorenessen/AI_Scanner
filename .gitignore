@@ -40,4 +40,5 @@ spec_out/
 
 release/
 release-notes-v*
+*sha256.txt
 
