@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_dynamic_libs
 from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('index.html', '.'), ('static', 'static'), ('assets/copycat_logo.png', 'assets'), ('assets/calypso_logo.png', 'assets')]
+datas = [('index.html', '.'), ('static', 'static'), ('assets', 'assets')]
 binaries = []
 hiddenimports = []
 datas += collect_data_files('numpy')

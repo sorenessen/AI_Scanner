@@ -4,26 +4,14 @@ set -euo pipefail
 APP_NAME="CopyCat"
 ENTRYPOINT="app.py"
 
-# ---- Paths (adjust if you want, but these match your current tree)
 STATIC_DIR="static"
+ASSETS_DIR="assets"
 
-# Preferred icon file for macOS bundles (already working for you)
 ICON_ICNS="${STATIC_DIR}/CopyCat.icns"
 
-# Logos used by the report UI (adjust names if needed)
-COPYCAT_LOGO="${STATIC_DIR}/cat-logo.png"
-CALYPSO_LOGO="${STATIC_DIR}/calypso_logo.png"   # <- if you don’t have this, set to an existing file or delete the checks below
-
-# index.html can be at repo root or inside static/
-UI_HTML=""
-if [[ -f "index.html" ]]; then UI_HTML="index.html"; fi
-if [[ -z "${UI_HTML}" && -f "${STATIC_DIR}/index.html" ]]; then UI_HTML="${STATIC_DIR}/index.html"; fi
-
-# ---- Signing / notarization config
-KEYCHAIN_PROFILE="CopyCat"      # you provided this
-TEAM_ID="282VJ37HVD"            # you provided this
-
-# Set this to your actual identity string from: security find-identity -v -p codesigning
+# notarization
+KEYCHAIN_PROFILE="CopyCat"
+TEAM_ID="282VJ37HVD"
 SIGN_ID="${SIGN_ID:-}"
 
 red()   { printf "\033[31m%s\033[0m\n" "$*"; }
@@ -37,43 +25,35 @@ need() {
   fi
 }
 
-blue "[build] preflight..."
-need "$ENTRYPOINT"
-need "$STATIC_DIR"
-need "$ICON_ICNS"
-need "$COPYCAT_LOGO"
-# CALYPSO_LOGO is optional if you don’t use it
-if [[ -e "$CALYPSO_LOGO" ]]; then
-  blue "[build] found calypso logo: $CALYPSO_LOGO"
-else
-  blue "[build] calypso logo not found (ok if you don’t embed it): $CALYPSO_LOGO"
-fi
-
-if [[ -z "${UI_HTML}" ]]; then
-  red "[error] could not find index.html (repo root or static/index.html)"
-  exit 1
-fi
-blue "[build] using UI html: ${UI_HTML}"
+blue "[preflight] checking required files..."
+need "${ENTRYPOINT}"
+need "index.html"              # ROOT INDEX (your reality)
+need "${STATIC_DIR}"
+need "${ICON_ICNS}"
 
 # venv
 if [[ -f ".venv/bin/activate" ]]; then
+  # shellcheck disable=SC1091
   source ".venv/bin/activate"
-  blue "[build] activated .venv"
+  blue "[preflight] activated .venv"
 else
-  red "[error] .venv not found. Create it first."
+  red "[error] .venv not found."
   exit 1
 fi
 
 PYVER="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+blue "[preflight] python: ${PYVER}"
 if [[ "${PYVER}" != "3.11" && "${PYVER}" != "3.12" && "${PYVER}" != "3.13" ]]; then
   red "[error] expected Python 3.11/3.12/3.13 in .venv (found ${PYVER})"
   exit 1
 fi
 
-blue "[build] clean build/dist..."
-rm -rf build dist dmg_stage "${APP_NAME}-mac-arm64.dmg"
+blue "[clean] removing old artifacts..."
+rm -rf build dist dmg_stage
+rm -f "${APP_NAME}-mac-arm64.dmg"
 
 blue "[build] PyInstaller..."
+# CRITICAL: all flags BEFORE the entrypoint, and bundle ROOT index.html to Resources/index.html
 python -m PyInstaller --noconfirm --clean \
   --windowed \
   --name "${APP_NAME}" \
@@ -82,63 +62,60 @@ python -m PyInstaller --noconfirm --clean \
   --collect-binaries numpy \
   --collect-data numpy \
   --collect-all torch \
-  --add-data "${UI_HTML}:." \
+  --add-data "index.html:." \
   --add-data "${STATIC_DIR}:${STATIC_DIR}" \
-  "${ENTRYPOINT}" \
-  --add-data "assets/copycat_logo.png:assets" \
-  --add-data "assets/calypso_logo.png:assets"
+  $( [[ -d "${ASSETS_DIR}" ]] && echo "--add-data ${ASSETS_DIR}:${ASSETS_DIR}" ) \
+  "${ENTRYPOINT}"
 
 APP_BUNDLE="dist/${APP_NAME}.app"
 need "${APP_BUNDLE}"
 
-blue "[build] verify bundled UI + assets..."
-need "${APP_BUNDLE}/Contents/Resources/$(basename "${UI_HTML}")"
-need "${APP_BUNDLE}/Contents/Resources/${STATIC_DIR}/$(basename "${COPYCAT_LOGO}")"
-# optional
-if [[ -e "$CALYPSO_LOGO" ]]; then
-  need "${APP_BUNDLE}/Contents/Resources/${STATIC_DIR}/$(basename "${CALYPSO_LOGO}")"
+RES="${APP_BUNDLE}/Contents/Resources"
+PLIST="${APP_BUNDLE}/Contents/Info.plist"
+
+blue "[verify] verify bundled UI exists inside app bundle..."
+need "${RES}/index.html"                # ROOT index bundled to Resources/index.html
+need "${RES}/${STATIC_DIR}"             # static folder exists
+
+# Optional sanity check to prove the bundle contains the "new UI"
+if grep -q "Upload" "${RES}/index.html"; then
+  green "[ok] UI check: found 'Upload' in bundled Resources/index.html"
+else
+  blue "[warn] UI check: did NOT find 'Upload' in bundled Resources/index.html"
+  blue "       If browser shows it but app doesn't, your local index.html may differ from what you built."
 fi
 
-blue "[build] force Info.plist icon keys..."
-PLIST="${APP_BUNDLE}/Contents/Info.plist"
-RES="${APP_BUNDLE}/Contents/Resources"
-
+blue "[bundle] force Info.plist icon keys..."
 cp -f "${ICON_ICNS}" "${RES}/CopyCat.icns"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile CopyCat.icns" "${PLIST}" 2>/dev/null \
 || /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string CopyCat.icns" "${PLIST}"
 
-# keep bundle id stable (helps caching + logging path stability)
- /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.calypso-labs.copycat" "${PLIST}" 2>/dev/null \
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.calypso-labs.copycat" "${PLIST}" 2>/dev/null \
 || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.calypso-labs.copycat" "${PLIST}"
 
 touch "${APP_BUNDLE}" "${PLIST}" "${RES}/CopyCat.icns"
-
 green "[ok] app build complete: ${APP_BUNDLE}"
 
 # ---- SIGN
 if [[ -z "${SIGN_ID}" ]]; then
   red "[error] SIGN_ID is empty."
-  echo "Run this and pick your Developer ID Application identity:"
-  echo "  security find-identity -v -p codesigning"
-  echo
-  echo "Then rerun like:"
-  echo "  SIGN_ID=\"Developer ID Application: Your Name (${TEAM_ID})\" ./build_mac.sh"
+  echo "Run: security find-identity -v -p codesigning"
+  echo "Then: SIGN_ID=\"Developer ID Application: ... (${TEAM_ID})\" ./build_mac.sh"
   exit 1
 fi
 
 blue "[sign] signing app bundle..."
-# sign nested libs first
-codesign --force --options runtime --timestamp --sign "${SIGN_ID}" "${APP_BUNDLE}/Contents/Frameworks"/* 2>/dev/null || true
-# sign the app itself
+if [[ -d "${APP_BUNDLE}/Contents/Frameworks" ]]; then
+  codesign --force --options runtime --timestamp --sign "${SIGN_ID}" "${APP_BUNDLE}/Contents/Frameworks"/* 2>/dev/null || true
+fi
 codesign --force --deep --options runtime --timestamp --sign "${SIGN_ID}" "${APP_BUNDLE}"
 
 blue "[sign] verify codesign..."
 codesign --verify --deep --strict --verbose=4 "${APP_BUNDLE}"
 spctl --assess --type execute --verbose=4 "${APP_BUNDLE}" || true
-
 green "[ok] signed + verified: ${APP_BUNDLE}"
 
-# ---- DMG (stage folder avoids /Volumes confusion)
+# ---- DMG
 blue "[dmg] staging..."
 mkdir -p dmg_stage
 ditto "${APP_BUNDLE}" "dmg_stage/${APP_NAME}.app"
@@ -153,7 +130,7 @@ hdiutil create -volname "${APP_NAME}" \
 green "[ok] dmg created: ${DMG_OUT}"
 
 # ---- NOTARIZE + STAPLE
-blue "[notary] submit..."
+blue "[notary] submit + wait..."
 xcrun notarytool submit "${DMG_OUT}" \
   --keychain-profile "${KEYCHAIN_PROFILE}" \
   --team-id "${TEAM_ID}" \
@@ -165,7 +142,9 @@ xcrun stapler staple "${DMG_OUT}"
 green "[ok] notarized + stapled: ${DMG_OUT}"
 
 echo
-echo "Final verify (mount + assess the .app inside):"
+echo "Verification:"
+echo "  spctl -a -vv --type open \"${DMG_OUT}\""
 echo "  hdiutil attach \"${DMG_OUT}\""
 echo "  spctl --assess --type execute --verbose=4 \"/Volumes/${APP_NAME}/${APP_NAME}.app\""
+echo "  codesign --verify --deep --strict --verbose=4 \"/Volumes/${APP_NAME}/${APP_NAME}.app\""
 echo "  hdiutil detach \"/Volumes/${APP_NAME}\""
