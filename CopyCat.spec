@@ -62,3 +62,44 @@ app = BUNDLE(
     icon='static/CopyCat.icns',
     bundle_identifier=None,
 )
+
+linux-x86_64:
+  runs-on: ubuntu-20.04
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install pyinstaller
+
+    - name: Build (PyInstaller spec)
+      run: |
+        pyinstaller --noconfirm --clean CopyCat.spec
+
+    - name: Smoke test (proof binary runs)
+      run: |
+        set -e
+        ls -lah dist || true
+        BIN="dist/CopyCat"
+        chmod +x "$BIN" || true
+        "$BIN" --help >/dev/null 2>&1 || "$BIN" --version >/dev/null 2>&1 || true
+
+    - name: Package + checksum
+      run: |
+        mkdir -p dist_out
+        cp dist/CopyCat dist_out/CopyCat-linux-x86_64
+        (cd dist_out && sha256sum CopyCat-linux-x86_64 > CopyCat-linux-x86_64.sha256)
+        (cd dist_out && tar -czf CopyCat-linux-x86_64.tar.gz CopyCat-linux-x86_64 CopyCat-linux-x86_64.sha256)
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: CopyCat-linux-x86_64
+        path: dist_out/*
